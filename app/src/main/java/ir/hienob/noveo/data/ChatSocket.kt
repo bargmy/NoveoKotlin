@@ -17,7 +17,7 @@ class ChatSocket(
 
     fun connect(session: Session): Flow<ChatMessage> = callbackFlow {
         val request = Request.Builder()
-            .url("wss://noveo.ir/ws")
+            .url("wss://noveo.ir:8443/ws")
             .header("Origin", origin)
             .build()
 
