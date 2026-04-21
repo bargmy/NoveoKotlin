@@ -13,21 +13,21 @@ internal fun parseUsers(payload: JSONObject): Pair<Map<String, UserSummary>, Set
     val onlineIds = mutableSetOf<String>()
     val onlineArray = payload.optJSONArray("online") ?: JSONArray()
     for (index in 0 until onlineArray.length()) {
-        onlineArray.optString(index).takeIf { it.isNotBlank() }?.let(onlineIds::add)
+        onlineArray.optString(index).sanitizeServerString().takeIf { it.isNotBlank() }?.let(onlineIds::add)
     }
 
     val users = mutableMapOf<String, UserSummary>()
     val usersArray = payload.optJSONArray("users") ?: JSONArray()
     for (index in 0 until usersArray.length()) {
         val item = usersArray.optJSONObject(index) ?: continue
-        val userId = item.optString("userId")
+        val userId = item.optString("userId").sanitizeServerString()
         if (userId.isBlank()) continue
         users[userId] = UserSummary(
             id = userId,
-            username = item.optString("username", "Unknown"),
-            avatarUrl = item.optString("avatarUrl").takeIf { it.isNotBlank() },
-            handle = item.optString("handle").takeIf { it.isNotBlank() },
-            bio = item.optString("bio"),
+            username = item.optString("username").sanitizeServerString().ifBlank { "Unknown" },
+            avatarUrl = item.optString("avatarUrl").sanitizeServerString().takeIf { it.isNotBlank() },
+            handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
+            bio = item.optString("bio").sanitizeServerString(),
             isOnline = onlineIds.contains(userId),
             isVerified = item.optBoolean("isVerified", false)
         )
@@ -40,7 +40,7 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
     return buildList {
         for (index in 0 until chatsArray.length()) {
             val item = chatsArray.optJSONObject(index) ?: continue
-            val chatId = item.optString("chatId").ifBlank { item.optString("id") }
+            val chatId = item.optString("chatId").sanitizeServerString().ifBlank { item.optString("id").sanitizeServerString() }
             if (chatId.isBlank()) continue
             val memberIds = parseStringList(item.optJSONArray("members"))
             val messages = item.optJSONArray("messages") ?: JSONArray()
@@ -52,13 +52,13 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
             add(
                 ChatSummary(
                     id = chatId,
-                    chatType = item.optString("chatType", "private"),
+                    chatType = item.optString("chatType").sanitizeServerString().ifBlank { "private" },
                     title = resolveChatTitle(item, usersById, memberIds, selfUserId),
                     avatarUrl = resolveChatAvatar(item, usersById, memberIds, selfUserId),
                     lastMessagePreview = preview,
                     unreadCount = item.optInt("unreadCount", item.optInt("unread", 0)),
                     memberIds = memberIds,
-                    handle = item.optString("handle").takeIf { it.isNotBlank() },
+                    handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
                     isVerified = item.optBoolean("isVerified", false)
                 )
             )
@@ -70,7 +70,7 @@ internal fun parseMessagesForChat(payload: JSONObject, usersById: Map<String, Us
     val chatsArray = payload.optJSONArray("chats") ?: JSONArray()
     for (index in 0 until chatsArray.length()) {
         val item = chatsArray.optJSONObject(index) ?: continue
-        val itemChatId = item.optString("chatId").ifBlank { item.optString("id") }
+        val itemChatId = item.optString("chatId").sanitizeServerString().ifBlank { item.optString("id").sanitizeServerString() }
         if (itemChatId != chatId) continue
         val messagesArray = item.optJSONArray("messages") ?: JSONArray()
         return buildList {
@@ -84,16 +84,16 @@ internal fun parseMessagesForChat(payload: JSONObject, usersById: Map<String, Us
 }
 
 internal fun parseRealtimeMessage(payload: JSONObject, usersById: Map<String, UserSummary>): ChatMessage {
-    val chatId = payload.optString("chatId")
+    val chatId = payload.optString("chatId").sanitizeServerString()
     return parseChatMessage(payload, chatId, usersById)
 }
 
 private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map<String, UserSummary>): ChatMessage {
-    val messageId = message.optString("messageId").ifBlank { message.optString("id") }
-    val senderId = message.optString("senderId").ifBlank { message.optString("sender") }
+    val messageId = message.optString("messageId").sanitizeServerString().ifBlank { message.optString("id").sanitizeServerString() }
+    val senderId = message.optString("senderId").sanitizeServerString().ifBlank { message.optString("sender").sanitizeServerString() }
     return ChatMessage(
         id = messageId,
-        chatId = message.optString("chatId").ifBlank { chatId },
+        chatId = message.optString("chatId").sanitizeServerString().ifBlank { chatId },
         senderId = senderId,
         senderName = resolveSenderName(senderId, message, usersById),
         content = parseMessageContent(message.opt("content")),
@@ -105,52 +105,57 @@ internal fun parseMessageContent(raw: Any?): MessageContent {
     val payload = when (raw) {
         is JSONObject -> raw
         is String -> {
-            if (raw.isBlank()) return MessageContent()
-            runCatching { JSONObject(raw) }.getOrNull() ?: return MessageContent(text = raw)
+            val text = raw.sanitizeServerString()
+            if (text.isBlank()) return MessageContent()
+            runCatching { JSONObject(text) }.getOrNull() ?: return MessageContent(text = text)
         }
-        else -> return MessageContent(text = raw?.toString().orEmpty())
+        else -> return MessageContent(text = raw?.toString().sanitizeServerString())
     }
 
     val fileObject = payload.optJSONObject("file")
     val file = fileObject?.let {
         MessageFileAttachment(
-            url = it.optString("url"),
-            name = it.optString("name"),
-            type = it.optString("type"),
-            caption = it.optString("caption")
+            url = it.optString("url").sanitizeServerString(),
+            name = it.optString("name").sanitizeServerString(),
+            type = it.optString("type").sanitizeServerString(),
+            caption = it.optString("caption").sanitizeServerString()
         )
     }
     return MessageContent(
-        text = payload.optString("text"),
+        text = payload.optString("text").sanitizeServerString(),
         file = file,
-        pollQuestion = payload.optJSONObject("poll")?.optString("question")?.takeIf { it.isNotBlank() },
-        themeName = payload.optJSONObject("theme")?.optString("name")?.takeIf { it.isNotBlank() },
+        pollQuestion = payload.optJSONObject("poll")?.optString("question")?.sanitizeServerString()?.takeIf { it.isNotBlank() },
+        themeName = payload.optJSONObject("theme")?.optString("name")?.sanitizeServerString()?.takeIf { it.isNotBlank() },
         callLabel = payload.optJSONObject("callLog")?.let {
-            if (it.optString("status") == "missed") "Missed call" else "Call"
+            if (it.optString("status").sanitizeServerString() == "missed") "Missed call" else "Call"
         },
         forwardedLabel = payload.optJSONObject("forwardedInfo")?.let { "Forwarded message" }
     )
 }
 
 private fun resolveChatTitle(chat: JSONObject, usersById: Map<String, UserSummary>, memberIds: List<String>, selfUserId: String): String {
-    val explicit = chat.optString("chatName").trim()
+    val explicit = chat.optString("chatName").sanitizeServerString()
     if (explicit.isNotBlank()) return explicit
-    if (chat.optString("chatType") == "private") {
+    if (chat.optString("chatType").sanitizeServerString() == "private") {
         return memberIds.firstOrNull { it != selfUserId }
             ?.let(usersById::get)
             ?.username
+            ?.sanitizeServerString()
+            ?.ifBlank { "Direct Message" }
             ?: "Direct Message"
     }
     return "Chat"
 }
 
 private fun resolveChatAvatar(chat: JSONObject, usersById: Map<String, UserSummary>, memberIds: List<String>, selfUserId: String): String? {
-    val explicit = chat.optString("avatarUrl").trim()
+    val explicit = chat.optString("avatarUrl").sanitizeServerString()
     if (explicit.isNotBlank()) return explicit
-    if (chat.optString("chatType") == "private") {
+    if (chat.optString("chatType").sanitizeServerString() == "private") {
         return memberIds.firstOrNull { it != selfUserId }
             ?.let(usersById::get)
             ?.avatarUrl
+            ?.sanitizeServerString()
+            ?.takeIf { it.isNotBlank() }
     }
     return null
 }
@@ -158,9 +163,9 @@ private fun resolveChatAvatar(chat: JSONObject, usersById: Map<String, UserSumma
 private fun resolveSenderName(senderId: String, payload: JSONObject, usersById: Map<String, UserSummary>): String {
     if (senderId == "system") return "System"
     if (senderId == "anonymous") return "Anonymous"
-    return usersById[senderId]?.username
-        ?: payload.optString("senderName").takeIf { it.isNotBlank() }
-        ?: payload.optString("sender").takeIf { it.isNotBlank() }
+    return usersById[senderId]?.username?.sanitizeServerString()?.takeIf { it.isNotBlank() }
+        ?: payload.optString("senderName").sanitizeServerString().takeIf { it.isNotBlank() }
+        ?: payload.optString("sender").sanitizeServerString().takeIf { it.isNotBlank() }
         ?: "Unknown"
 }
 
@@ -168,7 +173,12 @@ private fun parseStringList(array: JSONArray?): List<String> {
     if (array == null) return emptyList()
     return buildList {
         for (index in 0 until array.length()) {
-            array.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+            array.optString(index).sanitizeServerString().takeIf { it.isNotBlank() }?.let(::add)
         }
     }
+}
+
+private fun String?.sanitizeServerString(): String {
+    val value = this?.trim().orEmpty()
+    return if (value.equals("null", ignoreCase = true) || value.equals("undefined", ignoreCase = true)) "" else value
 }
