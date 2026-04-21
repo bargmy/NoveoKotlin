@@ -12,7 +12,7 @@ import org.json.JSONObject
 
 class ChatSocket(
     private val client: OkHttpClient = OkHttpClient(),
-    private val origin: String = "https://localhost"
+    private val origin: String = "https://noveo.ir"
 ) {
 
     fun connect(session: Session): Flow<ChatMessage> = callbackFlow {
@@ -48,7 +48,13 @@ class ChatSocket(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                close(t)
+                val code = response?.code
+                val message = when (code) {
+                    404 -> "Noveo realtime server was not found while opening the chat stream (HTTP 404). Check the websocket endpoint on the server."
+                    401, 403 -> "Noveo rejected the realtime connection while opening the chat stream (HTTP $code)."
+                    else -> t.message ?: t.javaClass.simpleName
+                }
+                close(IllegalStateException(message, t))
             }
         })
 
