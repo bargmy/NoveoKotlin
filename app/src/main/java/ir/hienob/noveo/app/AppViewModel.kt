@@ -9,6 +9,7 @@ import ir.hienob.noveo.data.ChatSummary
 import ir.hienob.noveo.data.NoveoApi
 import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.SessionStore
+import ir.hienob.noveo.data.UserSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,8 +30,9 @@ data class AppUiState(
     val loading: Boolean = false,
     val error: String? = null,
     val session: Session? = null,
+    val usersById: Map<String, UserSummary> = emptyMap(),
     val chats: List<ChatSummary> = emptyList(),
-    val selectedChatId: Long? = null,
+    val selectedChatId: String? = null,
     val messages: List<ChatMessage> = emptyList(),
     val authModeSignup: Boolean = false
 )
@@ -54,12 +56,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(startupState = StartupState.Splash, loading = true, error = null)
             val session = sessionStore.read()
             if (session == null) {
-                _uiState.value = _uiState.value.copy(
-                    startupState = StartupState.Onboarding,
-                    loading = false,
-                    selectedChatId = null,
-                    messages = emptyList()
-                )
+                _uiState.value = _uiState.value.copy(startupState = StartupState.Onboarding, loading = false, selectedChatId = null, messages = emptyList())
                 return@launch
             }
             loadHome(session)
@@ -99,13 +96,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(selectedChatId = null, messages = emptyList(), error = null, loading = false)
     }
 
-    fun openChat(chatId: Long) {
+    fun openChat(chatId: String) {
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             runCatching {
                 _uiState.value = _uiState.value.copy(loading = true, selectedChatId = chatId, error = null)
-                val messages = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
-                _uiState.value = _uiState.value.copy(messages = messages, loading = false)
+                val result = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
+                _uiState.value = _uiState.value.copy(
+                    usersById = _uiState.value.usersById + result.usersById,
+                    messages = result.messages,
+                    loading = false
+                )
             }.onFailure {
                 _uiState.value = _uiState.value.copy(loading = false, error = it.message ?: "Unable to load chat")
             }
@@ -119,8 +120,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching {
                 api.sendMessage(session, chatId, text)
-                val messages = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
-                _uiState.value = _uiState.value.copy(messages = messages, error = null)
+                val result = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
+                _uiState.value = _uiState.value.copy(usersById = _uiState.value.usersById + result.usersById, messages = result.messages, error = null)
             }.onFailure {
                 _uiState.value = _uiState.value.copy(error = it.message ?: "Unable to send")
             }
@@ -129,12 +130,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun loadHome(session: Session) {
         runCatching {
-            val chats = withContext(Dispatchers.IO) { api.getChats(session) }
+            val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
                 loading = false,
                 session = session,
-                chats = chats,
+                usersById = home.usersById,
+                chats = home.chats,
                 selectedChatId = null,
                 messages = emptyList(),
                 error = null
@@ -149,10 +151,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeSocket(session: Session) {
         socketJob?.cancel()
         socketJob = viewModelScope.launch {
-            socket.connect(session).collect { incoming ->
+            socket.connect(session, _uiState.value.usersById).collect { incoming ->
                 val state = _uiState.value
+                val mergedUsers = if (incoming.senderId.isNotBlank() && !state.usersById.containsKey(incoming.senderId)) state.usersById else state.usersById
                 if (incoming.chatId == state.selectedChatId) {
-                    _uiState.value = state.copy(messages = state.messages + incoming)
+                    _uiState.value = state.copy(usersById = mergedUsers, messages = state.messages + incoming)
                 }
             }
         }
