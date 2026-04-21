@@ -68,11 +68,13 @@ class NoveoApi(
                 when (msg.optString("type")) {
                     "login_success" -> webSocket.send(JSONObject().put("type", "message").put("chatId", chatId).put("content", text).toString())
                     "new_message", "message_sent", "chat_history" -> {
-                        if (completed.compareAndSet(false, true)) latch.countDown(); webSocket.close(1000, null)
+                        if (completed.compareAndSet(false, true)) latch.countDown()
+                        webSocket.close(1000, null)
                     }
                     "auth_failed" -> {
                         failure.set(msg.optString("message", "Authentication failed"))
-                        if (completed.compareAndSet(false, true)) latch.countDown(); webSocket.close(1000, null)
+                        if (completed.compareAndSet(false, true)) latch.countDown()
+                        webSocket.close(1000, null)
                     }
                 }
             }
@@ -218,27 +220,18 @@ class NoveoApi(
 
     private fun socketFailureMessage(response: Response?, t: Throwable, context: String): String {
         val code = response?.code
-        val body = response?.message?.takeIf { it.isNotBlank() }
+        val responseMessage = response?.message.orEmpty()
+        val throwableMessage = t.message ?: t.javaClass.simpleName
         return when (code) {
             404 -> "Noveo realtime server was not found while $context (HTTP 404). Check the websocket endpoint on the server."
             401, 403 -> "Noveo rejected the realtime connection while $context (HTTP $code)."
-            else -> buildString {
-                append("Socket failure while ")
-                append(context)
-                code?.let {
-                    append(" (HTTP ")
-                    append(it)
-                    body?.let { message ->
-                        append(": ")
-                        append(message)
-                    }
-                    append(')')
+            else -> {
+                val httpPart = if (code != null) {
+                    if (responseMessage.isNotBlank()) " (HTTP $code: $responseMessage)" else " (HTTP $code)"
+                } else {
+                    ""
                 }
-                val throwableMessage = t.message ?: t.javaClass.simpleName
-                if (!throwableMessage.isNullOrBlank()) {
-                    append(": ")
-                    append(throwableMessage)
-                }
+                "Socket failure while $context$httpPart: $throwableMessage"
             }
         }
     }
@@ -273,7 +266,7 @@ class NoveoApi(
                     text = item.optString("content", item.optString("text", "")),
                     createdAt = item.optString("timestamp", item.optString("createdAt", ""))
                 )
-            }
+            )
         }
     }
 }
