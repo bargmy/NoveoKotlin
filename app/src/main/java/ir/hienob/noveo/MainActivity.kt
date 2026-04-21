@@ -20,9 +20,11 @@ class MainActivity : ComponentActivity() {
             val state by viewModel.uiState.collectAsState()
             NoveoRoot(
                 state = state,
+                onDismissOnboarding = viewModel::dismissOnboarding,
                 onAuthMode = viewModel::setAuthMode,
                 onAuthSubmit = viewModel::authenticate,
                 onOpenChat = viewModel::openChat,
+                onBackToChats = viewModel::backToChatList,
                 onSend = viewModel::sendMessage,
                 onLogout = viewModel::logout
             )
