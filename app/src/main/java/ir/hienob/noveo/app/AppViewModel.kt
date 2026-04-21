@@ -19,6 +19,7 @@ import kotlinx.coroutines.withContext
 
 sealed interface StartupState {
     data object Splash : StartupState
+    data object Onboarding : StartupState
     data object Auth : StartupState
     data object Home : StartupState
 }
@@ -53,11 +54,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(startupState = StartupState.Splash, loading = true, error = null)
             val session = sessionStore.read()
             if (session == null) {
-                _uiState.value = _uiState.value.copy(startupState = StartupState.Auth, loading = false)
+                _uiState.value = _uiState.value.copy(
+                    startupState = StartupState.Onboarding,
+                    loading = false,
+                    selectedChatId = null,
+                    messages = emptyList()
+                )
                 return@launch
             }
             loadHome(session)
         }
+    }
+
+    fun dismissOnboarding() {
+        _uiState.value = _uiState.value.copy(startupState = StartupState.Auth, loading = false, error = null)
     }
 
     fun setAuthMode(signup: Boolean) {
@@ -85,6 +95,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = AppUiState(startupState = StartupState.Auth)
     }
 
+    fun backToChatList() {
+        _uiState.value = _uiState.value.copy(selectedChatId = null, messages = emptyList(), error = null, loading = false)
+    }
+
     fun openChat(chatId: Long) {
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
@@ -106,7 +120,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 api.sendMessage(session, chatId, text)
                 val messages = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
-                _uiState.value = _uiState.value.copy(messages = messages)
+                _uiState.value = _uiState.value.copy(messages = messages, error = null)
             }.onFailure {
                 _uiState.value = _uiState.value.copy(error = it.message ?: "Unable to send")
             }
@@ -121,9 +135,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 loading = false,
                 session = session,
                 chats = chats,
-                selectedChatId = chats.firstOrNull()?.id
+                selectedChatId = null,
+                messages = emptyList(),
+                error = null
             )
-            chats.firstOrNull()?.id?.let { openChat(it) }
             observeSocket(session)
         }.onFailure {
             sessionStore.clear()
