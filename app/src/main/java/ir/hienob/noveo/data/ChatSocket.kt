@@ -15,7 +15,7 @@ class ChatSocket(
     private val origin: String = "https://noveo.ir"
 ) {
 
-    fun connect(session: Session): Flow<ChatMessage> = callbackFlow {
+    fun connect(session: Session, knownUsers: Map<String, UserSummary>): Flow<ChatMessage> = callbackFlow {
         val request = Request.Builder()
             .url("wss://noveo.ir:8443/ws")
             .header("Origin", origin)
@@ -36,15 +36,7 @@ class ChatSocket(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val json = JSONObject(text)
                 if (json.optString("type") != "new_message") return
-                trySend(
-                    ChatMessage(
-                        id = json.optLong("messageId", json.optLong("id")),
-                        chatId = json.optLong("chatId"),
-                        sender = json.optString("senderName", json.optString("sender")),
-                        text = json.optString("content", json.optString("text")),
-                        createdAt = json.optString("timestamp", json.optString("createdAt"))
-                    )
-                )
+                trySend(parseRealtimeMessage(json, knownUsers))
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
