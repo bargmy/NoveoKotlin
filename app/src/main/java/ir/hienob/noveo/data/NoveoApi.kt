@@ -17,98 +17,48 @@ class NoveoApi(
     private val wsUrl: String = "wss://noveo.ir:8443/ws",
     private val origin: String = "https://noveo.ir"
 ) {
+    fun login(handle: String, password: String): Session = auth(JSONObject().put("type", "login_with_password").put("username", handle).put("password", password).put("languageCode", "en"))
+    fun signup(handle: String, password: String): Session = auth(JSONObject().put("type", "register").put("username", handle).put("password", password).put("languageCode", "en"))
 
-    fun login(handle: String, password: String): Session = authOverSocket(
-        payload = JSONObject()
-            .put("type", "login_with_" + "password")
-            .put("username", handle)
-            .put("pass" + "word", password)
-            .put("languageCode", "en")
-    )
-
-    fun signup(handle: String, password: String): Session = authOverSocket(
-        payload = JSONObject()
-            .put("type", "register")
-            .put("username", handle)
-            .put("pass" + "word", password)
-            .put("languageCode", "en")
-    )
-
-    fun getChats(session: Session): List<ChatSummary> {
-        val history = requestChatHistory(session)
-        return parseChats(history)
+    fun getHomeData(session: Session): HomeData {
+        val sync = sync(session)
+        return HomeData(sync.usersById, sync.onlineUserIds, parseChats(sync.history, sync.usersById, session.userId))
     }
 
-    fun getMessages(session: Session, chatId: Long): List<ChatMessage> {
-        val history = requestChatHistory(session)
-        val chats = history.optJSONArray("chats") ?: JSONArray()
-        for (i in 0 until chats.length()) {
-            val chat = chats.getJSONObject(i)
-            val id = chat.optLong("chatId", chat.optLong("id"))
-            if (id == chatId) {
-                val arr = chat.optJSONArray("messages") ?: JSONArray()
-                return parseMessages(arr, chatId)
-            }
-        }
-        return emptyList()
+    fun getMessages(session: Session, chatId: String): MessageLoadResult {
+        val sync = sync(session)
+        return MessageLoadResult(sync.usersById, parseMessagesForChat(sync.history, sync.usersById, chatId))
     }
 
-    fun sendMessage(session: Session, chatId: Long, text: String) {
+    fun sendMessage(session: Session, chatId: String, text: String) {
         val latch = CountDownLatch(1)
         val failure = AtomicReference<String?>(null)
-        val completed = AtomicBoolean(false)
-
-        val socket = client.newWebSocket(newSocketRequest(), object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(reconnectPayload(session).toString())
-            }
-
+        val done = AtomicBoolean(false)
+        val socket = client.newWebSocket(request(), object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.send(reconnect(session).toString()) }
             override fun onMessage(webSocket: WebSocket, textMsg: String) {
                 val msg = JSONObject(textMsg)
                 when (msg.optString("type")) {
                     "login_success" -> webSocket.send(JSONObject().put("type", "message").put("chatId", chatId).put("content", text).toString())
-                    "new_message", "message_sent", "chat_history" -> {
-                        if (completed.compareAndSet(false, true)) latch.countDown()
-                        webSocket.close(1000, null)
-                    }
-                    "auth_failed" -> {
-                        failure.set(msg.optString("message", "Authentication failed"))
-                        if (completed.compareAndSet(false, true)) latch.countDown()
-                        webSocket.close(1000, null)
-                    }
+                    "new_message", "message_sent", "chat_history" -> { if (done.compareAndSet(false, true)) latch.countDown(); webSocket.close(1000, null) }
+                    "auth_failed", "error" -> { failure.set(msg.optString("message", "Unable to send")); if (done.compareAndSet(false, true)) latch.countDown(); webSocket.close(1000, null) }
                 }
             }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                failure.set(socketFailureMessage(response, t, "sending message"))
-                if (completed.compareAndSet(false, true)) latch.countDown()
-            }
-
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (completed.compareAndSet(false, true)) {
-                    failure.set("Socket closed before ack: code=$code reason=$reason")
-                    latch.countDown()
-                }
-            }
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { failure.set(fail(response, t, "sending message")); if (done.compareAndSet(false, true)) latch.countDown() }
         })
-
-        val done = latch.await(20, TimeUnit.SECONDS)
+        val finished = latch.await(20, TimeUnit.SECONDS)
         socket.cancel()
-        if (!done) error("Send timeout (no ack frame)")
+        if (!finished) error("Send timeout")
         failure.get()?.let { error(it) }
     }
 
-    private fun authOverSocket(payload: JSONObject): Session {
+    private fun auth(payload: JSONObject): Session {
         val latch = CountDownLatch(1)
-        val session = AtomicReference<Session?>(null)
+        val result = AtomicReference<Session?>(null)
         val failure = AtomicReference<String?>(null)
-        val completed = AtomicBoolean(false)
-
-        val socket = client.newWebSocket(newSocketRequest(), object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(payload.toString())
-            }
-
+        val done = AtomicBoolean(false)
+        val socket = client.newWebSocket(request(), object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.send(payload.toString()) }
             override fun onMessage(webSocket: WebSocket, textMsg: String) {
                 val msg = JSONObject(textMsg)
                 when (msg.optString("type")) {
@@ -116,157 +66,56 @@ class NoveoApi(
                         val user = msg.optJSONObject("user")
                         val userId = user?.optString("userId").orEmpty()
                         val token = msg.optString("token")
-                        if (userId.isBlank() || token.isBlank()) {
-                            failure.set("Missing session token in login response")
-                        } else {
-                            session.set(
-                                Session(
-                                    userId = userId,
-                                    token = token,
-                                    sessionId = msg.optString("sessionId"),
-                                    expiresAt = msg.optLong("expiresAt", 0L)
-                                )
-                            )
-                        }
-                        if (completed.compareAndSet(false, true)) latch.countDown()
-                        webSocket.close(1000, null)
+                        if (userId.isBlank() || token.isBlank()) failure.set("Missing session token") else result.set(Session(userId, token, msg.optString("sessionId"), msg.optLong("expiresAt", 0L)))
+                        if (done.compareAndSet(false, true)) latch.countDown(); webSocket.close(1000, null)
                     }
-                    "auth_failed" -> {
-                        failure.set(msg.optString("message", "Authentication failed"))
-                        if (completed.compareAndSet(false, true)) latch.countDown()
-                        webSocket.close(1000, null)
-                    }
+                    "auth_failed" -> { failure.set(msg.optString("message", "Authentication failed")); if (done.compareAndSet(false, true)) latch.countDown(); webSocket.close(1000, null) }
                 }
             }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                failure.set(socketFailureMessage(response, t, "authenticating"))
-                if (completed.compareAndSet(false, true)) latch.countDown()
-            }
-
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (completed.compareAndSet(false, true)) {
-                    failure.set("Socket closed before auth result: code=$code reason=$reason")
-                    latch.countDown()
-                }
-            }
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { failure.set(fail(response, t, "authenticating")); if (done.compareAndSet(false, true)) latch.countDown() }
         })
-
-        val done = latch.await(20, TimeUnit.SECONDS)
+        val finished = latch.await(20, TimeUnit.SECONDS)
         socket.cancel()
-        if (!done) error("Auth timeout (no login_success/auth_failed frame)")
+        if (!finished) error("Auth timeout")
         failure.get()?.let { error(it) }
-        return session.get() ?: error("Authentication failed")
+        return result.get() ?: error("Authentication failed")
     }
 
-    private fun requestChatHistory(session: Session): JSONObject {
+    private fun sync(session: Session): SyncSnapshot {
         val latch = CountDownLatch(1)
         val history = AtomicReference<JSONObject?>(null)
+        val users = AtomicReference<Map<String, UserSummary>>(emptyMap())
+        val online = AtomicReference<Set<String>>(emptySet())
         val failure = AtomicReference<String?>(null)
-        val completed = AtomicBoolean(false)
-
-        val socket = client.newWebSocket(newSocketRequest(), object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(reconnectPayload(session).toString())
-            }
-
+        val done = AtomicBoolean(false)
+        val socket = client.newWebSocket(request(), object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.send(reconnect(session).toString()) }
             override fun onMessage(webSocket: WebSocket, textMsg: String) {
                 val msg = JSONObject(textMsg)
                 when (msg.optString("type")) {
                     "login_success" -> webSocket.send(JSONObject().put("type", "resync_state").toString())
-                    "chat_history" -> {
-                        history.set(msg)
-                        if (completed.compareAndSet(false, true)) latch.countDown()
-                        webSocket.close(1000, null)
-                    }
-                    "auth_failed" -> {
-                        failure.set(msg.optString("message", "Authentication failed"))
-                        if (completed.compareAndSet(false, true)) latch.countDown()
-                        webSocket.close(1000, null)
-                    }
+                    "user_list_update" -> { val parsed = parseUsers(msg); users.set(parsed.first); online.set(parsed.second) }
+                    "chat_history" -> { history.set(msg); if (done.compareAndSet(false, true)) latch.countDown(); webSocket.close(1000, null) }
+                    "auth_failed" -> { failure.set(msg.optString("message", "Authentication failed")); if (done.compareAndSet(false, true)) latch.countDown(); webSocket.close(1000, null) }
                 }
             }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                failure.set(socketFailureMessage(response, t, "loading chats"))
-                if (completed.compareAndSet(false, true)) latch.countDown()
-            }
-
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (completed.compareAndSet(false, true)) {
-                    failure.set("Socket closed before chat_history: code=$code reason=$reason")
-                    latch.countDown()
-                }
-            }
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { failure.set(fail(response, t, "loading chats")); if (done.compareAndSet(false, true)) latch.countDown() }
         })
-
-        val done = latch.await(20, TimeUnit.SECONDS)
+        val finished = latch.await(20, TimeUnit.SECONDS)
         socket.cancel()
-        if (!done) error("Chat history timeout (no chat_history frame)")
+        if (!finished) error("Sync timeout")
         failure.get()?.let { error(it) }
-        return history.get() ?: JSONObject().put("chats", JSONArray())
+        return SyncSnapshot(users.get(), online.get(), history.get() ?: JSONObject().put("chats", JSONArray()))
     }
 
-    private fun reconnectPayload(session: Session): JSONObject = JSONObject()
-        .put("type", "reconnect")
-        .put("userId", session.userId)
-        .put("token", session.token)
-        .put("sessionId", session.sessionId)
-
-    private fun newSocketRequest(): Request = Request.Builder()
-        .url(wsUrl)
-        .header("Origin", origin)
-        .build()
-
-    private fun socketFailureMessage(response: Response?, t: Throwable, context: String): String {
+    private fun request(): Request = Request.Builder().url(wsUrl).header("Origin", origin).build()
+    private fun reconnect(session: Session): JSONObject = JSONObject().put("type", "reconnect").put("userId", session.userId).put("token", session.token).put("sessionId", session.sessionId)
+    private fun fail(response: Response?, t: Throwable, context: String): String {
         val code = response?.code
-        val responseMessage = response?.message.orEmpty()
-        val throwableMessage = t.message ?: t.javaClass.simpleName
         return when (code) {
-            404 -> "Noveo realtime server was not found while $context (HTTP 404). Check the websocket endpoint on the server."
+            404 -> "Noveo realtime server was not found while $context (HTTP 404)."
             401, 403 -> "Noveo rejected the realtime connection while $context (HTTP $code)."
-            else -> {
-                val httpPart = if (code != null) {
-                    if (responseMessage.isNotBlank()) " (HTTP $code: $responseMessage)" else " (HTTP $code)"
-                } else {
-                    ""
-                }
-                "Socket failure while $context$httpPart: $throwableMessage"
-            }
-        }
-    }
-
-    private fun parseChats(payload: JSONObject): List<ChatSummary> {
-        val array = payload.optJSONArray("chats") ?: JSONArray()
-        return buildList {
-            for (i in 0 until array.length()) {
-                val item = array.getJSONObject(i)
-                val messages = item.optJSONArray("messages") ?: JSONArray()
-                val last = if (messages.length() > 0) messages.getJSONObject(messages.length() - 1) else null
-                add(
-                    ChatSummary(
-                        id = item.optLong("chatId", item.optLong("id")),
-                        title = item.optString("chatName", item.optString("title", "Chat")),
-                        lastMessage = last?.optString("content", "") ?: "",
-                        unreadCount = item.optInt("unreadCount", item.optInt("unread", 0))
-                    )
-                )
-            }
-        }
-    }
-
-    private fun parseMessages(array: JSONArray, chatId: Long): List<ChatMessage> = buildList {
-        for (i in 0 until array.length()) {
-            val item = array.getJSONObject(i)
-            add(
-                ChatMessage(
-                    id = item.optLong("messageId", item.optLong("id")),
-                    chatId = item.optLong("chatId", chatId),
-                    sender = item.optString("senderName", item.optString("sender", "")),
-                    text = item.optString("content", item.optString("text", "")),
-                    createdAt = item.optString("timestamp", item.optString("createdAt", ""))
-                )
-            )
+            else -> "Socket failure while $context: ${t.message ?: t.javaClass.simpleName}"
         }
     }
 }
