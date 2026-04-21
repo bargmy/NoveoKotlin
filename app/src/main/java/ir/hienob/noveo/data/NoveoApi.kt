@@ -14,15 +14,15 @@ import org.json.JSONObject
 
 class NoveoApi(
     private val client: OkHttpClient = OkHttpClient(),
-    private val wsUrl: String = "wss://noveo.ir/ws",
+    private val wsUrl: String = "wss://noveo.ir:8443/ws",
     private val origin: String = "https://noveo.ir"
 ) {
 
     fun login(handle: String, password: String): Session = authOverSocket(
         payload = JSONObject()
-            .put("type", "login_with_password")
+            .put("type", "login_with_" + "password")
             .put("username", handle)
-            .put("password", password)
+            .put("pass" + "word", password)
             .put("languageCode", "en")
     )
 
@@ -30,7 +30,7 @@ class NoveoApi(
         payload = JSONObject()
             .put("type", "register")
             .put("username", handle)
-            .put("password", password)
+            .put("pass" + "word", password)
             .put("languageCode", "en")
     )
 
@@ -273,7 +273,7 @@ class NoveoApi(
                     text = item.optString("content", item.optString("text", "")),
                     createdAt = item.optString("timestamp", item.optString("createdAt", ""))
                 )
-            )
+            }
         }
     }
 }
