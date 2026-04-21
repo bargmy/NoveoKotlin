@@ -15,7 +15,7 @@ import org.json.JSONObject
 class NoveoApi(
     private val client: OkHttpClient = OkHttpClient(),
     private val wsUrl: String = "wss://noveo.ir/ws",
-    private val origin: String = "https://localhost"
+    private val origin: String = "https://noveo.ir"
 ) {
 
     fun login(handle: String, password: String): Session = authOverSocket(
@@ -58,7 +58,7 @@ class NoveoApi(
         val failure = AtomicReference<String?>(null)
         val completed = AtomicBoolean(false)
 
-        val socket = client.newWebSocket(Request.Builder().url(wsUrl).header("Origin", origin).build(), object : WebSocketListener() {
+        val socket = client.newWebSocket(newSocketRequest(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send(reconnectPayload(session).toString())
             }
@@ -78,7 +78,7 @@ class NoveoApi(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                failure.set("Socket failure: ${t.message ?: t.javaClass.simpleName}")
+                failure.set(socketFailureMessage(response, t, "sending message"))
                 if (completed.compareAndSet(false, true)) latch.countDown()
             }
 
@@ -102,7 +102,7 @@ class NoveoApi(
         val failure = AtomicReference<String?>(null)
         val completed = AtomicBoolean(false)
 
-        val socket = client.newWebSocket(Request.Builder().url(wsUrl).header("Origin", origin).build(), object : WebSocketListener() {
+        val socket = client.newWebSocket(newSocketRequest(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send(payload.toString())
             }
@@ -138,7 +138,7 @@ class NoveoApi(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                failure.set("Socket failure: ${t.message ?: t.javaClass.simpleName}")
+                failure.set(socketFailureMessage(response, t, "authenticating"))
                 if (completed.compareAndSet(false, true)) latch.countDown()
             }
 
@@ -163,7 +163,7 @@ class NoveoApi(
         val failure = AtomicReference<String?>(null)
         val completed = AtomicBoolean(false)
 
-        val socket = client.newWebSocket(Request.Builder().url(wsUrl).header("Origin", origin).build(), object : WebSocketListener() {
+        val socket = client.newWebSocket(newSocketRequest(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send(reconnectPayload(session).toString())
             }
@@ -186,7 +186,7 @@ class NoveoApi(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                failure.set("Socket failure: ${t.message ?: t.javaClass.simpleName}")
+                failure.set(socketFailureMessage(response, t, "loading chats"))
                 if (completed.compareAndSet(false, true)) latch.countDown()
             }
 
@@ -210,6 +210,38 @@ class NoveoApi(
         .put("userId", session.userId)
         .put("token", session.token)
         .put("sessionId", session.sessionId)
+
+    private fun newSocketRequest(): Request = Request.Builder()
+        .url(wsUrl)
+        .header("Origin", origin)
+        .build()
+
+    private fun socketFailureMessage(response: Response?, t: Throwable, context: String): String {
+        val code = response?.code
+        val body = response?.message?.takeIf { it.isNotBlank() }
+        return when (code) {
+            404 -> "Noveo realtime server was not found while $context (HTTP 404). Check the websocket endpoint on the server."
+            401, 403 -> "Noveo rejected the realtime connection while $context (HTTP $code)."
+            else -> buildString {
+                append("Socket failure while ")
+                append(context)
+                code?.let {
+                    append(" (HTTP ")
+                    append(it)
+                    body?.let { message ->
+                        append(": ")
+                        append(message)
+                    }
+                    append(')')
+                }
+                val throwableMessage = t.message ?: t.javaClass.simpleName
+                if (!throwableMessage.isNullOrBlank()) {
+                    append(": ")
+                    append(throwableMessage)
+                }
+            }
+        }
+    }
 
     private fun parseChats(payload: JSONObject): List<ChatSummary> {
         val array = payload.optJSONArray("chats") ?: JSONArray()
