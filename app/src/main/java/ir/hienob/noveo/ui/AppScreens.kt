@@ -19,12 +19,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,7 +39,14 @@ import androidx.compose.ui.unit.dp
 import ir.hienob.noveo.app.AppUiState
 import ir.hienob.noveo.app.StartupState
 
-private val noveoBlueScheme = lightColorScheme(
+internal enum class ThemePreset(val label: String) {
+    SKY_LIGHT("Sky Light"),
+    LIGHT("Light"),
+    OCEAN_DARK("Ocean Dark"),
+    DARK("Dark")
+}
+
+private val skyLightScheme = lightColorScheme(
     primary = Color(0xFF168BFF),
     onPrimary = Color.White,
     primaryContainer = Color(0xFFD6ECFF),
@@ -52,6 +61,51 @@ private val noveoBlueScheme = lightColorScheme(
     error = Color(0xFFD14352)
 )
 
+private val lightScheme = lightColorScheme(
+    primary = Color(0xFF2F80ED),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFDCEBFF),
+    onPrimaryContainer = Color(0xFF0B3D91),
+    secondary = Color(0xFF5B8DEF),
+    background = Color(0xFFF5F9FF),
+    surface = Color.White,
+    surfaceVariant = Color(0xFFEDF4FF),
+    onSurface = Color(0xFF162033),
+    onSurfaceVariant = Color(0xFF5A6880),
+    outline = Color(0xFFD2DEEF),
+    error = Color(0xFFCC3344)
+)
+
+private val oceanDarkScheme = darkColorScheme(
+    primary = Color(0xFF4DB4FF),
+    onPrimary = Color(0xFF003A59),
+    primaryContainer = Color(0xFF0D4C73),
+    onPrimaryContainer = Color(0xFFD4F0FF),
+    secondary = Color(0xFF81D0FF),
+    background = Color(0xFF09131C),
+    surface = Color(0xFF0E1B27),
+    surfaceVariant = Color(0xFF132636),
+    onSurface = Color(0xFFE1F4FF),
+    onSurfaceVariant = Color(0xFF92B2C7),
+    outline = Color(0xFF274257),
+    error = Color(0xFFFF91A0)
+)
+
+private val darkScheme = darkColorScheme(
+    primary = Color(0xFF74A7FF),
+    onPrimary = Color(0xFF062B63),
+    primaryContainer = Color(0xFF123A7C),
+    onPrimaryContainer = Color(0xFFD7E6FF),
+    secondary = Color(0xFF95B8FF),
+    background = Color(0xFF0F141C),
+    surface = Color(0xFF141B24),
+    surfaceVariant = Color(0xFF1B2430),
+    onSurface = Color(0xFFEAF1FF),
+    onSurfaceVariant = Color(0xFF9CACBF),
+    outline = Color(0xFF334258),
+    error = Color(0xFFFF8A98)
+)
+
 @Composable
 fun NoveoRoot(
     state: AppUiState,
@@ -64,14 +118,30 @@ fun NoveoRoot(
     onSend: (String) -> Unit,
     onLogout: () -> Unit
 ) {
+    var currentTheme by rememberSaveable { mutableStateOf(ThemePreset.SKY_LIGHT) }
+    val colorScheme = when (currentTheme) {
+        ThemePreset.SKY_LIGHT -> skyLightScheme
+        ThemePreset.LIGHT -> lightScheme
+        ThemePreset.OCEAN_DARK -> oceanDarkScheme
+        ThemePreset.DARK -> darkScheme
+    }
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        MaterialTheme(colorScheme = noveoBlueScheme) {
+        MaterialTheme(colorScheme = colorScheme) {
             Surface(modifier = Modifier.fillMaxSize()) {
                 when (state.startupState) {
                     StartupState.Splash -> SplashScreen()
                     StartupState.Onboarding -> OnboardingScreen(onDismissOnboarding)
                     StartupState.Auth -> AuthScreen(state, onAuthMode, onAuthSubmit)
-                    StartupState.Home -> HomeScreen(state, onOpenChat, onStartDirectChat, onBackToChats, onSend, onLogout)
+                    StartupState.Home -> HomeScreen(
+                        state = state,
+                        onOpenChat = onOpenChat,
+                        onStartDirectChat = onStartDirectChat,
+                        onBackToChats = onBackToChats,
+                        onSend = onSend,
+                        onLogout = onLogout,
+                        currentTheme = currentTheme,
+                        onThemeChange = { currentTheme = it }
+                    )
                 }
             }
         }
