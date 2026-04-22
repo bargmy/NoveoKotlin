@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -107,6 +108,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir"
@@ -458,6 +460,18 @@ private fun SidebarHeader(
     onSearchToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit
 ) {
+    val statusAlpha = remember { Animatable(1f) }
+    LaunchedEffect(connectionTitle) {
+        if (connectionTitle == "Noveo") {
+            statusAlpha.snapTo(1f)
+            return@LaunchedEffect
+        }
+        while (isActive) {
+            statusAlpha.animateTo(0.5f, animationSpec = tween(durationMillis = 850, easing = FastOutSlowInEasing))
+            statusAlpha.animateTo(1f, animationSpec = tween(durationMillis = 850, easing = FastOutSlowInEasing))
+        }
+    }
+    val titleAlpha = statusAlpha.value
     val statusTransition = rememberInfiniteTransition(label = "connection_status_fade")
     val statusAlpha by statusTransition.animateFloat(
         initialValue = 1f,
