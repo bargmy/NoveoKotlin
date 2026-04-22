@@ -7,7 +7,11 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -468,6 +472,17 @@ private fun SidebarHeader(
         }
     }
     val titleAlpha = statusAlpha.value
+    val statusTransition = rememberInfiniteTransition(label = "connection_status_fade")
+    val statusAlpha by statusTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "connection_status_alpha"
+    )
+    val titleAlpha = if (connectionTitle == "Noveo") 1f else statusAlpha
 
     Row(
         modifier = Modifier
@@ -1088,6 +1103,32 @@ private fun SettingsThemesSection(currentTheme: ThemePreset, onThemeChange: (The
     ) {
         themeSections.forEach { section ->
             ThemeSectionBlock(section = section, currentTheme = currentTheme, onThemeChange = onThemeChange)
+        DetailCard(title = "Theme", body = "Themes are now grouped into sections (light, dark, and accent variants) for easier switching.")
+
+        val themeSections = listOf(
+            ThemeSection(
+                title = "System",
+                subtitle = "Use Light or Dark manually until automatic system-follow mode is added.",
+                presets = emptyList()
+            ),
+            ThemeSection(
+                title = "Light",
+                subtitle = "Bright themes for daytime usage.",
+                presets = listOf(ThemePreset.LIGHT, ThemePreset.SKY_LIGHT)
+            ),
+            ThemeSection(
+                title = "Dark",
+                subtitle = "Low-light themes for nighttime usage.",
+                presets = listOf(ThemePreset.DARK, ThemePreset.OCEAN_DARK)
+            )
+        )
+
+        themeSections.forEach { section ->
+            ThemeSectionBlock(
+                section = section,
+                currentTheme = currentTheme,
+                onThemeChange = onThemeChange
+            )
         }
     }
 }
