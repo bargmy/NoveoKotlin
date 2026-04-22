@@ -96,6 +96,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(selectedChatId = null, messages = emptyList(), error = null, loading = false)
     }
 
+    fun openDirectChat(userId: String) {
+        val state = _uiState.value
+        val existingChat = state.chats.firstOrNull { chat ->
+            chat.chatType == "private" && chat.memberIds.contains(userId) && state.session?.userId?.let(chat.memberIds::contains) == true
+        }
+        if (existingChat != null) {
+            openChat(existingChat.id)
+            return
+        }
+        val name = state.usersById[userId]?.username?.ifBlank { "that contact" } ?: "that contact"
+        _uiState.value = state.copy(error = "No existing chat with $name yet.")
+    }
+
     fun openChat(chatId: String) {
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
