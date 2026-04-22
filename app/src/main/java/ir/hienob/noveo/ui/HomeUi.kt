@@ -571,7 +571,11 @@ private fun ChatPane(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(state.messages, key = { it.id }) { message ->
-                    MessageRow(message = message, ownMessage = message.senderId == state.session?.userId)
+                    MessageRow(
+                        message = message,
+                        ownMessage = message.senderId == state.session?.userId,
+                        senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl
+                    )
                 }
                 items(pendingBubbles, key = { it.id }) { pending ->
                     PendingMessageBubble(text = pending.text)
@@ -637,14 +641,14 @@ private fun ComposerBar(
 }
 
 @Composable
-private fun MessageRow(message: ChatMessage, ownMessage: Boolean) {
+private fun MessageRow(message: ChatMessage, ownMessage: Boolean, senderAvatarUrl: String?) {
     Column(
         horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
             if (!ownMessage) {
-                ProfileCircle(name = message.senderName, imageUrl = null, size = 34.dp)
+                ProfileCircle(name = message.senderName, imageUrl = senderAvatarUrl, size = 34.dp)
                 Spacer(Modifier.width(8.dp))
             } else {
                 Spacer(Modifier.weight(1f))
@@ -1262,6 +1266,8 @@ private fun MessageFileAttachment.isVideo(): Boolean {
 private fun String?.normalizeNoveoUrl(): String? {
     val value = this?.trim().orEmpty()
     if (value.isBlank()) return null
+    if (value.startsWith("data:")) return value
     if (value.startsWith("http://") || value.startsWith("https://")) return value
-    return if (value.startsWith("/")) "$NOVEO_BASE_URL$value" else "$NOVEO_BASE_URL/$value"
+    val normalized = if (value.startsWith("/")) value else "/$value"
+    return "$NOVEO_BASE_URL$normalized"
 }
