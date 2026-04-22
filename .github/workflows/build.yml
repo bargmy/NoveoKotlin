@@ -9,6 +9,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      APK_FOLDER: app/build/outputs/apk/release
+      DRIVE_META_NAME: .noveo-latest-apk.json
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,22 +30,155 @@ jobs:
         with:
           gradle-version: 8.7
 
-      - name: Build debug APK
-        run: gradle assembleDebug
+      - name: Build release APK
+        id: build_apk
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle assembleRelease 2>&1 | tee build.log
 
-      - name: Upload APK artifact
+      - name: Upload build log artifact on failure
+        if: steps.build_apk.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
-          name: noveo-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: build-log-${{ github.run_number }}
+          path: build.log
+          if-no-files-found: ignore
 
-      - name: Send APK to Telegram
+      - name: Send build failure to Telegram
+        if: steps.build_apk.outcome == 'failure'
+        shell: bash
         env:
           TOKEN: ${{ secrets.TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
-          curl -fsSL -X POST "https://api.telegram.org/bot${TOKEN}/sendDocument" \
-            -F chat_id="${CHANNEL_ID}" \
-            -F caption="NoveoKotlin debug APK from ${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
-            -F document=@app/build/outputs/apk/debug/app-debug.apk
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import urllib.parse
+          import urllib.request
+
+          token = os.environ['TOKEN']
+          chat_id = os.environ['CHANNEL_ID']
+          repo = os.environ['REPO']
+          ref_name = os.environ['REF_NAME']
+          sha = os.environ['SHA'][:7]
+          run_id = os.environ['RUN_ID']
+          run_url = f"https://github.com/{repo}/actions/runs/{run_id}"
+          log_text = ''
+          log_file = pathlib.Path('build.log')
+          if log_file.exists():
+              lines = log_file.read_text(errors='ignore').strip().splitlines()
+              log_text = '\n'.join(lines[-35:])[-3200:]
+          message = f"❌ NoveoKotlin release build failed\nrepo: {repo}\nbranch: {ref_name}\ncommit: {sha}\nrun: {run_url}"
+          if log_text:
+              message += f"\n\nLast log lines:\n{log_text}"
+          data = urllib.parse.urlencode({'chat_id': chat_id, 'text': message}).encode()
+          req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
+          urllib.request.urlopen(req).read()
+          PY
+
+      - name: Fail workflow after Telegram failure notice
+        if: steps.build_apk.outcome == 'failure'
+        run: exit 1
+
+      - name: Find built APK
+        id: find_apk
+        shell: bash
+        run: |
+          APK_PATH=$(find "$APK_FOLDER" -type f -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "No APK found in $APK_FOLDER" >&2
+            exit 1
+          fi
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$(basename "$APK_PATH")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: noveo-release-apk
+          path: ${{ steps.find_apk.outputs.apk_path }}
+          if-no-files-found: error
+
+      - name: Write service account JSON
+        shell: bash
+        run: |
+          printf '%s' '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > service-account.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Drive client dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install google-api-python-client google-auth google-auth-httplib2
+
+      - name: Upload unique APK to Google Drive
+        id: drive_upload
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/service-account.json
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+          APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
+          APK_NAME: ${{ steps.find_apk.outputs.apk_name }}
+          DRIVE_META_NAME: ${{ env.DRIVE_META_NAME }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python scripts/ci/upload_apk_to_drive.py
+
+      - name: Notify Telegram on fresh APK upload
+        if: steps.drive_upload.outputs.uploaded == 'true'
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          DRIVE_LINK: ${{ steps.drive_upload.outputs.drive_link }}
+          APK_HASH: ${{ steps.drive_upload.outputs.sha256 }}
+          APK_NAME: ${{ steps.drive_upload.outputs.file_name }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import urllib.parse
+          import urllib.request
+
+          token = os.environ['TOKEN']
+          chat_id = os.environ['CHANNEL_ID']
+          repo = os.environ['REPO']
+          ref_name = os.environ['REF_NAME']
+          sha = os.environ['SHA'][:7]
+          drive_link = os.environ['DRIVE_LINK']
+          apk_hash = os.environ['APK_HASH']
+          apk_name = os.environ['APK_NAME']
+          run_id = os.environ['RUN_ID']
+          run_url = f"https://github.com/{repo}/actions/runs/{run_id}"
+          message = (
+              f"✅ New NoveoKotlin APK uploaded\n"
+              f"repo: {repo}\n"
+              f"branch: {ref_name}\n"
+              f"commit: {sha}\n"
+              f"file: {apk_name}\n"
+              f"sha256: {apk_hash}\n"
+              f"drive: {drive_link}\n"
+              f"run: {run_url}"
+          )
+          data = urllib.parse.urlencode({'chat_id': chat_id, 'text': message}).encode()
+          req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
+          urllib.request.urlopen(req).read()
+          PY
+
+      - name: Clean up credentials
+        if: always()
+        run: rm -f service-account.json
