@@ -115,7 +115,9 @@ internal fun HomeScreen(
     onStartDirectChat: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    currentTheme: ThemePreset,
+    onThemeChange: (ThemePreset) -> Unit
 ) {
     var showMenu by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
@@ -125,6 +127,7 @@ internal fun HomeScreen(
     var showSettingsModal by rememberSaveable { mutableStateOf(false) }
     var settingsSection by rememberSaveable { mutableStateOf(SettingsSection.MENU) }
     var profileUserId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showGroupInfo by rememberSaveable { mutableStateOf(false) }
 
     val filteredChats = remember(state.chats, searchQuery) {
         state.chats.filter {
@@ -205,7 +208,8 @@ internal fun HomeScreen(
                         selectedChat = selectedChat,
                         onBackToChats = onBackToChats,
                         onSend = onSend,
-                        onOpenProfile = { userId -> profileUserId = userId }
+                        onOpenProfile = { userId -> profileUserId = userId },
+                        onOpenGroupInfo = { showGroupInfo = true }
                     )
                 }
             }
@@ -255,6 +259,7 @@ internal fun HomeScreen(
                             onBackToChats = onBackToChats,
                             onSend = onSend,
                             onOpenProfile = { userId -> profileUserId = userId },
+                            onOpenGroupInfo = { showGroupInfo = true },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -330,8 +335,20 @@ internal fun HomeScreen(
                 section = settingsSection,
                 onSectionChange = { settingsSection = it },
                 onClose = { showSettingsModal = false },
-                onLogout = onLogout
+                onLogout = onLogout,
+                currentTheme = currentTheme,
+                onThemeChange = onThemeChange
             )
+        }
+
+        ModalHost(visible = showGroupInfo && selectedChat != null, onDismiss = { showGroupInfo = false }) {
+            selectedChat?.let { chat ->
+                GroupInfoModal(
+                    chat = chat,
+                    usersById = state.usersById,
+                    onClose = { showGroupInfo = false }
+                )
+            }
         }
 
         ModalHost(visible = selectedProfile != null, onDismiss = { profileUserId = null }) {
@@ -540,6 +557,7 @@ private fun ChatPane(
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
+    onOpenGroupInfo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
@@ -582,7 +600,9 @@ private fun ChatPane(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(18.dp))
-                    .clickable(enabled = profileUserId != null) { profileUserId?.let(onOpenProfile) }
+                    .clickable {
+                        if (profileUserId != null) onOpenProfile(profileUserId) else if (selectedChat != null) onOpenGroupInfo()
+                    }
                     .padding(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -869,7 +889,9 @@ private fun SettingsModal(
     section: SettingsSection,
     onSectionChange: (SettingsSection) -> Unit,
     onClose: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    currentTheme: ThemePreset,
+    onThemeChange: (ThemePreset) -> Unit
 ) {
     val me = state.session?.userId?.let { state.usersById[it] }
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
@@ -892,7 +914,7 @@ private fun SettingsModal(
                     SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection()
                     SettingsSection.PROFILE -> SettingsProfileSection(me)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(state, onLogout)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection()
+                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(currentTheme, onThemeChange)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection()
                 }
             }
@@ -940,18 +962,36 @@ private fun SettingsAccountSection(state: AppUiState, onLogout: () -> Unit) {
         DetailRow("User ID", state.session?.userId ?: "Unknown")
         DetailRow("Session ID", state.session?.sessionId?.ifBlank { "Connected" } ?: "Unavailable")
         DetailRow("Expiry", formatExpiry(state.session))
-        DetailCard(title = "Account actions", body = "Web includes change password, devices, and delete account. Android needs those exact flows next.")
+        DetailCard(title = "Account status", body = "This build now shows your real active session fields from the live account. Logout is still wired and working.")
         Button(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Logout") }
     }
 }
 
 @Composable
-private fun SettingsPreferencesSection() {
+private fun SettingsPreferencesSection(currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         DetailCard(title = "Privacy", body = "Block group invites and related privacy controls belong here like web.")
         DetailCard(title = "Language", body = "English, فارسی, Русский, 中文")
         DetailCard(title = "Emoji Style", body = "Default or iOS")
-        DetailCard(title = "Appearance", body = "Themes and animated premium presets exist on web and should move here on Android.")
+        DetailCard(title = "Theme", body = "Choose the closest available preset for this Kotlin client.")
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThemePreset.entries.forEach { preset ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { onThemeChange(preset) },
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (preset == currentTheme) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(preset.label, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        if (preset == currentTheme) {
+                            Text("Selected", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -990,6 +1030,46 @@ private fun ProfileModal(
             )
             Spacer(Modifier.height(14.dp))
             Button(onClick = onMessage, modifier = Modifier.fillMaxWidth()) { Text("Message") }
+        }
+    }
+}
+
+@Composable
+private fun GroupInfoModal(chat: ChatSummary, usersById: Map<String, UserSummary>, onClose: () -> Unit) {
+    Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            ModalHeader(title = chat.title.ifBlank { "Chat info" }, onClose = onClose)
+            Column(modifier = Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                ProfileCircle(name = chat.title, imageUrl = chat.avatarUrl, size = 96.dp)
+                Spacer(Modifier.height(12.dp))
+                Text(chat.title.ifBlank { "Chat" }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text(chat.chatType.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(18.dp))
+                DetailRow("Members", chat.memberIds.size.toString())
+                Spacer(Modifier.height(10.dp))
+                if (chat.memberIds.isNotEmpty()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(top = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(chat.memberIds, key = { it }) { memberId ->
+                            val user = usersById[memberId]
+                            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                                Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    ProfileCircle(name = user?.username ?: memberId, imageUrl = user?.avatarUrl, size = 40.dp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(user?.username ?: memberId, fontWeight = FontWeight.SemiBold)
+                                        Text(user?.handle ?: user?.bio?.ifBlank { memberId } ?: memberId, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
