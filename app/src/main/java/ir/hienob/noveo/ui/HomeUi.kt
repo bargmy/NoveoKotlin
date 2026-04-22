@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -129,6 +130,7 @@ internal fun HomeScreen(
     state: AppUiState,
     onOpenChat: (String) -> Unit,
     onStartDirectChat: (String) -> Unit,
+    onSearchPublic: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onLogout: () -> Unit,
@@ -202,7 +204,10 @@ internal fun HomeScreen(
                             showSearch = !showSearch
                             if (!showSearch) searchQuery = ""
                         },
-                        onSearchQueryChange = { searchQuery = it },
+                        onSearchQueryChange = {
+                            searchQuery = it
+                            onSearchPublic(it)
+                        },
                         onOpenChat = onOpenChat,
                         onOpenContacts = { showContactsModal = true },
                         onOpenCreate = { showCreateModal = true },
@@ -242,7 +247,10 @@ internal fun HomeScreen(
                         showSearch = !showSearch
                         if (!showSearch) searchQuery = ""
                     },
-                    onSearchQueryChange = { searchQuery = it },
+                    onSearchQueryChange = {
+                        searchQuery = it
+                        onSearchPublic(it)
+                    },
                     onOpenChat = onOpenChat,
                     onOpenContacts = { showContactsModal = true },
                     onOpenCreate = { showCreateModal = true },
