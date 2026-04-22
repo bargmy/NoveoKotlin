@@ -49,19 +49,19 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
             val preview = if (messages.length() > 0) {
                 parseMessageContent(messages.optJSONObject(messages.length() - 1)?.opt("content")).previewText()
             } else {
-                item.optString("lastMessagePreview").sanitizeServerString()
+                ""
             }
             add(
                 ChatSummary(
                     id = chatId,
-                    chatType = item.optString("chatType").sanitizeServerString().ifBlank { item.optString("chat_type").sanitizeServerString() }.ifBlank { "private" },
+                    chatType = item.optString("chatType").sanitizeServerString().ifBlank { "private" },
                     title = resolveChatTitle(item, usersById, memberIds, selfUserId),
                     avatarUrl = resolveChatAvatar(item, usersById, memberIds, selfUserId),
                     lastMessagePreview = preview,
                     unreadCount = item.optInt("unreadCount", item.optInt("unread", 0)),
                     memberIds = memberIds,
                     handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
-                    isVerified = item.optBoolean("isVerified", item.optBoolean("is_verified", false))
+                    isVerified = item.optBoolean("isVerified", false)
                 )
             )
         }
@@ -91,19 +91,15 @@ internal fun parseRealtimeMessage(payload: JSONObject, usersById: Map<String, Us
 }
 
 private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map<String, UserSummary>): ChatMessage {
-    val messageId = message.optString("messageId").sanitizeServerString()
-        .ifBlank { message.optString("message_id").sanitizeServerString() }
-        .ifBlank { message.optString("id").sanitizeServerString() }
-    val senderId = message.optString("senderId").sanitizeServerString()
-        .ifBlank { message.optString("sender_id").sanitizeServerString() }
-        .ifBlank { message.optString("sender").sanitizeServerString() }
+    val messageId = message.optString("messageId").sanitizeServerString().ifBlank { message.optString("id").sanitizeServerString() }
+    val senderId = message.optString("senderId").sanitizeServerString().ifBlank { message.optString("sender").sanitizeServerString() }
     return ChatMessage(
         id = messageId,
         chatId = message.optString("chatId").sanitizeServerString().ifBlank { chatId },
         senderId = senderId,
         senderName = resolveSenderName(senderId, message, usersById),
         content = parseMessageContent(message.opt("content")),
-        createdAt = message.optLong("timestamp", message.optLong("createdAt", message.optLong("created_at", 0L)))
+        createdAt = message.optLong("timestamp", message.optLong("createdAt", 0L))
     )
 }
 
