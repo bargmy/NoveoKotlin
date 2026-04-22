@@ -20,14 +20,17 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import ir.hienob.noveo.app.AppUiState
 import ir.hienob.noveo.app.StartupState
@@ -44,12 +47,14 @@ fun NoveoRoot(
     onSend: (String) -> Unit,
     onLogout: () -> Unit
 ) {
-    Surface(modifier = Modifier.fillMaxSize()) {
-        when (state.startupState) {
-            StartupState.Splash -> SplashScreen()
-            StartupState.Onboarding -> OnboardingScreen(onDismissOnboarding)
-            StartupState.Auth -> AuthScreen(state, onAuthMode, onAuthSubmit)
-            StartupState.Home -> HomeScreen(state, onOpenChat, onStartDirectChat, onBackToChats, onSend, onLogout)
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            when (state.startupState) {
+                StartupState.Splash -> SplashScreen()
+                StartupState.Onboarding -> OnboardingScreen(onDismissOnboarding)
+                StartupState.Auth -> AuthScreen(state, onAuthMode, onAuthSubmit)
+                StartupState.Home -> HomeScreen(state, onOpenChat, onStartDirectChat, onBackToChats, onSend, onLogout)
+            }
         }
     }
 }
