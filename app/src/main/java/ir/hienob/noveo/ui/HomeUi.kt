@@ -49,6 +49,7 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
@@ -83,6 +84,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -826,6 +828,7 @@ private fun PendingMessageBubble(text: String) {
 
 @Composable
 private fun AttachmentPreview(file: MessageFileAttachment?) {
+    val uriHandler = LocalUriHandler.current
     val normalizedUrl = remember(file?.url) { file?.url.normalizeNoveoUrl() }
     if (file == null) return
     if (normalizedUrl != null && file.isImage()) {
@@ -842,11 +845,14 @@ private fun AttachmentPreview(file: MessageFileAttachment?) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = !normalizedUrl.isNullOrBlank()) { normalizedUrl?.let(uriHandler::openUri) }
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = if (file.isVideo()) Icons.Outlined.Call else Icons.Outlined.Info,
+                imageVector = if (file.isVideo()) Icons.Outlined.PlayArrow else Icons.Outlined.Info,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
             )
@@ -1468,10 +1474,13 @@ private fun MessageFileAttachment.isVideo(): Boolean {
 }
 
 private fun String?.normalizeNoveoUrl(): String? {
-    val value = this?.trim().orEmpty()
+    val value = this?.trim().orEmpty().replace("\\", "/")
     if (value.isBlank()) return null
     if (value.startsWith("data:")) return value
+    if (value.startsWith("//")) return "https:$value"
     if (value.startsWith("http://") || value.startsWith("https://")) return value
+    if (value.startsWith("ws://")) return value.replaceFirst("ws://", "http://")
+    if (value.startsWith("wss://")) return value.replaceFirst("wss://", "https://")
     val normalized = if (value.startsWith("/")) value else "/$value"
     return "$NOVEO_BASE_URL$normalized"
 }
