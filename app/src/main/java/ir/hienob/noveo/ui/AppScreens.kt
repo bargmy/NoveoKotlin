@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -27,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -34,6 +36,21 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import ir.hienob.noveo.app.AppUiState
 import ir.hienob.noveo.app.StartupState
+
+private val noveoBlueScheme = lightColorScheme(
+    primary = Color(0xFF168BFF),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFD6ECFF),
+    onPrimaryContainer = Color(0xFF003A66),
+    secondary = Color(0xFF52A7FF),
+    background = Color(0xFFF1F8FF),
+    surface = Color.White,
+    surfaceVariant = Color(0xFFE7F3FF),
+    onSurface = Color(0xFF132238),
+    onSurfaceVariant = Color(0xFF56708F),
+    outline = Color(0xFFCEE2F6),
+    error = Color(0xFFD14352)
+)
 
 @Composable
 fun NoveoRoot(
@@ -48,12 +65,14 @@ fun NoveoRoot(
     onLogout: () -> Unit
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            when (state.startupState) {
-                StartupState.Splash -> SplashScreen()
-                StartupState.Onboarding -> OnboardingScreen(onDismissOnboarding)
-                StartupState.Auth -> AuthScreen(state, onAuthMode, onAuthSubmit)
-                StartupState.Home -> HomeScreen(state, onOpenChat, onStartDirectChat, onBackToChats, onSend, onLogout)
+        MaterialTheme(colorScheme = noveoBlueScheme) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                when (state.startupState) {
+                    StartupState.Splash -> SplashScreen()
+                    StartupState.Onboarding -> OnboardingScreen(onDismissOnboarding)
+                    StartupState.Auth -> AuthScreen(state, onAuthMode, onAuthSubmit)
+                    StartupState.Home -> HomeScreen(state, onOpenChat, onStartDirectChat, onBackToChats, onSend, onLogout)
+                }
             }
         }
     }
