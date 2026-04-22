@@ -117,7 +117,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val result = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
                 _uiState.value = _uiState.value.copy(
                     usersById = _uiState.value.usersById + result.usersById,
-                    messages = result.messages,
+                    messages = result.messages.sortedBy { it.createdAt },
                     loading = false
                 )
             }.onFailure {
@@ -133,8 +133,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching {
                 api.sendMessage(session, chatId, text)
-                val result = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
-                _uiState.value = _uiState.value.copy(usersById = _uiState.value.usersById + result.usersById, messages = result.messages, error = null)
+                refreshHomeAndSelectedChat(session, chatId)
             }.onFailure {
                 _uiState.value = _uiState.value.copy(error = it.message ?: "Unable to send")
             }
@@ -161,15 +160,51 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private suspend fun refreshHomeAndSelectedChat(session: Session, chatId: String? = _uiState.value.selectedChatId) {
+        val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
+        val refreshedMessages = if (chatId.isNullOrBlank()) {
+            _uiState.value.messages
+        } else {
+            withContext(Dispatchers.IO) { api.getMessages(session, chatId) }.messages.sortedBy { it.createdAt }
+        }
+        _uiState.value = _uiState.value.copy(
+            usersById = home.usersById,
+            chats = home.chats,
+            messages = refreshedMessages,
+            loading = false,
+            error = null
+        )
+    }
+
     private fun observeSocket(session: Session) {
         socketJob?.cancel()
         socketJob = viewModelScope.launch {
             socket.connect(session, _uiState.value.usersById).collect { incoming ->
                 val state = _uiState.value
-                val mergedUsers = if (incoming.senderId.isNotBlank() && !state.usersById.containsKey(incoming.senderId)) state.usersById else state.usersById
-                if (incoming.chatId == state.selectedChatId) {
-                    _uiState.value = state.copy(usersById = mergedUsers, messages = state.messages + incoming)
+                val updatedMessages = if (incoming.chatId == state.selectedChatId) {
+                    (state.messages + incoming)
+                        .distinctBy { message -> message.id.ifBlank { "${message.chatId}-${message.createdAt}-${message.senderId}" } }
+                        .sortedBy { it.createdAt }
+                } else {
+                    state.messages
                 }
+                val updatedChats = state.chats.map { chat ->
+                    if (chat.id != incoming.chatId) {
+                        chat
+                    } else {
+                        chat.copy(
+                            lastMessagePreview = incoming.content.previewText().ifBlank { chat.lastMessagePreview },
+                            unreadCount = if (incoming.chatId == state.selectedChatId) 0 else chat.unreadCount + 1
+                        )
+                    }
+                }
+                val prioritizedChats = updatedChats.sortedByDescending { chat -> if (chat.id == incoming.chatId) incoming.createdAt else 0L }
+                _uiState.value = state.copy(
+                    chats = prioritizedChats,
+                    messages = updatedMessages,
+                    error = null
+                )
+                refreshHomeAndSelectedChat(session, state.selectedChatId)
             }
         }
     }
