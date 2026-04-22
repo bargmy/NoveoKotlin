@@ -14,6 +14,8 @@ jobs:
     env:
       APK_FOLDER: app/build/outputs/apk/release
       DRIVE_META_NAME: .noveo-latest-apk.json
+      RCLONE_REMOTE: gdrive
+      RCLONE_DIR: NoveoKotlin
 
     steps:
       - name: Checkout
@@ -106,34 +108,33 @@ jobs:
           path: ${{ steps.find_apk.outputs.apk_path }}
           if-no-files-found: error
 
-      - name: Write service account JSON
+      - name: Install rclone
+        run: curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Write rclone config from secret
         shell: bash
         run: |
-          printf '%s' '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > service-account.json
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf <<'EOF'
+          ${{ secrets.RCLONE }}
+          EOF
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Make rclone upload helper executable
+        run: chmod +x scripts/ci/upload_apk_with_rclone.sh
 
-      - name: Install Drive client dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install google-api-python-client google-auth google-auth-httplib2
-
-      - name: Upload unique APK to Google Drive
+      - name: Upload unique APK to Google Drive via rclone
         id: drive_upload
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/service-account.json
-          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
           APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
           APK_NAME: ${{ steps.find_apk.outputs.apk_name }}
           DRIVE_META_NAME: ${{ env.DRIVE_META_NAME }}
+          RCLONE_REMOTE: ${{ env.RCLONE_REMOTE }}
+          RCLONE_DIR: ${{ env.RCLONE_DIR }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python scripts/ci/upload_apk_to_drive.py
+        run: scripts/ci/upload_apk_with_rclone.sh
 
       - name: Notify Telegram on fresh APK upload
         if: steps.drive_upload.outputs.uploaded == 'true'
@@ -179,6 +180,6 @@ jobs:
           urllib.request.urlopen(req).read()
           PY
 
-      - name: Clean up credentials
+      - name: Clean up rclone config
         if: always()
-        run: rm -f service-account.json
+        run: rm -f ~/.config/rclone/rclone.conf
