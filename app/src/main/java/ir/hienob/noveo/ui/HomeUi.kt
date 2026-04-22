@@ -543,8 +543,7 @@ private fun SidebarHeader(
                         placeholder = { Text("Search", style = MaterialTheme.typography.bodyMedium) },
                         textStyle = MaterialTheme.typography.bodyMedium,
                         singleLine = true,
-                        shape = RoundedCornerShape(24.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        shape = RoundedCornerShape(24.dp)
                     )
                 } else {
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -958,7 +957,8 @@ private fun SettingsModal(
     onClose: () -> Unit,
     onLogout: () -> Unit,
     currentTheme: ThemePreset,
-    onThemeChange: (ThemePreset) -> Unit
+    onThemeChange: (ThemePreset) -> Unit,
+    onUpdateProfile: (String, String) -> Unit
 ) {
     val me = state.session?.userId?.let { state.usersById[it] }
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
@@ -979,7 +979,7 @@ private fun SettingsModal(
                 when (current) {
                     SettingsSection.MENU -> SettingsMenu(onSectionChange)
                     SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection()
-                    SettingsSection.PROFILE -> SettingsProfileSection(me)
+                    SettingsSection.PROFILE -> SettingsProfileSection(me, onUpdateProfile)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(state, onLogout)
                     SettingsSection.PREFERENCES -> SettingsPreferencesSection(currentTheme, onThemeChange)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection()
@@ -1064,7 +1064,11 @@ private fun SettingsAccountSection(state: AppUiState, onLogout: () -> Unit) {
 
 @Composable
 private fun SettingsPreferencesSection(currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val scrollState = rememberScrollState()
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(scrollState),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         DetailCard(title = "Privacy", body = "Block group invites and related privacy controls belong here like web.")
         DetailCard(title = "Language", body = "English, فارسی, Русский, 中文")
         DetailCard(title = "Emoji Style", body = "Default or iOS")
