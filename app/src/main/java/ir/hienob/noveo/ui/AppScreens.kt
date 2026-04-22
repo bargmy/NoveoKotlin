@@ -1,5 +1,5 @@
-
 package ir.hienob.noveo.ui
+
 
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
@@ -124,6 +124,7 @@ fun NoveoRoot(
     onAuthSubmit: (String, String) -> Unit,
     onOpenChat: (String) -> Unit,
     onStartDirectChat: (String) -> Unit,
+    onSearchPublic: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onLogout: () -> Unit
@@ -162,6 +163,7 @@ fun NoveoRoot(
                         state = state,
                         onOpenChat = onOpenChat,
                         onStartDirectChat = onStartDirectChat,
+                        onSearchPublic = onSearchPublic,
                         onBackToChats = onBackToChats,
                         onSend = onSend,
                         onLogout = onLogout,
