@@ -1089,6 +1089,32 @@ private fun SettingsThemesSection(currentTheme: ThemePreset, onThemeChange: (The
     ) {
         themeSections.forEach { section ->
             ThemeSectionBlock(section = section, currentTheme = currentTheme, onThemeChange = onThemeChange)
+        DetailCard(title = "Theme", body = "Themes are now grouped into sections (light, dark, and accent variants) for easier switching.")
+
+        val themeSections = listOf(
+            ThemeSection(
+                title = "System",
+                subtitle = "Use Light or Dark manually until automatic system-follow mode is added.",
+                presets = emptyList()
+            ),
+            ThemeSection(
+                title = "Light",
+                subtitle = "Bright themes for daytime usage.",
+                presets = listOf(ThemePreset.LIGHT, ThemePreset.SKY_LIGHT)
+            ),
+            ThemeSection(
+                title = "Dark",
+                subtitle = "Low-light themes for nighttime usage.",
+                presets = listOf(ThemePreset.DARK, ThemePreset.OCEAN_DARK)
+            )
+        )
+
+        themeSections.forEach { section ->
+            ThemeSectionBlock(
+                section = section,
+                currentTheme = currentTheme,
+                onThemeChange = onThemeChange
+            )
         }
     }
 }
