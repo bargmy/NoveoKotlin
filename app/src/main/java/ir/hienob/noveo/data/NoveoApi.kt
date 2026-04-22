@@ -4,6 +4,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -50,6 +51,45 @@ class NoveoApi(
         socket.cancel()
         if (!finished) error("Send timeout")
         failure.get()?.let { error(it) }
+    }
+
+    fun searchPublicUsers(session: Session, query: String): List<UserSummary> {
+        val normalizedQuery = query.trim()
+        if (normalizedQuery.length < 2) return emptyList()
+        val url = "$origin/user/public-search".toHttpUrl().newBuilder()
+            .addQueryParameter("q", normalizedQuery)
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Public search failed (${response.code})")
+            val payload = JSONObject(response.body?.string().orEmpty().ifBlank { "{}" })
+            val usersArray = when {
+                payload.optJSONArray("users") != null -> payload.optJSONArray("users")
+                payload.optJSONArray("results") != null -> payload.optJSONArray("results")
+                payload.optJSONArray("data") != null -> payload.optJSONArray("data")
+                else -> JSONArray()
+            }
+            return (0 until usersArray.length()).mapNotNull { index ->
+                usersArray.optJSONObject(index)?.let { user ->
+                    val id = user.optString("userId").ifBlank { user.optString("id") }
+                    if (id.isBlank()) return@let null
+                    UserSummary(
+                        id = id,
+                        username = user.optString("username").ifBlank { user.optString("name").ifBlank { id } },
+                        avatarUrl = user.optString("avatarUrl").ifBlank { null },
+                        handle = user.optString("handle").ifBlank { null },
+                        bio = user.optString("bio", ""),
+                        isOnline = user.optBoolean("online", false),
+                        isVerified = user.optBoolean("isVerified", false)
+                    )
+                }
+            }
+        }
     }
 
     private fun auth(payload: JSONObject): Session {
