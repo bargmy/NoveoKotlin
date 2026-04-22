@@ -120,7 +120,8 @@ internal fun HomeScreen(
                     },
                     onSearchQueryChange = { searchQuery = it },
                     onOpenChat = onOpenChat,
-                    onOpenDirectChat = onStartDirectChat
+                    onOpenDirectChat = onStartDirectChat,
+                    onLogout = onLogout
                 )
             } else {
                 ChatPane(state = state, compact = true, onBackToChats = onBackToChats, onSend = onSend)
@@ -142,6 +143,7 @@ internal fun HomeScreen(
                     onSearchQueryChange = { searchQuery = it },
                     onOpenChat = onOpenChat,
                     onOpenDirectChat = onStartDirectChat,
+                    onLogout = onLogout,
                     modifier = Modifier.width(340.dp).fillMaxHeight()
                 )
                 if (state.selectedChatId == null) {
@@ -203,6 +205,7 @@ private fun SidebarPane(
     onSearchQueryChange: (String) -> Unit,
     onOpenChat: (String) -> Unit,
     onOpenDirectChat: (String) -> Unit,
+    onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -239,13 +242,11 @@ private fun SidebarPane(
                 SidebarPanel.STARS -> CompactInfoPanel(title = "Stars", body = "Your wallet surface is now reachable from the menu. Sending and transaction history still need backend flows on Android.")
                 SidebarPanel.SETTINGS -> CompactInfoPanel(title = "Settings", body = "Profile, account, privacy, language, notifications, and appearance are now visible from the home shell.")
                 SidebarPanel.PROFILE -> SidebarProfileSummary(state = state)
-                SidebarPanel.ACCOUNT -> SidebarAccountSummary(state = state, onLogout = onLogoutPlaceholder(onOpenChat))
+                SidebarPanel.ACCOUNT -> SidebarAccountSummary(state = state, onLogout = onLogout)
             }
         }
     }
 }
-
-private fun onLogoutPlaceholder(onOpenChat: (String) -> Unit): () -> Unit = { }
 
 @Composable
 private fun ChatListContent(state: AppUiState, chats: List<ChatSummary>, onOpenChat: (String) -> Unit) {
