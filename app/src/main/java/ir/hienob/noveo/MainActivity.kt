@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
                 onAuthSubmit = viewModel::authenticate,
                 onOpenChat = viewModel::openChat,
                 onStartDirectChat = viewModel::openDirectChat,
+                onSearchPublic = viewModel::searchPublicDirectory,
                 onBackToChats = viewModel::backToChatList,
                 onSend = viewModel::sendMessage,
                 onLogout = viewModel::logout
