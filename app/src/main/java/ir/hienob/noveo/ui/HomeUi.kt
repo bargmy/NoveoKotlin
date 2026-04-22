@@ -107,7 +107,7 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val NOVEO_BASE_URL = "https://noveo.ir"
+private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
 private const val CLIENT_VERSION = "v0.1 mobile"
 
 private enum class SettingsSection {
@@ -120,11 +120,6 @@ private data class ThemeSection(
     val presets: List<ThemePreset>
 )
 
-data class PendingBubble(
-    val id: String,
-    val text: String
-)
-
 @Composable
 internal fun HomeScreen(
     state: AppUiState,
@@ -134,6 +129,7 @@ internal fun HomeScreen(
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onLogout: () -> Unit,
+    onUpdateProfile: (String, String) -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit
 ) {
@@ -361,7 +357,8 @@ internal fun HomeScreen(
                 onClose = { showSettingsModal = false },
                 onLogout = onLogout,
                 currentTheme = currentTheme,
-                onThemeChange = onThemeChange
+                onThemeChange = onThemeChange,
+                onUpdateProfile = onUpdateProfile
             )
         }
 
@@ -448,6 +445,66 @@ private fun SidebarPane(
 }
 
 @Composable
+private fun SearchResultsList(
+    chats: List<ChatSummary>,
+    users: List<UserSummary>,
+    onOpenChat: (String) -> Unit,
+    onOpenContacts: () -> Unit,
+    onOpenProfile: (String) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (chats.isNotEmpty()) {
+            item { Text("Chats", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp), color = MaterialTheme.colorScheme.primary) }
+            items(chats) { chat ->
+                ChatRow(chat = chat, selected = false, onClick = { onOpenChat(chat.id) })
+            }
+        }
+        if (users.isNotEmpty()) {
+            item { Text("Contacts", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp), color = MaterialTheme.colorScheme.primary) }
+            items(users) { user ->
+                ContactRow(
+                    user = user,
+                    existingChat = null,
+                    onMessage = { onOpenProfile(user.id) },
+                    onOpenProfile = { onOpenProfile(user.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatListContent(
+    state: AppUiState,
+    chats: List<ChatSummary>,
+    onOpenChat: (String) -> Unit
+) {
+    if (chats.isEmpty() && !state.loading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No chats found.", style = MaterialTheme.typography.bodyMedium)
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(chats, key = { it.id }) { chat ->
+                ChatRow(
+                    chat = chat,
+                    selected = chat.id == state.selectedChatId,
+                    onClick = { onOpenChat(chat.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun SidebarHeader(
     showSearch: Boolean,
     searchQuery: String,
@@ -471,23 +528,23 @@ private fun SidebarHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         HeaderIconButton(icon = Icons.Outlined.Menu, onClick = onMenuClick)
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(8.dp))
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
             AnimatedContent(targetState = showSearch, label = "sidebar_header_swap") { searching ->
                 if (searching) {
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
-                        modifier = Modifier.fillMaxWidth(0.92f),
-                        placeholder = { Text("Search", maxLines = 1) },
-                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        placeholder = { Text("Search", style = MaterialTheme.typography.bodyMedium) },
                         textStyle = MaterialTheme.typography.bodyMedium,
                         singleLine = true,
-                        shape = RoundedCornerShape(18.dp)
+                        shape = RoundedCornerShape(24.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                     )
                 } else {
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -503,7 +560,7 @@ private fun SidebarHeader(
                 }
             }
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(8.dp))
         HeaderIconButton(
             icon = if (showSearch) Icons.Outlined.Close else Icons.Outlined.Search,
             onClick = onSearchToggle
@@ -512,79 +569,13 @@ private fun SidebarHeader(
 }
 
 @Composable
-private fun SearchResultsList(
-    chats: List<ChatSummary>,
-    users: List<UserSummary>,
-    onOpenChat: (String) -> Unit,
-    onOpenContacts: () -> Unit,
-    onOpenProfile: (String) -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (chats.isNotEmpty()) {
-            item {
-                Text(
-                    "Chats",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
-                )
-            }
-            items(chats, key = { it.id }) { chat ->
-                ChatRow(chat = chat, selected = false, onClick = { onOpenChat(chat.id) })
-            }
-        }
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Public handles", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.weight(1f))
-                Text(
-                    "All Contacts",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { onOpenContacts() }
-                )
-            }
-        }
-        if (users.isEmpty()) {
-            item {
-                Text("No people found.", modifier = Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else {
-            items(users, key = { it.id }) { user ->
-                ContactRow(
-                    user = user,
-                    existingChat = null,
-                    onMessage = { onOpenProfile(user.id) },
-                    onOpenProfile = { onOpenProfile(user.id) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChatListContent(state: AppUiState, chats: List<ChatSummary>, onOpenChat: (String) -> Unit) {
-    if (chats.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-            Text("No chats yet.", textAlign = TextAlign.Center)
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(chats, key = { it.id }) { chat ->
-                ChatRow(chat = chat, selected = chat.id == state.selectedChatId, onClick = { onOpenChat(chat.id) })
-            }
-        }
+fun VerifiedIcon(modifier: Modifier = Modifier, tint: Color = MaterialTheme.colorScheme.primary) {
+    Canvas(modifier = modifier.size(18.dp)) {
+        val path1 = androidx.compose.ui.graphics.vector.PathParser().parsePathString("M12.3 2.9c.1.1.2.1.3.2.7.6 1.3 1.1 2 1.7.3.2.6.4.9.4.9.1 1.7.2 2.6.2.5 0 .6.1.7.7.1.9.1 1.8.2 2.6 0 .4.2.7.4 1 .6.7 1.1 1.3 1.7 2 .3.4.3.5 0 .8-.5.6-1.1 1.3-1.6 1.9-.3.3-.5.7-.5 1.2-.1.8-.2 1.7-.2 2.5 0 .4-.2.5-.6.6-.8 0-1.6.1-2.5.2-.5 0-1 .2-1.4.5-.6.5-1.3 1.1-1.9 1.6-.3.3-.5.3-.8 0-.7-.6-1.4-1.2-2-1.8-.3-.2-.6-.4-.9-.4-.9-.1-1.8-.2-2.7-.2-.4 0-.5-.2-.6-.5 0-.9-.1-1.7-.2-2.6 0-.4-.2-.8-.4-1.1-.6-.6-1.1-1.3-1.6-2-.4-.4-.3-.5 0-1 .6-.6 1.1-1.3 1.7-1.9.3-.3.4-.6.4-1 0-.8.1-1.6.2-2.5 0-.5.1-.6.6-.6.9-.1 1.7-.1 2.6-.2.4 0 .7-.2 1-.4.7-.6 1.4-1.2 2.1-1.7.1-.2.3-.3.5-.2z").toPath()
+        val path2 = androidx.compose.ui.graphics.vector.PathParser().parsePathString("M16.4 10.1l-.2.2-5.4 5.4c-.1.1-.2.2-.4 0l-2.6-2.6c-.2-.2-.1-.3 0-.4.2-.2.5-.6.7-.6.3 0 .5.4.7.6l1.1 1.1c.2.2.3.2.5 0l4.3-4.3c.2-.2.4-.3.6 0 .1.2.3.3.4.5.2 0 .3.1.3.1z").toPath()
+        
+        drawPath(path = path1, color = tint)
+        drawPath(path = path2, color = Color.White)
     }
 }
 
@@ -601,7 +592,6 @@ private fun ChatPane(
 ) {
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
     var sendPulse by rememberSaveable { mutableStateOf(false) }
-    val pendingBubbles = remember(state.selectedChatId) { mutableStateListOf<PendingBubble>() }
     val listState = rememberLazyListState()
     val sendScale by animateFloatAsState(
         targetValue = if (sendPulse) 1.18f else 1f,
@@ -610,19 +600,33 @@ private fun ChatPane(
     )
     val scope = rememberCoroutineScope()
     val selectedTitle = selectedChat?.title?.ifBlank { "Chat" } ?: "Chat"
-    val subtitle = selectedChat?.memberIds?.size?.let { "$it members" } ?: "conversation"
+    
     val profileUserId = remember(selectedChat, state.session?.userId) {
         resolveProfileUserId(selectedChat, state.session?.userId)
     }
+    val profileUser = remember(profileUserId, state.usersById) { state.usersById[profileUserId] }
+    val isOnline = remember(profileUserId, state.onlineUserIds) { state.onlineUserIds.contains(profileUserId) }
+    
+    val onlineCount = remember(selectedChat, state.onlineUserIds) {
+        selectedChat?.memberIds?.count { state.onlineUserIds.contains(it) } ?: 0
+    }
+    val subtitle = if (profileUser != null) {
+        if (isOnline) "online" else "last seen recently"
+    } else {
+        selectedChat?.memberIds?.size?.let { total ->
+            if (onlineCount > 0) "$total members, $onlineCount online" else "$total members"
+        } ?: "conversation"
+    }
 
     LaunchedEffect(state.selectedChatId, state.messages.size) {
-        val lastIndex = state.messages.lastIndex
-        if (lastIndex >= 0) listState.scrollToItem(lastIndex)
+        if (state.messages.isNotEmpty()) {
+            listState.scrollToItem(state.messages.lastIndex)
+        }
     }
-    LaunchedEffect(state.messages.size, pendingBubbles.size) {
-        val lastIndex = state.messages.size + pendingBubbles.size - 1
-        if (lastIndex >= 0) {
-            listState.animateScrollToItem(lastIndex)
+    LaunchedEffect(state.messages.size) {
+        if (state.messages.isNotEmpty()) {
+            delay(50)
+            listState.animateScrollToItem(state.messages.lastIndex)
         }
     }
 
@@ -678,9 +682,6 @@ private fun ChatPane(
                         senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl
                     )
                 }
-                items(pendingBubbles, key = { it.id }) { pending ->
-                    PendingMessageBubble(text = pending.text)
-                }
             }
         }
 
@@ -691,16 +692,12 @@ private fun ChatPane(
             onSendClick = {
                 val text = draft.trim()
                 if (text.isBlank()) return@ComposerBar
-                val pending = PendingBubble(id = "pending-${System.currentTimeMillis()}", text = text)
-                pendingBubbles += pending
                 onSend(text)
                 draft = ""
                 sendPulse = true
                 scope.launch {
                     delay(220)
                     sendPulse = false
-                    delay(1200)
-                    pendingBubbles.remove(pending)
                 }
             }
         )
@@ -1012,16 +1009,44 @@ private fun SettingsSubscriptionSection() {
 }
 
 @Composable
-private fun SettingsProfileSection(me: UserSummary?) {
-    Column(modifier = Modifier.fillMaxSize().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+private fun SettingsProfileSection(me: UserSummary?, onUpdateProfile: (String, String) -> Unit) {
+    var username by remember(me) { mutableStateOf(me?.username ?: "") }
+    var bio by remember(me) { mutableStateOf(me?.bio ?: "") }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         ProfileCircle(name = me?.username ?: "Me", imageUrl = me?.avatarUrl, size = 90.dp)
+        Spacer(Modifier.height(16.dp))
+        
+        OutlinedTextField(
+            value = username,
+            onValueChange = { username = it },
+            label = { Text("Display Name") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
+        )
         Spacer(Modifier.height(12.dp))
-        Text(me?.username ?: "Me", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
-        Text(me?.handle ?: "No handle yet", style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(14.dp))
-        DetailCard(title = "Bio", body = me?.bio?.ifBlank { "No bio yet." } ?: "No bio yet.")
-        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            value = bio,
+            onValueChange = { bio = it },
+            label = { Text("Bio") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            maxLines = 4,
+            shape = RoundedCornerShape(12.dp)
+        )
+        Spacer(Modifier.height(20.dp))
+        Button(
+            onClick = { onUpdateProfile(username, bio) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("Save Changes")
+        }
+        Spacer(Modifier.height(16.dp))
         DetailCard(title = "Profile Skin", body = "Web exposes profile skin and premium visuals here. Android still needs the real editor flow.")
     }
 }
@@ -1410,21 +1435,9 @@ private fun SendIconButton(enabled: Boolean, onClick: () -> Unit) {
         modifier = Modifier.size(52.dp).clickable(enabled = enabled, onClick = onClick)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.size(22.dp)) {
-                val path = Path().apply {
-                    moveTo(size.width * 0.1f, size.height * 0.52f)
-                    lineTo(size.width * 0.9f, size.height * 0.1f)
-                    lineTo(size.width * 0.62f, size.height * 0.9f)
-                    lineTo(size.width * 0.48f, size.height * 0.58f)
-                    close()
-                }
-                drawPath(path = path, color = tint)
-                drawLine(
-                    color = tint,
-                    start = Offset(size.width * 0.18f, size.height * 0.5f),
-                    end = Offset(size.width * 0.5f, size.height * 0.58f),
-                    strokeWidth = 1.8.dp.toPx()
-                )
+            Canvas(modifier = Modifier.size(24.dp)) {
+                val path = androidx.compose.ui.graphics.vector.PathParser().parsePathString("M11.5003 12H5.41872M5.24634 12.7972L4.24158 15.7986C3.69128 17.4424 3.41613 18.2643 3.61359 18.7704C3.78506 19.21 4.15335 19.5432 4.6078 19.6701C5.13111 19.8161 5.92151 19.4604 7.50231 18.7491L17.6367 14.1886C19.1797 13.4942 19.9512 13.1471 20.1896 12.6648C20.3968 12.2458 20.3968 11.7541 20.1896 11.3351C19.9512 10.8529 19.1797 10.5057 17.6367 9.81135L7.48483 5.24303C5.90879 4.53382 5.12078 4.17921 4.59799 4.32468C4.14397 4.45101 3.77572 4.78336 3.60365 5.22209C3.40551 5.72728 3.67772 6.54741 4.22215 8.18767L5.24829 11.2793C5.34179 11.561 5.38855 11.7019 5.407 11.8459C5.42338 11.9738 5.42321 12.1032 5.40651 12.231C5.38768 12.375 5.34057 12.5157 5.24634 12.7972Z").toPath()
+                drawPath(path = path, color = tint, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
             }
         }
     }
