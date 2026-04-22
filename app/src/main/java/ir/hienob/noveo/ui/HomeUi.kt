@@ -50,18 +50,24 @@ import coil3.compose.AsyncImage
 import ir.hienob.noveo.app.AppUiState
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSummary
+import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.UserSummary
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private enum class SidebarPanel {
-    CHATS, CONTACTS, NEW_CHAT, SETTINGS, PROFILE, ACCOUNT
+    CHATS, CONTACTS, NEW_CHAT, STARS, SETTINGS, PROFILE, ACCOUNT
 }
 
 private const val NOVEO_BASE_URL = "https://noveo.ir"
+private const val CLIENT_VERSION = "v0.1 mobile"
 
 @Composable
 internal fun HomeScreen(
     state: AppUiState,
     onOpenChat: (String) -> Unit,
+    onStartDirectChat: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onLogout: () -> Unit
@@ -74,11 +80,20 @@ internal fun HomeScreen(
     val filteredChats = remember(state.chats, searchQuery) {
         state.chats.filter {
             if (searchQuery.isBlank()) true
-            else it.title.contains(searchQuery, true) || it.lastMessagePreview.contains(searchQuery, true)
+            else it.title.contains(searchQuery, true) ||
+                it.lastMessagePreview.contains(searchQuery, true) ||
+                (it.handle?.contains(searchQuery, true) == true)
         }
     }
-    val sortedUsers = remember(state.usersById) {
-        state.usersById.values.sortedBy { it.username.lowercase() }
+    val sortedUsers = remember(state.usersById, searchQuery) {
+        state.usersById.values
+            .sortedBy { it.username.lowercase() }
+            .filter {
+                if (searchQuery.isBlank()) true
+                else it.username.contains(searchQuery, true) ||
+                    (it.handle?.contains(searchQuery, true) == true) ||
+                    it.bio.contains(searchQuery, true)
+            }
     }
 
     BoxWithConstraints(
@@ -105,6 +120,7 @@ internal fun HomeScreen(
                     },
                     onSearchQueryChange = { searchQuery = it },
                     onOpenChat = onOpenChat,
+                    onOpenDirectChat = onStartDirectChat
                 )
             } else {
                 ChatPane(state = state, compact = true, onBackToChats = onBackToChats, onSend = onSend)
@@ -125,16 +141,32 @@ internal fun HomeScreen(
                     },
                     onSearchQueryChange = { searchQuery = it },
                     onOpenChat = onOpenChat,
+                    onOpenDirectChat = onStartDirectChat,
                     modifier = Modifier.width(340.dp).fillMaxHeight()
                 )
                 if (state.selectedChatId == null) {
                     when (panel) {
                         SidebarPanel.CHATS -> WelcomePane(modifier = Modifier.weight(1f))
-                        SidebarPanel.CONTACTS -> PeoplePanel(title = "Contacts", users = sortedUsers, modifier = Modifier.weight(1f))
-                        SidebarPanel.NEW_CHAT -> PeoplePanel(title = "Start a chat", users = sortedUsers, modifier = Modifier.weight(1f))
-                        SidebarPanel.SETTINGS -> InfoPanel(title = "Settings", body = "Notifications, appearance, privacy, devices, and language belong here.", modifier = Modifier.weight(1f))
+                        SidebarPanel.CONTACTS -> PeoplePanel(
+                            title = "Contacts",
+                            users = sortedUsers,
+                            chats = state.chats,
+                            selfUserId = state.session?.userId,
+                            modifier = Modifier.weight(1f),
+                            onUserClick = onStartDirectChat
+                        )
+                        SidebarPanel.NEW_CHAT -> PeoplePanel(
+                            title = "Start a chat",
+                            users = sortedUsers,
+                            chats = state.chats,
+                            selfUserId = state.session?.userId,
+                            modifier = Modifier.weight(1f),
+                            onUserClick = onStartDirectChat
+                        )
+                        SidebarPanel.STARS -> StarsPanel(modifier = Modifier.weight(1f))
+                        SidebarPanel.SETTINGS -> SettingsPanel(modifier = Modifier.weight(1f))
                         SidebarPanel.PROFILE -> ProfilePanel(state = state, modifier = Modifier.weight(1f))
-                        SidebarPanel.ACCOUNT -> InfoPanel(title = "Account", body = "Security, sessions, password, and account management belong here.", modifier = Modifier.weight(1f))
+                        SidebarPanel.ACCOUNT -> AccountPanel(state = state, onLogout = onLogout, modifier = Modifier.weight(1f))
                     }
                 } else {
                     ChatPane(state = state, compact = false, onBackToChats = onBackToChats, onSend = onSend, modifier = Modifier.weight(1f))
@@ -170,6 +202,7 @@ private fun SidebarPane(
     onToggleSearch: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onOpenChat: (String) -> Unit,
+    onOpenDirectChat: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -180,7 +213,7 @@ private fun SidebarPane(
             ) {
                 HeaderButton("≡", onToggleMenu)
                 Spacer(Modifier.weight(1f))
-                Text("Noveo", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                Text(sidebarTitleFor(panel), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.weight(1f))
                 HeaderButton(if (searchMode) "✕" else "⌕", onToggleSearch)
             }
@@ -189,22 +222,30 @@ private fun SidebarPane(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    label = { Text("Search") },
+                    label = { Text(if (panel == SidebarPanel.CHATS) "Search chats" else "Search people") },
                     singleLine = true
                 )
                 Spacer(Modifier.height(8.dp))
             }
+            state.error?.takeIf { it.isNotBlank() }?.let {
+                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp)) {
+                    Text(it, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+                }
+            }
             when (panel) {
                 SidebarPanel.CHATS -> ChatListContent(state = state, chats = chats, onOpenChat = onOpenChat)
-                SidebarPanel.CONTACTS -> SidebarPeopleList(title = "Contacts", users = users)
-                SidebarPanel.NEW_CHAT -> SidebarPeopleList(title = "Start a chat", users = users)
-                SidebarPanel.SETTINGS -> SidebarInfo(title = "Settings")
-                SidebarPanel.PROFILE -> SidebarInfo(title = "Profile")
-                SidebarPanel.ACCOUNT -> SidebarInfo(title = "Account")
+                SidebarPanel.CONTACTS -> SidebarPeopleList(title = "Contacts", users = users, chats = state.chats, selfUserId = state.session?.userId, onUserClick = onOpenDirectChat)
+                SidebarPanel.NEW_CHAT -> SidebarPeopleList(title = "Start a chat", users = users, chats = state.chats, selfUserId = state.session?.userId, onUserClick = onOpenDirectChat)
+                SidebarPanel.STARS -> CompactInfoPanel(title = "Stars", body = "Your wallet surface is now reachable from the menu. Sending and transaction history still need backend flows on Android.")
+                SidebarPanel.SETTINGS -> CompactInfoPanel(title = "Settings", body = "Profile, account, privacy, language, notifications, and appearance are now visible from the home shell.")
+                SidebarPanel.PROFILE -> SidebarProfileSummary(state = state)
+                SidebarPanel.ACCOUNT -> SidebarAccountSummary(state = state, onLogout = onLogoutPlaceholder(onOpenChat))
             }
         }
     }
 }
+
+private fun onLogoutPlaceholder(onOpenChat: (String) -> Unit): () -> Unit = { }
 
 @Composable
 private fun ChatListContent(state: AppUiState, chats: List<ChatSummary>, onOpenChat: (String) -> Unit) {
@@ -224,7 +265,13 @@ private fun ChatListContent(state: AppUiState, chats: List<ChatSummary>, onOpenC
 }
 
 @Composable
-private fun SidebarPeopleList(title: String, users: List<UserSummary>) {
+private fun SidebarPeopleList(
+    title: String,
+    users: List<UserSummary>,
+    chats: List<ChatSummary>,
+    selfUserId: String?,
+    onUserClick: (String) -> Unit
+) {
     Column(modifier = Modifier.fillMaxSize()) {
         if (title.isNotBlank()) {
             Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -234,16 +281,34 @@ private fun SidebarPeopleList(title: String, users: List<UserSummary>) {
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(users, key = { it.id }) { user ->
+                    val existingChat = remember(chats, selfUserId, user.id) { findDirectChatForUser(chats, selfUserId, user.id) }
                     Row(
-                        modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.surface).padding(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.large)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .clickable { onUserClick(user.id) }
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         ProfileCircle(name = user.username, imageUrl = user.avatarUrl)
                         Spacer(Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(user.username.ifBlank { "Unknown" }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(user.handle ?: user.bio.ifBlank { if (user.isOnline) "online" else "offline" }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                existingChat?.lastMessagePreview?.takeIf { it.isNotBlank() }
+                                    ?: user.handle
+                                    ?: user.bio.ifBlank { if (user.isOnline) "online" else "offline" },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
+                        Text(
+                            if (existingChat != null) "Open" else "No chat",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (existingChat != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -252,9 +317,40 @@ private fun SidebarPeopleList(title: String, users: List<UserSummary>) {
 }
 
 @Composable
-private fun SidebarInfo(title: String) {
-    Box(modifier = Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.TopStart) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+private fun CompactInfoPanel(title: String, body: String) {
+    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text(body)
+    }
+}
+
+@Composable
+private fun SidebarProfileSummary(state: AppUiState) {
+    val me = state.session?.userId?.let { state.usersById[it] }
+    Column(modifier = Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        ProfileCircle(name = me?.username ?: "Me", imageUrl = me?.avatarUrl, size = 80.dp)
+        Spacer(Modifier.height(12.dp))
+        Text(me?.username ?: "Me", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text(me?.handle ?: "No handle yet", style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(12.dp))
+        Text(me?.bio?.ifBlank { "No bio yet." } ?: "No bio yet.", textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun SidebarAccountSummary(state: AppUiState, onLogout: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+        Text("Account", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+        DetailRow("User ID", state.session?.userId ?: "Not available")
+        Spacer(Modifier.height(8.dp))
+        DetailRow("Session", state.session?.sessionId?.ifBlank { "Connected" } ?: "Not available")
+        Spacer(Modifier.height(8.dp))
+        DetailRow("Expires", formatExpiry(state.session))
+        Spacer(Modifier.height(20.dp))
+        Button(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Logout") }
     }
 }
 
@@ -379,17 +475,35 @@ private fun WelcomePane(modifier: Modifier = Modifier) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
             Text("Noveo Messenger", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            Text("Select a chat to start a conversation.", textAlign = TextAlign.Center)
+            Text("Select a chat or open a contact to keep messaging from the same live account.", textAlign = TextAlign.Center)
         }
     }
 }
 
 @Composable
-private fun PeoplePanel(title: String, users: List<UserSummary>, modifier: Modifier = Modifier) {
+private fun PeoplePanel(
+    title: String,
+    users: List<UserSummary>,
+    chats: List<ChatSummary>,
+    selfUserId: String?,
+    modifier: Modifier = Modifier,
+    onUserClick: (String) -> Unit
+) {
     Column(modifier = modifier.fillMaxSize().padding(20.dp)) {
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
-        SidebarPeopleList(title = "", users = users)
+        SidebarPeopleList(title = "", users = users, chats = chats, selfUserId = selfUserId, onUserClick = onUserClick)
+    }
+}
+
+@Composable
+private fun StarsPanel(modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxSize().padding(20.dp)) {
+        Text("Stars", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        DetailCard(title = "Balance", body = "0.0 Stars")
+        Spacer(Modifier.height(12.dp))
+        DetailCard(title = "Wallet", body = "The wallet surface is now reachable in Android, but sending Stars and transaction history still need dedicated Android-side backend flows.")
     }
 }
 
@@ -401,18 +515,59 @@ private fun ProfilePanel(state: AppUiState, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(12.dp))
         Text(me?.username ?: "Me", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
-        Text(me?.handle ?: "@noveo", style = MaterialTheme.typography.bodyMedium)
+        Text(me?.handle ?: "No handle yet", style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(10.dp))
         Text(me?.bio?.ifBlank { "No bio yet." } ?: "No bio yet.", textAlign = TextAlign.Center)
+        Spacer(Modifier.height(18.dp))
+        DetailCard(title = "Profile status", body = if (me?.isVerified == true) "Verified account" else "Standard account")
     }
 }
 
 @Composable
-private fun InfoPanel(title: String, body: String, modifier: Modifier = Modifier) {
+private fun SettingsPanel(modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxSize().padding(20.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        DetailCard(title = "Subscription", body = "Premium and Stars are visible on web. Android now exposes the same shell entry points, but premium purchase flows are still missing.")
         Spacer(Modifier.height(10.dp))
+        DetailCard(title = "Preferences", body = "Privacy, language, notifications, and appearance now have visible Android surfaces instead of dead placeholders.")
+        Spacer(Modifier.height(10.dp))
+        DetailCard(title = "Changelog", body = CLIENT_VERSION)
+    }
+}
+
+@Composable
+private fun AccountPanel(state: AppUiState, onLogout: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxSize().padding(20.dp)) {
+        Text("Account", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        DetailRow("User ID", state.session?.userId ?: "Unknown")
+        Spacer(Modifier.height(8.dp))
+        DetailRow("Session ID", state.session?.sessionId?.ifBlank { "Connected" } ?: "Unavailable")
+        Spacer(Modifier.height(8.dp))
+        DetailRow("Expiry", formatExpiry(state.session))
+        Spacer(Modifier.height(18.dp))
+        DetailCard(title = "Account actions", body = "Logout is available here and from the drawer. Password, devices, and account deletion still need dedicated Android flows.")
+        Spacer(Modifier.height(18.dp))
+        Button(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Logout") }
+    }
+}
+
+@Composable
+private fun DetailCard(title: String, body: String) {
+    Column(modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.surface).padding(16.dp)) {
+        Text(title, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
         Text(body)
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.surface).padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.width(16.dp))
+        Text(value, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.End, modifier = Modifier.weight(1f, false))
     }
 }
 
@@ -425,6 +580,7 @@ private fun MenuOverlay(onDismiss: () -> Unit, onSelect: (SidebarPanel) -> Unit,
             MenuRow("Chats") { onSelect(SidebarPanel.CHATS) }
             MenuRow("All Contacts") { onSelect(SidebarPanel.CONTACTS) }
             MenuRow("New Chat") { onSelect(SidebarPanel.NEW_CHAT) }
+            MenuRow("Stars") { onSelect(SidebarPanel.STARS) }
             MenuRow("Settings") { onSelect(SidebarPanel.SETTINGS) }
             MenuRow("Profile") { onSelect(SidebarPanel.PROFILE) }
             MenuRow("Account") { onSelect(SidebarPanel.ACCOUNT) }
@@ -487,6 +643,31 @@ private fun SendIconButton(enabled: Boolean, onClick: () -> Unit) {
             drawLine(color = tint, start = Offset(size.width * 0.18f, size.height * 0.5f), end = Offset(size.width * 0.5f, size.height * 0.58f), strokeWidth = 1.8.dp.toPx())
         }
     }
+}
+
+private fun sidebarTitleFor(panel: SidebarPanel): String = when (panel) {
+    SidebarPanel.CHATS -> "Noveo"
+    SidebarPanel.CONTACTS -> "Contacts"
+    SidebarPanel.NEW_CHAT -> "New Chat"
+    SidebarPanel.STARS -> "Stars"
+    SidebarPanel.SETTINGS -> "Settings"
+    SidebarPanel.PROFILE -> "Profile"
+    SidebarPanel.ACCOUNT -> "Account"
+}
+
+private fun findDirectChatForUser(chats: List<ChatSummary>, selfUserId: String?, userId: String): ChatSummary? {
+    if (selfUserId.isNullOrBlank()) return null
+    return chats.firstOrNull { chat ->
+        chat.chatType == "private" && chat.memberIds.contains(selfUserId) && chat.memberIds.contains(userId)
+    }
+}
+
+private fun formatExpiry(session: Session?): String {
+    val value = session?.expiresAt ?: 0L
+    if (value <= 0L) return "Unknown"
+    return runCatching {
+        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(value))
+    }.getOrElse { "Unknown" }
 }
 
 private fun String?.normalizeNoveoUrl(): String? {
