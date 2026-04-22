@@ -300,16 +300,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     fun updateProfile(username: String, bio: String) {
-        val session = _uiState.value.session ?: return
+        val session: Session = _uiState.value.session ?: return
         viewModelScope.launch {
             runCatching {
                 _uiState.value = _uiState.value.copy(loading = true)
-                val currentSession = session as Session
                 withContext(Dispatchers.IO) {
-                    api.updateProfile(session = currentSession, username = username, bio = bio)
+                    val apiRef: NoveoApi = api
+                    apiRef.updateProfile(session, username, bio)
                 }
                 // Refresh contacts and home data to get updated profile
-                loadHomeData(currentSession)
+                loadHomeData(session)
             }.onFailure {
                 _uiState.value = _uiState.value.copy(loading = false, error = it.message)
             }

@@ -26,7 +26,8 @@ class MainActivity : ComponentActivity() {
                 onSearchPublic = viewModel::searchPublicDirectory,
                 onBackToChats = viewModel::backToChatList,
                 onSend = viewModel::sendMessage,
-                onLogout = viewModel::logout
+                onLogout = viewModel::logout,
+                onUpdateProfile = { u, b -> viewModel.updateProfile(u, b) }
             )
         }
     }

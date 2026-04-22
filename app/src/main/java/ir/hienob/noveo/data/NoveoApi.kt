@@ -31,6 +31,36 @@ class NoveoApi(
         return MessageLoadResult(sync.usersById, parseMessagesForChat(sync.history, sync.usersById, chatId))
     }
 
+    fun getContacts(session: Session): List<UserSummary> {
+        val url = "$origin/user/contacts".toHttpUrl()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Contacts load failed (${response.code})")
+            val payload = JSONObject(response.body?.string().orEmpty().ifBlank { "{}" })
+            val contactsArray = payload.optJSONArray("contacts") ?: JSONArray()
+            return (0 until contactsArray.length()).mapNotNull { index ->
+                contactsArray.optJSONObject(index)?.let { user ->
+                    val id = user.optString("userId").ifBlank { user.optString("id") }
+                    if (id.isBlank()) return@let null
+                    UserSummary(
+                        id = id,
+                        username = user.optString("contactName").ifBlank { user.optString("username").ifBlank { user.optString("name").ifBlank { id } } },
+                        avatarUrl = user.optString("avatarUrl").ifBlank { null },
+                        handle = user.optString("handle").ifBlank { null },
+                        bio = user.optString("bio", ""),
+                        isOnline = user.optBoolean("online", false),
+                        isVerified = user.optBoolean("isVerified", false)
+                    )
+                }
+            }
+        }
+    }
+
     fun sendMessage(session: Session, chatId: String, text: String) {
         val latch = CountDownLatch(1)
         val failure = AtomicReference<String?>(null)
@@ -89,6 +119,23 @@ class NoveoApi(
                     )
                 }
             }
+        }
+    }
+
+    fun updateProfile(session: Session, username: String, bio: String) {
+        val url = "$origin/user/profile".toHttpUrl()
+        val body = JSONObject()
+            .put("username", username)
+            .put("bio", bio)
+            .toString()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .post(okhttp3.RequestBody.create(okhttp3.MediaType.get("application/json"), body))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Profile update failed (${response.code})")
         }
     }
 
