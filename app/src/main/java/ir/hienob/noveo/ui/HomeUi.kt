@@ -8,8 +8,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -36,6 +34,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -60,6 +59,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -387,13 +387,14 @@ private fun SidebarHeader(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search public handles") },
+                        placeholder = { Text("Search", maxLines = 1) },
                         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                         trailingIcon = {
                             IconButton(onClick = onSearchToggle) {
                                 Icon(Icons.Outlined.Close, contentDescription = "Close search")
                             }
                         },
+                        textStyle = MaterialTheme.typography.bodyMedium,
                         singleLine = true,
                         shape = RoundedCornerShape(18.dp)
                     )
@@ -503,6 +504,7 @@ private fun ChatPane(
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
     var sendPulse by rememberSaveable { mutableStateOf(false) }
     val pendingBubbles = remember(state.selectedChatId) { mutableStateListOf<PendingBubble>() }
+    val listState = rememberLazyListState()
     val sendScale by animateFloatAsState(
         targetValue = if (sendPulse) 1.18f else 1f,
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
@@ -513,6 +515,16 @@ private fun ChatPane(
     val subtitle = selectedChat?.handle ?: selectedChat?.chatType ?: "conversation"
     val profileUserId = remember(selectedChat, state.session?.userId) {
         resolveProfileUserId(selectedChat, state.session?.userId)
+    }
+
+    LaunchedEffect(state.selectedChatId) {
+        listState.scrollToItem(maxOf(0, state.messages.size - 1))
+    }
+    LaunchedEffect(state.messages.size, pendingBubbles.size) {
+        val lastIndex = state.messages.size + pendingBubbles.size - 1
+        if (lastIndex >= 0) {
+            listState.animateScrollToItem(lastIndex)
+        }
     }
 
     Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -553,6 +565,7 @@ private fun ChatPane(
             }
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1058,8 +1071,8 @@ private fun WelcomePane(modifier: Modifier = Modifier) {
 private fun ModalHost(visible: Boolean, onDismiss: () -> Unit, content: @Composable () -> Unit) {
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn() + scaleIn(initialScale = 0.96f),
-        exit = fadeOut() + scaleOut(targetScale = 0.96f)
+        enter = fadeIn(animationSpec = tween(180)),
+        exit = fadeOut(animationSpec = tween(180))
     ) {
         Box(
             modifier = Modifier
