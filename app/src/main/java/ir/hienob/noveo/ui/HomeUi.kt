@@ -1,5 +1,6 @@
 package ir.hienob.noveo.ui
 
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -102,6 +103,12 @@ private const val CLIENT_VERSION = "v0.1 mobile"
 private enum class SettingsSection {
     MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG
 }
+
+private data class ThemeSection(
+    val title: String,
+    val subtitle: String,
+    val presets: List<ThemePreset>
+)
 
 data class PendingBubble(
     val id: String,
@@ -973,21 +980,58 @@ private fun SettingsPreferencesSection(currentTheme: ThemePreset, onThemeChange:
         DetailCard(title = "Privacy", body = "Block group invites and related privacy controls belong here like web.")
         DetailCard(title = "Language", body = "English, فارسی, Русский, 中文")
         DetailCard(title = "Emoji Style", body = "Default or iOS")
-        DetailCard(title = "Theme", body = "Choose the closest available preset for this Kotlin client.")
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThemePreset.entries.forEach { preset ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable { onThemeChange(preset) },
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (preset == currentTheme) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(preset.label, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        if (preset == currentTheme) {
-                            Text("Selected", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-                        }
+        DetailCard(title = "Theme", body = "Themes are now grouped into sections (light, dark, and accent variants) for easier switching.")
+
+        val themeSections = listOf(
+            ThemeSection(
+                title = "System",
+                subtitle = "Use Light or Dark manually until automatic system-follow mode is added.",
+                presets = emptyList()
+            ),
+            ThemeSection(
+                title = "Light",
+                subtitle = "Bright themes for daytime usage.",
+                presets = listOf(ThemePreset.LIGHT, ThemePreset.SKY_LIGHT)
+            ),
+            ThemeSection(
+                title = "Dark",
+                subtitle = "Low-light themes for nighttime usage.",
+                presets = listOf(ThemePreset.DARK, ThemePreset.OCEAN_DARK)
+            )
+        )
+
+        themeSections.forEach { section ->
+            ThemeSectionBlock(
+                section = section,
+                currentTheme = currentTheme,
+                onThemeChange = onThemeChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeSectionBlock(
+    section: ThemeSection,
+    currentTheme: ThemePreset,
+    onThemeChange: (ThemePreset) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(section.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(section.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        section.presets.forEach { preset ->
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { onThemeChange(preset) },
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (preset == currentTheme) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(preset.label, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    if (preset == currentTheme) {
+                        Text("Selected", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
