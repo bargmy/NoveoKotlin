@@ -485,7 +485,11 @@ private fun ChatListContent(
     chats: List<ChatSummary>,
     onOpenChat: (String) -> Unit
 ) {
-    if (chats.isEmpty() && !state.loading) {
+    if (state.loading && chats.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else if (chats.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No chats found.", style = MaterialTheme.typography.bodyMedium)
         }
