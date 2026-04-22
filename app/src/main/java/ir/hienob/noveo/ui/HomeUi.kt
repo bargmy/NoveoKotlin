@@ -1,11 +1,15 @@
 package ir.hienob.noveo.ui
 
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -71,6 +75,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
@@ -79,6 +84,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -102,6 +110,12 @@ private const val CLIENT_VERSION = "v0.1 mobile"
 private enum class SettingsSection {
     MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG
 }
+
+private data class ThemeSection(
+    val title: String,
+    val subtitle: String,
+    val presets: List<ThemePreset>
+)
 
 data class PendingBubble(
     val id: String,
@@ -391,6 +405,7 @@ private fun SidebarPane(
             SidebarHeader(
                 showSearch = showSearch,
                 searchQuery = searchQuery,
+                connectionTitle = state.connectionTitle,
                 onMenuClick = onMenuClick,
                 onSearchToggle = onSearchToggle,
                 onSearchQueryChange = onSearchQueryChange
@@ -426,10 +441,23 @@ private fun SidebarPane(
 private fun SidebarHeader(
     showSearch: Boolean,
     searchQuery: String,
+    connectionTitle: String,
     onMenuClick: () -> Unit,
     onSearchToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit
 ) {
+    val statusTransition = rememberInfiniteTransition(label = "connection_status_fade")
+    val statusAlpha by statusTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "connection_status_alpha"
+    )
+    val titleAlpha = if (connectionTitle == "Noveo") 1f else statusAlpha
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -438,33 +466,38 @@ private fun SidebarHeader(
     ) {
         HeaderIconButton(icon = Icons.Outlined.Menu, onClick = onMenuClick)
         Spacer(Modifier.width(10.dp))
-        Box(modifier = Modifier.weight(1f)) {
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
             AnimatedContent(targetState = showSearch, label = "sidebar_header_swap") { searching ->
                 if (searching) {
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(0.92f),
                         placeholder = { Text("Search", maxLines = 1) },
                         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                        trailingIcon = {
-                            IconButton(onClick = onSearchToggle) {
-                                Icon(Icons.Outlined.Close, contentDescription = "Close search")
-                            }
-                        },
                         textStyle = MaterialTheme.typography.bodyMedium,
                         singleLine = true,
                         shape = RoundedCornerShape(18.dp)
                     )
                 } else {
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("Noveo", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        AnimatedContent(targetState = connectionTitle, label = "connection_title_swap") { title ->
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.alpha(titleAlpha)
+                            )
+                        }
                     }
                 }
             }
         }
         Spacer(Modifier.width(10.dp))
-        HeaderIconButton(icon = Icons.Outlined.Search, onClick = onSearchToggle)
+        HeaderIconButton(
+            icon = if (showSearch) Icons.Outlined.Close else Icons.Outlined.Search,
+            onClick = onSearchToggle
+        )
     }
 }
 
@@ -528,11 +561,7 @@ private fun SearchResultsList(
 
 @Composable
 private fun ChatListContent(state: AppUiState, chats: List<ChatSummary>, onOpenChat: (String) -> Unit) {
-    if (state.loading && state.chats.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
-    } else if (chats.isEmpty()) {
+    if (chats.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             Text("No chats yet.", textAlign = TextAlign.Center)
         }
@@ -571,7 +600,7 @@ private fun ChatPane(
     )
     val scope = rememberCoroutineScope()
     val selectedTitle = selectedChat?.title?.ifBlank { "Chat" } ?: "Chat"
-    val subtitle = selectedChat?.handle ?: selectedChat?.chatType ?: "conversation"
+    val subtitle = selectedChat?.memberIds?.size?.let { "$it members" } ?: "conversation"
     val profileUserId = remember(selectedChat, state.session?.userId) {
         resolveProfileUserId(selectedChat, state.session?.userId)
     }
@@ -737,13 +766,40 @@ private fun MessageRow(message: ChatMessage, ownMessage: Boolean, senderAvatarUr
                         val preview = message.content.previewText().removePrefix("[File] ")
                         if (preview.isNotBlank()) {
                             if (message.content.file != null) Spacer(Modifier.height(8.dp))
-                            Text(preview)
+                            MarkdownText(preview)
                         }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun MarkdownText(text: String) {
+    val annotated = remember(text) {
+        buildAnnotatedString {
+            var index = 0
+            var bold = false
+            while (index < text.length) {
+                val markerIndex = text.indexOf("**", startIndex = index)
+                if (markerIndex == -1) {
+                    withStyle(if (bold) SpanStyle(fontWeight = FontWeight.Bold) else SpanStyle()) {
+                        append(text.substring(index))
+                    }
+                    break
+                }
+                if (markerIndex > index) {
+                    withStyle(if (bold) SpanStyle(fontWeight = FontWeight.Bold) else SpanStyle()) {
+                        append(text.substring(index, markerIndex))
+                    }
+                }
+                bold = !bold
+                index = markerIndex + 2
+            }
+        }
+    }
+    Text(annotated)
 }
 
 @Composable
@@ -973,21 +1029,58 @@ private fun SettingsPreferencesSection(currentTheme: ThemePreset, onThemeChange:
         DetailCard(title = "Privacy", body = "Block group invites and related privacy controls belong here like web.")
         DetailCard(title = "Language", body = "English, فارسی, Русский, 中文")
         DetailCard(title = "Emoji Style", body = "Default or iOS")
-        DetailCard(title = "Theme", body = "Choose the closest available preset for this Kotlin client.")
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThemePreset.entries.forEach { preset ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable { onThemeChange(preset) },
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (preset == currentTheme) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(preset.label, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        if (preset == currentTheme) {
-                            Text("Selected", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-                        }
+        DetailCard(title = "Theme", body = "Themes are now grouped into sections (light, dark, and accent variants) for easier switching.")
+
+        val themeSections = listOf(
+            ThemeSection(
+                title = "System",
+                subtitle = "Use Light or Dark manually until automatic system-follow mode is added.",
+                presets = emptyList()
+            ),
+            ThemeSection(
+                title = "Light",
+                subtitle = "Bright themes for daytime usage.",
+                presets = listOf(ThemePreset.LIGHT, ThemePreset.SKY_LIGHT)
+            ),
+            ThemeSection(
+                title = "Dark",
+                subtitle = "Low-light themes for nighttime usage.",
+                presets = listOf(ThemePreset.DARK, ThemePreset.OCEAN_DARK)
+            )
+        )
+
+        themeSections.forEach { section ->
+            ThemeSectionBlock(
+                section = section,
+                currentTheme = currentTheme,
+                onThemeChange = onThemeChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeSectionBlock(
+    section: ThemeSection,
+    currentTheme: ThemePreset,
+    onThemeChange: (ThemePreset) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(section.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(section.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        section.presets.forEach { preset ->
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { onThemeChange(preset) },
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (preset == currentTheme) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(preset.label, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    if (preset == currentTheme) {
+                        Text("Selected", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
