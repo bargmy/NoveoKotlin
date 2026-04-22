@@ -15,7 +15,7 @@ import org.json.JSONObject
 class ChatSocket(
     private val client: OkHttpClient = OkHttpClient(),
     private val wsUrl: String = "wss://noveo.ir:8443/ws",
-    private val origin: String = "https://noveo.ir:8443"
+    private val origin: String = "https://noveo.ir"
 ) {
     private var webSocket: WebSocket? = null
     

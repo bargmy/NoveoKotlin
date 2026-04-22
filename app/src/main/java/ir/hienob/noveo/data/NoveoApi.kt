@@ -18,7 +18,7 @@ import org.json.JSONObject
 class NoveoApi(
     private val client: OkHttpClient = OkHttpClient(),
     private val wsUrl: String = "wss://noveo.ir:8443/ws",
-    private val origin: String = "https://noveo.ir:8443"
+    private val origin: String = "https://noveo.ir"
 ) {
     fun login(handle: String, password: String): Session = auth(JSONObject().put("type", "login_with_password").put("username", handle).put("password", password).put("languageCode", "en"))
     fun signup(handle: String, password: String): Session = auth(JSONObject().put("type", "register").put("username", handle).put("password", password).put("languageCode", "en"))
