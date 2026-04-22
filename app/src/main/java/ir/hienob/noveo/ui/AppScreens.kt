@@ -52,68 +52,180 @@ import ir.hienob.noveo.app.StartupState
 internal enum class ThemePreset(val label: String) {
     SKY_LIGHT("Sky Light"),
     LIGHT("Light"),
+    SUNSET_LIGHT("Sunset Light"),
+    DARK("Dark"),
     OCEAN_DARK("Ocean Dark"),
-    DARK("Dark")
+    PLUM_DARK("Plum Dark"),
+    OLED_DARK("OLED Dark"),
+    SUNSET_SHIMMER("Sunset Shimmer"),
+    CHERRY_RED("Cherry Red"),
+    SNOWY_DAYDREAM("Snowy Daydream"),
+    RAINBOW_RAGEBAIT("Rainbow Ragebait"),
+    SANOKI_MEOA("Sanoki Meoa")
 }
 
-private val skyLightScheme = lightColorScheme(
-    primary = Color(0xFF168BFF),
+private val sunsetLightScheme = lightColorScheme(
+    primary = Color(0xFFEA580C),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFD6ECFF),
-    onPrimaryContainer = Color(0xFF003A66),
-    secondary = Color(0xFF52A7FF),
-    background = Color(0xFFF1F8FF),
-    surface = Color.White,
-    surfaceVariant = Color(0xFFE7F3FF),
-    onSurface = Color(0xFF132238),
-    onSurfaceVariant = Color(0xFF56708F),
-    outline = Color(0xFFCEE2F6),
-    error = Color(0xFFD14352)
+    primaryContainer = Color(0xFFFFEDD5),
+    onPrimaryContainer = Color(0xFF431407),
+    secondary = Color(0xFFFB923C),
+    background = Color(0xFFFFF7ED),
+    surface = Color(0xFFFFFAF5),
+    surfaceVariant = Color(0xFFFFEDD5),
+    onSurface = Color(0xFF431407),
+    onSurfaceVariant = Color(0xFF7C2D12),
+    outline = Color(0xFFFDBA74)
+)
+
+private val plumDarkScheme = darkColorScheme(
+    primary = Color(0xFFA855F7),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF2E1065),
+    onPrimaryContainer = Color(0xFFFAF5FF),
+    secondary = Color(0xFFD8B4FE),
+    background = Color(0xFF14051F),
+    surface = Color(0xFF1B0F2A),
+    surfaceVariant = Color(0xFF2A1741),
+    onSurface = Color(0xFFFAF5FF),
+    onSurfaceVariant = Color(0xFFF3E8FF),
+    outline = Color(0xFF4C1D95)
+)
+
+private val oledDarkScheme = darkColorScheme(
+    primary = Color(0xFF3B82F6),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF0B0B0B),
+    onPrimaryContainer = Color.White,
+    secondary = Color(0xFF60A5FA),
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceVariant = Color(0xFF050505),
+    onSurface = Color.White,
+    onSurfaceVariant = Color(0xFFE5E5E5),
+    outline = Color(0xFF1F1F1F)
+)
+
+private val sunsetShimmerScheme = darkColorScheme(
+    primary = Color(0xFFF97316),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF4A2311),
+    onPrimaryContainer = Color(0xFFFFF7ED),
+    secondary = Color(0xFFFB923C),
+    background = Color(0xFF180B07),
+    surface = Color(0xFF21110B),
+    surfaceVariant = Color(0xFF2F170D),
+    onSurface = Color(0xFFFFF7ED),
+    onSurfaceVariant = Color(0xFFFED7AA),
+    outline = Color(0xFF7C2D12)
+)
+
+private val cherryRedScheme = darkColorScheme(
+    primary = Color(0xFFD2042D),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF333333),
+    onPrimaryContainer = Color.White,
+    secondary = Color(0xFFFF2C55),
+    background = Color(0xFF1A1A1A),
+    surface = Color(0xFF2C2C2C),
+    onSurface = Color.White,
+    outline = Color(0xFF333333)
+)
+
+private val snowyDaydreamScheme = lightColorScheme(
+    primary = Color(0xFF3B82F6),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFDDE6FF),
+    onPrimaryContainer = Color(0xFF102041),
+    secondary = Color(0xFF7B94B8),
+    background = Color(0xFFF1F7FF),
+    surface = Color.White.copy(alpha = 0.86f),
+    onSurface = Color(0xFF102041),
+    outline = Color(0xFFBFDBFE)
+)
+
+private val rainbowRagebaitScheme = darkColorScheme(
+    primary = Color(0xFFFF4FD8),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF331D52),
+    onPrimaryContainer = Color(0xFFFFF7FF),
+    secondary = Color(0xFFD8B4FE),
+    background = Color(0xFF130A20),
+    surface = Color(0xFF1D1130),
+    onSurface = Color(0xFFFFF7FF),
+    outline = Color(0xFF5B2D83)
+)
+
+private val sanokiMeoaScheme = darkColorScheme(
+    primary = Color(0xFFA855F7),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF39145C),
+    onPrimaryContainer = Color(0xFFFAF5FF),
+    secondary = Color(0xFFC084FC),
+    background = Color(0xFF12051E),
+    surface = Color(0xFF1A0A2B),
+    onSurface = Color(0xFFFAF5FF),
+    outline = Color(0xFF6D28D9)
+)
+
+private val skyLightScheme = lightColorScheme(
+    primary = Color(0xFF2563EB),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFDBEAFE),
+    onPrimaryContainer = Color(0xFF1E40AF),
+    secondary = Color(0xFF60A5FA),
+    background = Color(0xFFE0F2FE),
+    surface = Color(0xFFF8FCFF),
+    surfaceVariant = Color(0xFFECFEFF),
+    onSurface = Color(0xFF082F49),
+    onSurfaceVariant = Color(0xFF0F4C68),
+    outline = Color(0xFFBAE6FD),
+    error = Color(0xFFDC2626)
 )
 
 private val lightScheme = lightColorScheme(
-    primary = Color(0xFF2F80ED),
+    primary = Color(0xFF2563EB),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDCEBFF),
-    onPrimaryContainer = Color(0xFF0B3D91),
-    secondary = Color(0xFF5B8DEF),
-    background = Color(0xFFF5F9FF),
+    primaryContainer = Color(0xFFEFF6FF),
+    onPrimaryContainer = Color(0xFF1E40AF),
+    secondary = Color(0xFF60A5FA),
+    background = Color(0xFFEEF4FF),
     surface = Color.White,
-    surfaceVariant = Color(0xFFEDF4FF),
-    onSurface = Color(0xFF162033),
-    onSurfaceVariant = Color(0xFF5A6880),
-    outline = Color(0xFFD2DEEF),
-    error = Color(0xFFCC3344)
+    surfaceVariant = Color(0xFFF8FAFC),
+    onSurface = Color(0xFF0F172A),
+    onSurfaceVariant = Color(0xFF475569),
+    outline = Color(0xFFDBEAFE),
+    error = Color(0xFFDC2626)
 )
 
 private val oceanDarkScheme = darkColorScheme(
-    primary = Color(0xFF4DB4FF),
-    onPrimary = Color(0xFF003A59),
-    primaryContainer = Color(0xFF0D4C73),
-    onPrimaryContainer = Color(0xFFD4F0FF),
-    secondary = Color(0xFF81D0FF),
-    background = Color(0xFF09131C),
-    surface = Color(0xFF0E1B27),
-    surfaceVariant = Color(0xFF132636),
-    onSurface = Color(0xFFE1F4FF),
-    onSurfaceVariant = Color(0xFF92B2C7),
-    outline = Color(0xFF274257),
-    error = Color(0xFFFF91A0)
+    primary = Color(0xFF1D4ED8),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF0F2742),
+    onPrimaryContainer = Color(0xFFEFF6FF),
+    secondary = Color(0xFF3B82F6),
+    background = Color(0xFF071423),
+    surface = Color(0xFF081A2F),
+    surfaceVariant = Color(0xFF0C233D),
+    onSurface = Color(0xFFEFF6FF),
+    onSurfaceVariant = Color(0xFFDBEAFE),
+    outline = Color(0xFF12324F),
+    error = Color(0xFFEF4444)
 )
 
 private val darkScheme = darkColorScheme(
-    primary = Color(0xFF74A7FF),
-    onPrimary = Color(0xFF062B63),
-    primaryContainer = Color(0xFF123A7C),
-    onPrimaryContainer = Color(0xFFD7E6FF),
-    secondary = Color(0xFF95B8FF),
-    background = Color(0xFF0F141C),
-    surface = Color(0xFF141B24),
-    surfaceVariant = Color(0xFF1B2430),
-    onSurface = Color(0xFFEAF1FF),
-    onSurfaceVariant = Color(0xFF9CACBF),
-    outline = Color(0xFF334258),
-    error = Color(0xFFFF8A98)
+    primary = Color(0xFF3B82F6),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF1E293B),
+    onPrimaryContainer = Color(0xFFF8FAF4),
+    secondary = Color(0xFF60A5FA),
+    background = Color(0xFF020617),
+    surface = Color(0xFF0F172A),
+    surfaceVariant = Color(0xFF111827),
+    onSurface = Color(0xFFF8FAF4),
+    onSurfaceVariant = Color(0xFFCBD5E1),
+    outline = Color(0xFF1F2937),
+    error = Color(0xFFEF4444)
 )
 
 @Composable
@@ -127,7 +239,8 @@ fun NoveoRoot(
     onSearchPublic: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onUpdateProfile: (String, String) -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember(context) { context.getSharedPreferences("noveo_ui", Context.MODE_PRIVATE) }
@@ -148,8 +261,16 @@ fun NoveoRoot(
     val colorScheme = when (currentTheme) {
         ThemePreset.SKY_LIGHT -> skyLightScheme
         ThemePreset.LIGHT -> lightScheme
+        ThemePreset.SUNSET_LIGHT -> sunsetLightScheme
         ThemePreset.OCEAN_DARK -> oceanDarkScheme
         ThemePreset.DARK -> darkScheme
+        ThemePreset.PLUM_DARK -> plumDarkScheme
+        ThemePreset.OLED_DARK -> oledDarkScheme
+        ThemePreset.SUNSET_SHIMMER -> sunsetShimmerScheme
+        ThemePreset.CHERRY_RED -> cherryRedScheme
+        ThemePreset.SNOWY_DAYDREAM -> snowyDaydreamScheme
+        ThemePreset.RAINBOW_RAGEBAIT -> rainbowRagebaitScheme
+        ThemePreset.SANOKI_MEOA -> sanokiMeoaScheme
     }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -167,6 +288,7 @@ fun NoveoRoot(
                         onBackToChats = onBackToChats,
                         onSend = onSend,
                         onLogout = onLogout,
+                        onUpdateProfile = onUpdateProfile,
                         currentTheme = currentTheme,
                         onThemeChange = { currentTheme = it }
                     )
