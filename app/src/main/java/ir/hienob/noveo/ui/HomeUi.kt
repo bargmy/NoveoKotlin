@@ -1,7 +1,23 @@
 package ir.hienob.noveo.ui
 
+
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,10 +41,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Call
@@ -45,6 +59,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -61,6 +76,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
@@ -70,6 +86,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -91,7 +110,7 @@ private const val NOVEO_BASE_URL = "https://noveo.ir"
 private const val CLIENT_VERSION = "v0.1 mobile"
 
 private enum class SettingsSection {
-    MENU, THEMES, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG
+    MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG
 }
 
 private data class ThemeSection(
@@ -110,7 +129,6 @@ internal fun HomeScreen(
     state: AppUiState,
     onOpenChat: (String) -> Unit,
     onStartDirectChat: (String) -> Unit,
-    onSearchPublic: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onLogout: () -> Unit,
@@ -147,10 +165,6 @@ internal fun HomeScreen(
             }
     }
 
-    LaunchedEffect(searchQuery) {
-        onSearchPublic(searchQuery)
-    }
-
     val selectedChat = state.chats.firstOrNull { it.id == state.selectedChatId }
     val selectedProfile = remember(profileUserId, state.usersById) { profileUserId?.let(state.usersById::get) }
 
@@ -162,17 +176,59 @@ internal fun HomeScreen(
     ) {
         val compact = maxWidth < 760.dp
 
-        if (compact && state.selectedChatId != null) {
-            ChatPane(
-                state = state,
-                compact = true,
-                selectedChat = selectedChat,
-                onBackToChats = onBackToChats,
-                onSend = onSend,
-                onOpenProfile = { profileUserId = it },
-                onOpenGroupInfo = { showGroupInfo = true },
-                modifier = Modifier.fillMaxSize()
-            )
+        if (compact) {
+            AnimatedContent(
+                targetState = state.selectedChatId == null,
+                label = "compact_shell_transition",
+                transitionSpec = {
+                    if (targetState) {
+                        slideInHorizontally(initialOffsetX = { -it / 3 }) + fadeIn() togetherWith
+                            slideOutHorizontally(targetOffsetX = { it / 3 }) + fadeOut()
+                    } else {
+                        slideInHorizontally(initialOffsetX = { it / 3 }) + fadeIn() togetherWith
+                            slideOutHorizontally(targetOffsetX = { -it / 3 }) + fadeOut()
+                    }.using(SizeTransform(clip = false))
+                }
+            ) { showList ->
+                if (showList) {
+                    SidebarPane(
+                        state = state,
+                        chats = filteredChats,
+                        users = filteredUsers,
+                        showSearch = showSearch,
+                        searchQuery = searchQuery,
+                        onMenuClick = { showMenu = true },
+                        onSearchToggle = {
+                            showSearch = !showSearch
+                            if (!showSearch) searchQuery = ""
+                        },
+                        onSearchQueryChange = { searchQuery = it },
+                        onOpenChat = onOpenChat,
+                        onOpenContacts = { showContactsModal = true },
+                        onOpenCreate = { showCreateModal = true },
+                        onOpenSettings = {
+                            settingsSection = SettingsSection.MENU
+                            showSettingsModal = true
+                        },
+                        onOpenStars = {
+                            settingsSection = SettingsSection.SUBSCRIPTION
+                            showSettingsModal = true
+                        },
+                        onOpenProfile = { profileUserId = it },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    ChatPane(
+                        state = state,
+                        compact = true,
+                        selectedChat = selectedChat,
+                        onBackToChats = onBackToChats,
+                        onSend = onSend,
+                        onOpenProfile = { userId -> profileUserId = userId },
+                        onOpenGroupInfo = { showGroupInfo = true }
+                    )
+                }
+            }
         } else {
             Row(modifier = Modifier.fillMaxSize()) {
                 SidebarPane(
@@ -199,10 +255,17 @@ internal fun HomeScreen(
                         showSettingsModal = true
                     },
                     onOpenProfile = { profileUserId = it },
-                    modifier = if (compact) Modifier.fillMaxSize() else Modifier.width(360.dp).fillMaxHeight()
+                    modifier = Modifier.width(360.dp).fillMaxHeight()
                 )
-                if (!compact) {
-                    if (selectedChat == null) {
+                AnimatedContent(
+                    targetState = state.selectedChatId,
+                    label = "wide_shell_transition",
+                    transitionSpec = {
+                        slideInHorizontally(initialOffsetX = { it / 5 }) + fadeIn() togetherWith
+                            slideOutHorizontally(targetOffsetX = { -it / 5 }) + fadeOut()
+                    }
+                ) { selectedId ->
+                    if (selectedId == null) {
                         WelcomePane(modifier = Modifier.weight(1f))
                     } else {
                         ChatPane(
@@ -211,7 +274,7 @@ internal fun HomeScreen(
                             selectedChat = selectedChat,
                             onBackToChats = onBackToChats,
                             onSend = onSend,
-                            onOpenProfile = { profileUserId = it },
+                            onOpenProfile = { userId -> profileUserId = userId },
                             onOpenGroupInfo = { showGroupInfo = true },
                             modifier = Modifier.weight(1f)
                         )
@@ -220,7 +283,11 @@ internal fun HomeScreen(
             }
         }
 
-        AnimatedVisibility(visible = showMenu) {
+        AnimatedVisibility(
+            visible = showMenu,
+            enter = fadeIn(animationSpec = tween(180)),
+            exit = fadeOut(animationSpec = tween(180))
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -233,7 +300,11 @@ internal fun HomeScreen(
             )
         }
 
-        AnimatedVisibility(visible = showMenu) {
+        AnimatedVisibility(
+            visible = showMenu,
+            enter = slideInHorizontally(initialOffsetX = { -it / 2 }) + fadeIn(animationSpec = tween(180)),
+            exit = slideOutHorizontally(targetOffsetX = { -it / 2 }) + fadeOut(animationSpec = tween(180))
+        ) {
             MenuSheet(
                 onOpenContacts = {
                     showMenu = false
@@ -266,7 +337,7 @@ internal fun HomeScreen(
                     showContactsModal = false
                     onStartDirectChat(userId)
                 },
-                onOpenProfile = { profileUserId = it }
+                onOpenProfile = { userId -> profileUserId = userId }
             )
         }
 
@@ -364,23 +435,6 @@ private fun SidebarPane(
             } else {
                 ChatListContent(state = state, chats = chats, onOpenChat = onOpenChat)
             }
-            if (!showSearch) {
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(onClick = onOpenContacts, modifier = Modifier.weight(1f)) { Text("Contacts") }
-                    OutlinedButton(onClick = onOpenCreate, modifier = Modifier.weight(1f)) { Text("Create") }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(onClick = onOpenStars, modifier = Modifier.weight(1f)) { Text("Stars") }
-                    OutlinedButton(onClick = onOpenSettings, modifier = Modifier.weight(1f)) { Text("Settings") }
-                }
-            }
         }
     }
 }
@@ -394,6 +448,18 @@ private fun SidebarHeader(
     onSearchToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit
 ) {
+    val statusTransition = rememberInfiniteTransition(label = "connection_status_fade")
+    val statusAlpha by statusTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "connection_status_alpha"
+    )
+    val titleAlpha = if (connectionTitle == "Noveo") 1f else statusAlpha
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -402,26 +468,31 @@ private fun SidebarHeader(
     ) {
         HeaderIconButton(icon = Icons.Outlined.Menu, onClick = onMenuClick)
         Spacer(Modifier.width(10.dp))
-        Box(modifier = Modifier.weight(1f)) {
-            if (showSearch) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search") },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(18.dp)
-                )
-            } else {
-                Text(
-                    text = connectionTitle,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 10.dp)
-                )
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            AnimatedContent(targetState = showSearch, label = "sidebar_header_swap") { searching ->
+                if (searching) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        modifier = Modifier.fillMaxWidth(0.92f),
+                        placeholder = { Text("Search", maxLines = 1) },
+                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        singleLine = true,
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                } else {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        AnimatedContent(targetState = connectionTitle, label = "connection_title_swap") { title ->
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.alpha(titleAlpha)
+                            )
+                        }
+                    }
+                }
             }
         }
         Spacer(Modifier.width(10.dp))
@@ -524,6 +595,11 @@ private fun ChatPane(
     var sendPulse by rememberSaveable { mutableStateOf(false) }
     val pendingBubbles = remember(state.selectedChatId) { mutableStateListOf<PendingBubble>() }
     val listState = rememberLazyListState()
+    val sendScale by animateFloatAsState(
+        targetValue = if (sendPulse) 1.18f else 1f,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "send_button_scale"
+    )
     val scope = rememberCoroutineScope()
     val selectedTitle = selectedChat?.title?.ifBlank { "Chat" } ?: "Chat"
     val subtitle = selectedChat?.memberIds?.size?.let { "$it members" } ?: "conversation"
@@ -531,9 +607,15 @@ private fun ChatPane(
         resolveProfileUserId(selectedChat, state.session?.userId)
     }
 
-    LaunchedEffect(state.selectedChatId, state.messages.size, pendingBubbles.size) {
+    LaunchedEffect(state.selectedChatId, state.messages.size) {
+        val lastIndex = state.messages.lastIndex
+        if (lastIndex >= 0) listState.scrollToItem(lastIndex)
+    }
+    LaunchedEffect(state.messages.size, pendingBubbles.size) {
         val lastIndex = state.messages.size + pendingBubbles.size - 1
-        if (lastIndex >= 0) listState.animateScrollToItem(lastIndex)
+        if (lastIndex >= 0) {
+            listState.animateScrollToItem(lastIndex)
+        }
     }
 
     Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -565,6 +647,11 @@ private fun ChatPane(
             HeaderIconButton(icon = Icons.Outlined.Call, onClick = {})
         }
 
+        state.error?.takeIf { it.isNotBlank() }?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp))
+            Spacer(Modifier.height(6.dp))
+        }
+
         if (state.loading && state.messages.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
@@ -592,7 +679,7 @@ private fun ChatPane(
         ComposerBar(
             draft = draft,
             onDraftChange = { draft = it },
-            sendScale = if (sendPulse) 1.08f else 1f,
+            sendScale = sendScale,
             onSendClick = {
                 val text = draft.trim()
                 if (text.isBlank()) return@ComposerBar
@@ -619,28 +706,29 @@ private fun ComposerBar(
     sendScale: Float,
     onSendClick: () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(12.dp)
     ) {
-        HeaderIconButton(icon = Icons.Outlined.Menu, onClick = {})
-        Spacer(Modifier.width(6.dp))
-        HeaderIconButton(icon = Icons.Outlined.Star, onClick = {})
-        Spacer(Modifier.width(8.dp))
-        OutlinedTextField(
-            value = draft,
-            onValueChange = onDraftChange,
-            modifier = Modifier.weight(1f),
-            placeholder = { Text("Message...") },
-            shape = RoundedCornerShape(22.dp),
-            maxLines = 4
-        )
-        Spacer(Modifier.width(8.dp))
-        Box(modifier = Modifier.scale(sendScale)) {
-            SendIconButton(enabled = draft.isNotBlank(), onClick = onSendClick)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            HeaderIconButton(icon = Icons.Outlined.Menu, onClick = {})
+            Spacer(Modifier.width(6.dp))
+            HeaderIconButton(icon = Icons.Outlined.Star, onClick = {})
+            Spacer(Modifier.width(8.dp))
+            OutlinedTextField(
+                value = draft,
+                onValueChange = onDraftChange,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Message...") },
+                shape = RoundedCornerShape(22.dp),
+                maxLines = 4
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(modifier = Modifier.scale(sendScale)) {
+                SendIconButton(enabled = draft.isNotBlank(), onClick = onSendClick)
+            }
         }
     }
 }
@@ -680,7 +768,7 @@ private fun MessageRow(message: ChatMessage, ownMessage: Boolean, senderAvatarUr
                         val preview = message.content.previewText().removePrefix("[File] ")
                         if (preview.isNotBlank()) {
                             if (message.content.file != null) Spacer(Modifier.height(8.dp))
-                            Text(preview)
+                            MarkdownText(preview)
                         }
                     }
                 }
@@ -690,16 +778,49 @@ private fun MessageRow(message: ChatMessage, ownMessage: Boolean, senderAvatarUr
 }
 
 @Composable
+private fun MarkdownText(text: String) {
+    val annotated = remember(text) {
+        buildAnnotatedString {
+            var index = 0
+            var bold = false
+            while (index < text.length) {
+                val markerIndex = text.indexOf("**", startIndex = index)
+                if (markerIndex == -1) {
+                    withStyle(if (bold) SpanStyle(fontWeight = FontWeight.Bold) else SpanStyle()) {
+                        append(text.substring(index))
+                    }
+                    break
+                }
+                if (markerIndex > index) {
+                    withStyle(if (bold) SpanStyle(fontWeight = FontWeight.Bold) else SpanStyle()) {
+                        append(text.substring(index, markerIndex))
+                    }
+                }
+                bold = !bold
+                index = markerIndex + 2
+            }
+        }
+    }
+    Text(annotated)
+}
+
+@Composable
 private fun PendingMessageBubble(text: String) {
-    Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxWidth()) {
-        Card(
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f))
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(text)
-                Spacer(Modifier.height(4.dp))
-                Text("Sending…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(animationSpec = tween(220)) + slideInVertically(initialOffsetY = { it / 2 }),
+        exit = fadeOut(animationSpec = tween(220)) + slideOutVertically(targetOffsetY = { it / 2 })
+    ) {
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxWidth()) {
+            Card(
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f))
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(text)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Sending…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
             }
         }
     }
@@ -707,10 +828,10 @@ private fun PendingMessageBubble(text: String) {
 
 @Composable
 private fun AttachmentPreview(file: MessageFileAttachment?) {
-    if (file == null) return
     val uriHandler = LocalUriHandler.current
-    val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
-    if (!normalizedUrl.isNullOrBlank() && file.isImage()) {
+    val normalizedUrl = remember(file?.url) { file?.url.normalizeNoveoUrl() }
+    if (file == null) return
+    if (normalizedUrl != null && file.isImage()) {
         AsyncImage(
             model = normalizedUrl,
             contentDescription = file.name.ifBlank { "Image attachment" },
@@ -738,7 +859,8 @@ private fun AttachmentPreview(file: MessageFileAttachment?) {
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(file.name.ifBlank { "Attachment" }, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                Text(file.type.ifBlank { normalizedUrl ?: "File" }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                val subtitle = file.type.ifBlank { normalizedUrl ?: "File" }
+                Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -839,7 +961,6 @@ private fun SettingsModal(
             ModalHeader(
                 title = when (section) {
                     SettingsSection.MENU -> "Settings"
-                    SettingsSection.THEMES -> "Themes"
                     SettingsSection.SUBSCRIPTION -> "Subscription"
                     SettingsSection.PROFILE -> "Profile"
                     SettingsSection.ACCOUNT -> "Account"
@@ -852,11 +973,10 @@ private fun SettingsModal(
             Crossfade(targetState = section, label = "settings_section") { current ->
                 when (current) {
                     SettingsSection.MENU -> SettingsMenu(onSectionChange)
-                    SettingsSection.THEMES -> SettingsThemesSection(currentTheme, onThemeChange)
                     SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection()
                     SettingsSection.PROFILE -> SettingsProfileSection(me)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(state, onLogout)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection()
+                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(currentTheme, onThemeChange)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection()
                 }
             }
@@ -867,7 +987,6 @@ private fun SettingsModal(
 @Composable
 private fun SettingsMenu(onSectionChange: (SettingsSection) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SettingsRow("Themes", Icons.Outlined.Star) { onSectionChange(SettingsSection.THEMES) }
         SettingsRow("Subscription", Icons.Outlined.Star) { onSectionChange(SettingsSection.SUBSCRIPTION) }
         SettingsRow("Profile", Icons.Outlined.Info) { onSectionChange(SettingsSection.PROFILE) }
         SettingsRow("Account", Icons.Outlined.Menu) { onSectionChange(SettingsSection.ACCOUNT) }
@@ -878,21 +997,15 @@ private fun SettingsMenu(onSectionChange: (SettingsSection) -> Unit) {
 
 @Composable
 private fun SettingsSubscriptionSection() {
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         DetailCard(title = "Premium", body = "Web already includes premium, stars, wallet, gifts, profile skins, and premium themes. Android needs those full flows, not placeholders.")
-        DetailCard(title = "Stars", body = "Stars belongs in the same settings and wallet orbit as web. This surface is reachable now, but wallet parity is still incomplete.")
+        DetailCard(title = "Stars", body = "Stars belongs in the same settings/wallet orbit as web. This surface is reachable now, but wallet parity is still incomplete.")
     }
 }
 
 @Composable
 private fun SettingsProfileSection(me: UserSummary?) {
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         ProfileCircle(name = me?.username ?: "Me", imageUrl = me?.avatarUrl, size = 90.dp)
         Spacer(Modifier.height(12.dp))
         Text(me?.username ?: "Me", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -907,56 +1020,41 @@ private fun SettingsProfileSection(me: UserSummary?) {
 
 @Composable
 private fun SettingsAccountSection(state: AppUiState, onLogout: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         DetailRow("User ID", state.session?.userId ?: "Unknown")
         DetailRow("Session ID", state.session?.sessionId?.ifBlank { "Connected" } ?: "Unavailable")
         DetailRow("Expiry", formatExpiry(state.session))
-        DetailCard(title = "Account status", body = "This build shows the current live session fields from the active account. Logout remains wired.")
+        DetailCard(title = "Account status", body = "This build now shows your real active session fields from the live account. Logout is still wired and working.")
         Button(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Logout") }
     }
 }
 
 @Composable
-private fun SettingsPreferencesSection() {
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
+private fun SettingsPreferencesSection(currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         DetailCard(title = "Privacy", body = "Block group invites and related privacy controls belong here like web.")
         DetailCard(title = "Language", body = "English, فارسی, Русский, 中文")
         DetailCard(title = "Emoji Style", body = "Default or iOS")
-        DetailCard(title = "Theme", body = "Open Settings → Themes for the full theme catalog and presets.")
-    }
-}
+        DetailCard(title = "Theme", body = "Themes are now grouped into sections (light, dark, and accent variants) for easier switching.")
 
-@Composable
-private fun SettingsThemesSection(currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
-    val themeSections = listOf(
-        ThemeSection(
-            title = "System",
-            subtitle = "Use Light or Dark manually until automatic system-follow mode is added.",
-            presets = emptyList()
-        ),
-        ThemeSection(
-            title = "Light",
-            subtitle = "Bright themes for daytime usage.",
-            presets = listOf(ThemePreset.LIGHT, ThemePreset.SKY_LIGHT)
-        ),
-        ThemeSection(
-            title = "Dark",
-            subtitle = "Low-light themes for nighttime usage.",
-            presets = listOf(ThemePreset.DARK, ThemePreset.OCEAN_DARK)
+        val themeSections = listOf(
+            ThemeSection(
+                title = "System",
+                subtitle = "Use Light or Dark manually until automatic system-follow mode is added.",
+                presets = emptyList()
+            ),
+            ThemeSection(
+                title = "Light",
+                subtitle = "Bright themes for daytime usage.",
+                presets = listOf(ThemePreset.LIGHT, ThemePreset.SKY_LIGHT)
+            ),
+            ThemeSection(
+                title = "Dark",
+                subtitle = "Low-light themes for nighttime usage.",
+                presets = listOf(ThemePreset.DARK, ThemePreset.OCEAN_DARK)
+            )
         )
-    )
 
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        DetailCard(title = "Theme", body = "Themes are grouped into sections for easier switching.")
         themeSections.forEach { section ->
             ThemeSectionBlock(
                 section = section,
@@ -977,22 +1075,18 @@ private fun ThemeSectionBlock(
         Text(section.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(section.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-        if (section.presets.isEmpty()) {
-            DetailCard(title = "System", body = "Automatic system-follow mode is not added yet.")
-        } else {
-            section.presets.forEach { preset ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable { onThemeChange(preset) },
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (preset == currentTheme) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(preset.label, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        if (preset == currentTheme) {
-                            Text("Selected", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-                        }
+        section.presets.forEach { preset ->
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { onThemeChange(preset) },
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (preset == currentTheme) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(preset.label, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    if (preset == currentTheme) {
+                        Text("Selected", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -1004,7 +1098,7 @@ private fun ThemeSectionBlock(
 private fun SettingsChangelogSection() {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         DetailCard(title = "Client Version", body = CLIENT_VERSION)
-        DetailCard(title = "Status", body = "Android includes search, settings, profiles, attachment previews, and a lightweight sending animation.")
+        DetailCard(title = "Status", body = "Android now has the web menu structure, larger shell buttons, profile surfaces, attachment previews, and a first sending animation pass.")
     }
 }
 
@@ -1031,11 +1125,7 @@ private fun ProfileModal(
             Spacer(Modifier.height(18.dp))
             DetailCard(
                 title = "Mutual chat state",
-                body = if (findDirectChatForUser(chats, selfUserId, user.id) != null) {
-                    "This profile already has a private chat you can open."
-                } else {
-                    "No private chat has been found yet in the current Android snapshot."
-                }
+                body = if (findDirectChatForUser(chats, selfUserId, user.id) != null) "This profile already has a private chat you can open." else "No private chat has been found yet in the current Android snapshot."
             )
             Spacer(Modifier.height(14.dp))
             Button(onClick = onMessage, modifier = Modifier.fillMaxWidth()) { Text("Message") }
@@ -1057,25 +1147,22 @@ private fun GroupInfoModal(chat: ChatSummary, usersById: Map<String, UserSummary
                 Spacer(Modifier.height(18.dp))
                 DetailRow("Members", chat.memberIds.size.toString())
                 Spacer(Modifier.height(10.dp))
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(top = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(chat.memberIds, key = { it }) { memberId ->
-                        val user = usersById[memberId]
-                        Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                ProfileCircle(name = user?.username ?: memberId, imageUrl = user?.avatarUrl, size = 40.dp)
-                                Spacer(Modifier.width(10.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(user?.username ?: memberId, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        user?.handle ?: user?.bio?.ifBlank { memberId } ?: memberId,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                if (chat.memberIds.isNotEmpty()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(top = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(chat.memberIds, key = { it }) { memberId ->
+                            val user = usersById[memberId]
+                            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                                Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    ProfileCircle(name = user?.username ?: memberId, imageUrl = user?.avatarUrl, size = 40.dp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(user?.username ?: memberId, fontWeight = FontWeight.SemiBold)
+                                        Text(user?.handle ?: user?.bio?.ifBlank { memberId } ?: memberId, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
                                 }
                             }
                         }
@@ -1172,10 +1259,7 @@ private fun ChatRow(chat: ChatSummary, selected: Boolean, onClick: () -> Unit) {
             if (chat.unreadCount > 0) {
                 Spacer(Modifier.width(8.dp))
                 Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary).padding(horizontal = 8.dp, vertical = 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(chat.unreadCount.toString(), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall)
@@ -1198,7 +1282,11 @@ private fun WelcomePane(modifier: Modifier = Modifier) {
 
 @Composable
 private fun ModalHost(visible: Boolean, onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    AnimatedVisibility(visible = visible) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(animationSpec = tween(180)),
+        exit = fadeOut(animationSpec = tween(180))
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1280,10 +1368,7 @@ private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 42.dp) {
                 .clip(CircleShape)
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
-                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
-                        )
+                        colors = listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f))
                     )
                 ),
             contentAlignment = Alignment.Center
