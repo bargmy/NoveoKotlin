@@ -490,8 +490,12 @@ private fun ChatListContent(
             CircularProgressIndicator()
         }
     } else if (chats.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No chats found.", style = MaterialTheme.typography.bodyMedium)
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("No chats found.", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(8.dp))
+                Text("Your chats will appear here once they are loaded from the server.", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     } else {
         LazyColumn(
@@ -1512,6 +1516,16 @@ private fun String?.normalizeNoveoUrl(): String? {
     if (value.startsWith("http://") || value.startsWith("https://")) return value
     if (value.startsWith("ws://")) return value.replaceFirst("ws://", "http://")
     if (value.startsWith("wss://")) return value.replaceFirst("wss://", "https://")
+    
     val normalized = if (value.startsWith("/")) value else "/$value"
-    return "$NOVEO_BASE_URL$normalized"
+    
+    // Server serves static files from /static/
+    // If path starts with /uploads, it likely needs /static/ prepended
+    val finalPath = if (normalized.startsWith("/uploads/") && !normalized.startsWith("/static/")) {
+        "/static$normalized"
+    } else {
+        normalized
+    }
+    
+    return "$NOVEO_BASE_URL$finalPath"
 }
