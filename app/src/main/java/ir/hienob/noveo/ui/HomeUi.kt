@@ -3,6 +3,7 @@ package ir.hienob.noveo.ui
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -12,6 +13,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -156,42 +158,56 @@ internal fun HomeScreen(
         val compact = maxWidth < 760.dp
 
         if (compact) {
-            if (state.selectedChatId == null) {
-                SidebarPane(
-                    state = state,
-                    chats = filteredChats,
-                    users = filteredUsers,
-                    showSearch = showSearch,
-                    searchQuery = searchQuery,
-                    onMenuClick = { showMenu = true },
-                    onSearchToggle = {
-                        showSearch = !showSearch
-                        if (!showSearch) searchQuery = ""
-                    },
-                    onSearchQueryChange = { searchQuery = it },
-                    onOpenChat = onOpenChat,
-                    onOpenContacts = { showContactsModal = true },
-                    onOpenCreate = { showCreateModal = true },
-                    onOpenSettings = {
-                        settingsSection = SettingsSection.MENU
-                        showSettingsModal = true
-                    },
-                    onOpenStars = {
-                        settingsSection = SettingsSection.SUBSCRIPTION
-                        showSettingsModal = true
-                    },
-                    onOpenProfile = { profileUserId = it },
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                ChatPane(
-                    state = state,
-                    compact = true,
-                    selectedChat = selectedChat,
-                    onBackToChats = onBackToChats,
-                    onSend = onSend,
-                    onOpenProfile = { userId -> profileUserId = userId }
-                )
+            AnimatedContent(
+                targetState = state.selectedChatId == null,
+                label = "compact_shell_transition",
+                transitionSpec = {
+                    if (targetState) {
+                        slideInHorizontally(initialOffsetX = { -it / 3 }) + fadeIn() togetherWith
+                            slideOutHorizontally(targetOffsetX = { it / 3 }) + fadeOut()
+                    } else {
+                        slideInHorizontally(initialOffsetX = { it / 3 }) + fadeIn() togetherWith
+                            slideOutHorizontally(targetOffsetX = { -it / 3 }) + fadeOut()
+                    }.using(SizeTransform(clip = false))
+                }
+            ) { showList ->
+                if (showList) {
+                    SidebarPane(
+                        state = state,
+                        chats = filteredChats,
+                        users = filteredUsers,
+                        showSearch = showSearch,
+                        searchQuery = searchQuery,
+                        onMenuClick = { showMenu = true },
+                        onSearchToggle = {
+                            showSearch = !showSearch
+                            if (!showSearch) searchQuery = ""
+                        },
+                        onSearchQueryChange = { searchQuery = it },
+                        onOpenChat = onOpenChat,
+                        onOpenContacts = { showContactsModal = true },
+                        onOpenCreate = { showCreateModal = true },
+                        onOpenSettings = {
+                            settingsSection = SettingsSection.MENU
+                            showSettingsModal = true
+                        },
+                        onOpenStars = {
+                            settingsSection = SettingsSection.SUBSCRIPTION
+                            showSettingsModal = true
+                        },
+                        onOpenProfile = { profileUserId = it },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    ChatPane(
+                        state = state,
+                        compact = true,
+                        selectedChat = selectedChat,
+                        onBackToChats = onBackToChats,
+                        onSend = onSend,
+                        onOpenProfile = { userId -> profileUserId = userId }
+                    )
+                }
             }
         } else {
             Row(modifier = Modifier.fillMaxSize()) {
@@ -221,29 +237,54 @@ internal fun HomeScreen(
                     onOpenProfile = { profileUserId = it },
                     modifier = Modifier.width(360.dp).fillMaxHeight()
                 )
-                if (state.selectedChatId == null) {
-                    WelcomePane(modifier = Modifier.weight(1f))
-                } else {
-                    ChatPane(
-                        state = state,
-                        compact = false,
-                        selectedChat = selectedChat,
-                        onBackToChats = onBackToChats,
-                        onSend = onSend,
-                        onOpenProfile = { userId -> profileUserId = userId },
-                        modifier = Modifier.weight(1f)
-                    )
+                AnimatedContent(
+                    targetState = state.selectedChatId,
+                    label = "wide_shell_transition",
+                    transitionSpec = {
+                        slideInHorizontally(initialOffsetX = { it / 5 }) + fadeIn() togetherWith
+                            slideOutHorizontally(targetOffsetX = { -it / 5 }) + fadeOut()
+                    }
+                ) { selectedId ->
+                    if (selectedId == null) {
+                        WelcomePane(modifier = Modifier.weight(1f))
+                    } else {
+                        ChatPane(
+                            state = state,
+                            compact = false,
+                            selectedChat = selectedChat,
+                            onBackToChats = onBackToChats,
+                            onSend = onSend,
+                            onOpenProfile = { userId -> profileUserId = userId },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }
 
         AnimatedVisibility(
             visible = showMenu,
-            enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it / 2 }),
-            exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it / 2 })
+            enter = fadeIn(animationSpec = tween(180)),
+            exit = fadeOut(animationSpec = tween(180))
         ) {
-            MenuOverlay(
-                onDismiss = { showMenu = false },
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { showMenu = false }
+                    )
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showMenu,
+            enter = slideInHorizontally(initialOffsetX = { -it / 2 }) + fadeIn(animationSpec = tween(180)),
+            exit = slideOutHorizontally(targetOffsetX = { -it / 2 }) + fadeOut(animationSpec = tween(180))
+        ) {
+            MenuSheet(
                 onOpenContacts = {
                     showMenu = false
                     showContactsModal = true
@@ -517,8 +558,9 @@ private fun ChatPane(
         resolveProfileUserId(selectedChat, state.session?.userId)
     }
 
-    LaunchedEffect(state.selectedChatId) {
-        listState.scrollToItem(maxOf(0, state.messages.size - 1))
+    LaunchedEffect(state.selectedChatId, state.messages.size) {
+        val lastIndex = state.messages.lastIndex
+        if (lastIndex >= 0) listState.scrollToItem(lastIndex)
     }
     LaunchedEffect(state.messages.size, pendingBubbles.size) {
         val lastIndex = state.messages.size + pendingBubbles.size - 1
@@ -953,42 +995,30 @@ private fun ProfileModal(
 }
 
 @Composable
-private fun MenuOverlay(
-    onDismiss: () -> Unit,
+private fun MenuSheet(
     onOpenContacts: () -> Unit,
     onOpenCreate: () -> Unit,
     onOpenStars: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    Box(
+    Column(
         modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.35f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onDismiss
-            )
+            .width(296.dp)
+            .fillMaxHeight()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(16.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .width(296.dp)
-                .fillMaxHeight()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(16.dp)
-        ) {
-            Text("Menu", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(16.dp))
-            MenuRow("All Contacts", Icons.Outlined.Info, onOpenContacts)
-            MenuRow("New Chat", Icons.Outlined.Menu, onOpenCreate)
-            MenuRow("Stars", Icons.Outlined.Star, onOpenStars)
-            MenuRow("Settings", Icons.Outlined.Settings, onOpenSettings)
-            Spacer(Modifier.weight(1f))
-            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Noveo Messenger", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(4.dp))
-                Text(CLIENT_VERSION, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        Text("Menu", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+        MenuRow("All Contacts", Icons.Outlined.Info, onOpenContacts)
+        MenuRow("New Chat", Icons.Outlined.Menu, onOpenCreate)
+        MenuRow("Stars", Icons.Outlined.Star, onOpenStars)
+        MenuRow("Settings", Icons.Outlined.Settings, onOpenSettings)
+        Spacer(Modifier.weight(1f))
+        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Noveo Messenger", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            Text(CLIENT_VERSION, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -1081,7 +1111,7 @@ private fun ModalHost(visible: Boolean, onDismiss: () -> Unit, content: @Composa
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.35f))
+                .background(Color.Black.copy(alpha = 0.5f))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -1215,6 +1245,7 @@ private fun SendIconButton(enabled: Boolean, onClick: () -> Unit) {
 
 private fun resolveProfileUserId(chat: ChatSummary?, selfUserId: String?): String? {
     if (chat == null || selfUserId.isNullOrBlank()) return null
+    if (chat.chatType != "private") return null
     return chat.memberIds.firstOrNull { it != selfUserId }
 }
 
