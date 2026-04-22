@@ -42,14 +42,12 @@ fi
 timestamp="$(date -u +%Y%m%d-%H%M%S)"
 short_sha="${GITHUB_SHA:0:7}"
 file_name="NoveoKotlin-${GITHUB_REF_NAME}-${short_sha}-${timestamp}.apk"
-remote_apk="${RCLONE_REMOTE}:${RCLONE_DIR}/${file_name}"
+remote_dir="${RCLONE_REMOTE}:${RCLONE_DIR}"
+remote_apk="${remote_dir}/${file_name}"
 
+rclone mkdir "$remote_dir"
 rclone copyto "$APK_PATH" "$remote_apk"
-encoded_name="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$file_name")"
-drive_link="https://drive.google.com/drive/folders/${GDRIVE_FOLDER_ID:-}?hl=en"
-if [ -n "${GDRIVE_FOLDER_ID:-}" ]; then
-  drive_link="https://drive.google.com/drive/folders/${GDRIVE_FOLDER_ID}?hl=en&file=${encoded_name}"
-fi
+drive_link="$(rclone link "$remote_apk")"
 run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
 meta_file="$(mktemp)"
