@@ -23,6 +23,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -118,7 +120,16 @@ fun NoveoRoot(
     onSend: (String) -> Unit,
     onLogout: () -> Unit
 ) {
-    var currentTheme by rememberSaveable { mutableStateOf(ThemePreset.SKY_LIGHT) }
+    val context = LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences("noveo_ui", android.content.Context.MODE_PRIVATE) }
+    val initialTheme = remember(prefs) {
+        runCatching { ThemePreset.valueOf(prefs.getString("theme_preset", ThemePreset.SKY_LIGHT.name) ?: ThemePreset.SKY_LIGHT.name) }
+            .getOrElse { ThemePreset.SKY_LIGHT }
+    }
+    var currentTheme by rememberSaveable { mutableStateOf(initialTheme) }
+    LaunchedEffect(currentTheme) {
+        prefs.edit().putString("theme_preset", currentTheme.name).apply()
+    }
     val colorScheme = when (currentTheme) {
         ThemePreset.SKY_LIGHT -> skyLightScheme
         ThemePreset.LIGHT -> lightScheme
