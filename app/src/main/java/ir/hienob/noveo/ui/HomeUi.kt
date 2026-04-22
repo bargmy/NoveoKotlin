@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -37,13 +39,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import ir.hienob.noveo.app.AppUiState
@@ -54,6 +55,8 @@ import ir.hienob.noveo.data.UserSummary
 private enum class SidebarPanel {
     CHATS, CONTACTS, NEW_CHAT, SETTINGS, PROFILE, ACCOUNT
 }
+
+private const val NOVEO_BASE_URL = "https://noveo.ir"
 
 @Composable
 internal fun HomeScreen(
@@ -68,13 +71,23 @@ internal fun HomeScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var panel by rememberSaveable { mutableStateOf(SidebarPanel.CHATS) }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val compact = maxWidth < 720.dp
-        val filteredChats = state.chats.filter {
+    val filteredChats = remember(state.chats, searchQuery) {
+        state.chats.filter {
             if (searchQuery.isBlank()) true
             else it.title.contains(searchQuery, true) || it.lastMessagePreview.contains(searchQuery, true)
         }
-        val sortedUsers = state.usersById.values.sortedBy { it.username.lowercase() }
+    }
+    val sortedUsers = remember(state.usersById) {
+        state.usersById.values.sortedBy { it.username.lowercase() }
+    }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+    ) {
+        val compact = maxWidth < 720.dp
 
         if (compact) {
             if (state.selectedChatId == null) {
@@ -203,7 +216,7 @@ private fun ChatListContent(state: AppUiState, chats: List<ChatSummary>, onOpenC
         }
     } else {
         LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(chats) { chat ->
+            items(chats, key = { it.id }) { chat ->
                 ChatRow(chat = chat, selected = chat.id == state.selectedChatId, onClick = { onOpenChat(chat.id) })
             }
         }
@@ -213,12 +226,14 @@ private fun ChatListContent(state: AppUiState, chats: List<ChatSummary>, onOpenC
 @Composable
 private fun SidebarPeopleList(title: String, users: List<UserSummary>) {
     Column(modifier = Modifier.fillMaxSize()) {
-        Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        if (title.isNotBlank()) {
+            Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        }
         if (users.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No users found.") }
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(users) { user ->
+                items(users, key = { it.id }) { user ->
                     Row(
                         modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.surface).padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -306,7 +321,7 @@ private fun ChatPane(
             Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("No messages here yet.", textAlign = TextAlign.Center) }
         } else {
             LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(state.messages) { message ->
+                items(state.messages, key = { it.id }) { message ->
                     MessageRow(message = message, ownMessage = message.senderId == state.session?.userId)
                 }
             }
@@ -425,10 +440,11 @@ private fun MenuRow(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ProfileCircle(name: String, imageUrl: String?, size: androidx.compose.ui.unit.Dp = 42.dp) {
-    if (!imageUrl.isNullOrBlank()) {
+private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 42.dp) {
+    val resolvedImageUrl = remember(imageUrl) { imageUrl.normalizeNoveoUrl() }
+    if (!resolvedImageUrl.isNullOrBlank()) {
         AsyncImage(
-            model = imageUrl,
+            model = resolvedImageUrl,
             contentDescription = name,
             modifier = Modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
             contentScale = ContentScale.Crop
@@ -468,12 +484,14 @@ private fun SendIconButton(enabled: Boolean, onClick: () -> Unit) {
                 close()
             }
             drawPath(path = path, color = tint)
-            drawLine(
-                color = Color.Transparent,
-                start = Offset.Zero,
-                end = Offset(size.width, size.height),
-                strokeWidth = 0f
-            )
+            drawLine(color = tint, start = Offset(size.width * 0.18f, size.height * 0.5f), end = Offset(size.width * 0.5f, size.height * 0.58f), strokeWidth = 1.8.dp.toPx())
         }
     }
+}
+
+private fun String?.normalizeNoveoUrl(): String? {
+    val value = this?.trim().orEmpty()
+    if (value.isBlank()) return null
+    if (value.startsWith("http://") || value.startsWith("https://")) return value
+    return if (value.startsWith("/")) "$NOVEO_BASE_URL$value" else "$NOVEO_BASE_URL/$value"
 }
