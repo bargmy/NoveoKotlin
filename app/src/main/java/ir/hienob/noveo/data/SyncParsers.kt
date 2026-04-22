@@ -25,7 +25,7 @@ internal fun parseUsers(payload: JSONObject): Pair<Map<String, UserSummary>, Set
         users[userId] = UserSummary(
             id = userId,
             username = item.optString("username").sanitizeServerString().ifBlank { "Unknown" },
-            avatarUrl = item.optString("avatarUrl").sanitizeServerString().takeIf { it.isNotBlank() },
+            avatarUrl = resolveAssetUrl(item, "avatarUrl", "avatar", "photo", "image")?.takeIf { it.isNotBlank() },
             handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
             bio = item.optString("bio").sanitizeServerString(),
             isOnline = onlineIds.contains(userId),
@@ -113,12 +113,19 @@ internal fun parseMessageContent(raw: Any?): MessageContent {
     }
 
     val fileObject = payload.optJSONObject("file")
+        ?: payload.optJSONObject("attachment")
+        ?: payload.optJSONObject("document")
+        ?: payload.optJSONObject("media")
     val file = fileObject?.let {
         MessageFileAttachment(
-            url = it.optString("url").sanitizeServerString(),
-            name = it.optString("name").sanitizeServerString(),
-            type = it.optString("type").sanitizeServerString(),
-            caption = it.optString("caption").sanitizeServerString()
+            url = resolveAssetUrl(it, "url", "src", "path", "downloadUrl", "fileUrl").orEmpty(),
+            name = it.optString("name").sanitizeServerString().ifBlank {
+                it.optString("filename").sanitizeServerString().ifBlank { it.optString("title").sanitizeServerString() }
+            },
+            type = it.optString("type").sanitizeServerString().ifBlank {
+                it.optString("mimeType").sanitizeServerString().ifBlank { it.optString("contentType").sanitizeServerString() }
+            },
+            caption = it.optString("caption").sanitizeServerString().ifBlank { payload.optString("caption").sanitizeServerString() }
         )
     }
     return MessageContent(
@@ -148,8 +155,8 @@ private fun resolveChatTitle(chat: JSONObject, usersById: Map<String, UserSummar
 }
 
 private fun resolveChatAvatar(chat: JSONObject, usersById: Map<String, UserSummary>, memberIds: List<String>, selfUserId: String): String? {
-    val explicit = chat.optString("avatarUrl").sanitizeServerString()
-    if (explicit.isNotBlank()) return explicit
+    val explicit = resolveAssetUrl(chat, "avatarUrl", "avatar", "photo", "image")
+    if (!explicit.isNullOrBlank()) return explicit
     if (chat.optString("chatType").sanitizeServerString() == "private") {
         return memberIds.firstOrNull { it != selfUserId }
             ?.let(usersById::get)
@@ -167,6 +174,26 @@ private fun resolveSenderName(senderId: String, payload: JSONObject, usersById: 
         ?: payload.optString("senderName").sanitizeServerString().takeIf { it.isNotBlank() }
         ?: payload.optString("sender").sanitizeServerString().takeIf { it.isNotBlank() }
         ?: "Unknown"
+}
+
+private fun resolveAssetUrl(source: JSONObject, vararg keys: String): String? {
+    for (key in keys) {
+        val direct = source.optString(key).sanitizeServerString()
+        if (direct.isNotBlank()) return direct
+        val nested = source.optJSONObject(key) ?: continue
+        val candidates = listOf(
+            nested.optString("url").sanitizeServerString(),
+            nested.optString("src").sanitizeServerString(),
+            nested.optString("path").sanitizeServerString(),
+            nested.optString("downloadUrl").sanitizeServerString(),
+            nested.optString("fileUrl").sanitizeServerString(),
+            nested.optString("thumbUrl").sanitizeServerString(),
+            nested.optString("thumbnailUrl").sanitizeServerString()
+        )
+        val resolved = candidates.firstOrNull { it.isNotBlank() }
+        if (!resolved.isNullOrBlank()) return resolved
+    }
+    return null
 }
 
 private fun parseStringList(array: JSONArray?): List<String> {
