@@ -304,9 +304,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching {
                 _uiState.value = _uiState.value.copy(loading = true)
-                withContext(Dispatchers.IO) { api.updateProfile(session, username, bio) }
+                val currentSession = session as Session
+                withContext(Dispatchers.IO) {
+                    api.updateProfile(session = currentSession, username = username, bio = bio)
+                }
                 // Refresh contacts and home data to get updated profile
-                loadHomeData(session)
+                loadHomeData(currentSession)
             }.onFailure {
                 _uiState.value = _uiState.value.copy(loading = false, error = it.message)
             }
