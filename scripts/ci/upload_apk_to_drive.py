@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload, MediaIoBaseUpload
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
@@ -42,6 +43,24 @@ def find_file(service, folder_id: str, name: str):
     ).execute()
     files = response.get("files", [])
     return files[0] if files else None
+
+
+def verify_folder_access(service, folder_id: str):
+    try:
+        info = service.files().get(
+            fileId=folder_id,
+            fields="id,name,mimeType",
+            supportsAllDrives=True,
+        ).execute()
+    except HttpError as exc:
+        status = getattr(exc.resp, "status", None)
+        if status == 404:
+            raise RuntimeError("Drive folder not found or not shared with the CI account. Check GDRIVE_FOLDER_ID and folder sharing.") from exc
+        if status in (401, 403):
+            raise RuntimeError("Drive denied folder access for the CI account. Check sharing and Drive API access.") from exc
+        raise
+    if info.get("mimeType") != "application/vnd.google-apps.folder":
+        raise RuntimeError("GDRIVE_FOLDER_ID is not a folder.")
 
 
 def download_text(service, file_id: str) -> str:
@@ -101,6 +120,7 @@ def main():
     repository = os.environ["GITHUB_REPOSITORY"]
 
     service = drive_service()
+    verify_folder_access(service, folder_id)
     apk_hash = sha256_file(apk_path)
     meta = {}
 
@@ -123,12 +143,20 @@ def main():
     file_name = f"NoveoKotlin-{branch}-{short_sha}-{timestamp}.apk"
 
     media = MediaFileUpload(apk_path, mimetype="application/vnd.android.package-archive", resumable=False)
-    created = service.files().create(
-        body={"name": file_name, "parents": [folder_id]},
-        media_body=media,
-        fields="id,name,webViewLink",
-        supportsAllDrives=True,
-    ).execute()
+    try:
+        created = service.files().create(
+            body={"name": file_name, "parents": [folder_id]},
+            media_body=media,
+            fields="id,name,webViewLink",
+            supportsAllDrives=True,
+        ).execute()
+    except HttpError as exc:
+        status = getattr(exc.resp, "status", None)
+        if status == 404:
+            raise RuntimeError("Drive upload target not found. Check GDRIVE_FOLDER_ID and folder sharing.") from exc
+        if status in (401, 403):
+            raise RuntimeError("Drive rejected upload permission for the CI account.") from exc
+        raise
 
     ensure_public_reader(service, created["id"])
     file_info = service.files().get(
