@@ -39,6 +39,7 @@ fun NoveoRoot(
     onAuthMode: (Boolean) -> Unit,
     onAuthSubmit: (String, String) -> Unit,
     onOpenChat: (String) -> Unit,
+    onStartDirectChat: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onLogout: () -> Unit
@@ -48,7 +49,7 @@ fun NoveoRoot(
             StartupState.Splash -> SplashScreen()
             StartupState.Onboarding -> OnboardingScreen(onDismissOnboarding)
             StartupState.Auth -> AuthScreen(state, onAuthMode, onAuthSubmit)
-            StartupState.Home -> HomeScreen(state, onOpenChat, onBackToChats, onSend, onLogout)
+            StartupState.Home -> HomeScreen(state, onOpenChat, onStartDirectChat, onBackToChats, onSend, onLogout)
         }
     }
 }
