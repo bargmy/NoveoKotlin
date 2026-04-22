@@ -42,8 +42,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Call
@@ -111,7 +113,7 @@ private const val NOVEO_BASE_URL = "https://noveo.ir"
 private const val CLIENT_VERSION = "v0.1 mobile"
 
 private enum class SettingsSection {
-    MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG
+    MENU, THEMES, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG
 }
 
 private data class ThemeSection(
@@ -130,6 +132,7 @@ internal fun HomeScreen(
     state: AppUiState,
     onOpenChat: (String) -> Unit,
     onStartDirectChat: (String) -> Unit,
+    onSearchPublic: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onLogout: () -> Unit,
@@ -203,7 +206,10 @@ internal fun HomeScreen(
                             showSearch = !showSearch
                             if (!showSearch) searchQuery = ""
                         },
-                        onSearchQueryChange = { searchQuery = it },
+                        onSearchQueryChange = {
+                            searchQuery = it
+                            onSearchPublic(it)
+                        },
                         onOpenChat = onOpenChat,
                         onOpenContacts = { showContactsModal = true },
                         onOpenCreate = { showCreateModal = true },
@@ -243,7 +249,10 @@ internal fun HomeScreen(
                         showSearch = !showSearch
                         if (!showSearch) searchQuery = ""
                     },
-                    onSearchQueryChange = { searchQuery = it },
+                    onSearchQueryChange = {
+                        searchQuery = it
+                        onSearchPublic(it)
+                    },
                     onOpenChat = onOpenChat,
                     onOpenContacts = { showContactsModal = true },
                     onOpenCreate = { showCreateModal = true },
@@ -962,6 +971,7 @@ private fun SettingsModal(
             ModalHeader(
                 title = when (section) {
                     SettingsSection.MENU -> "Settings"
+                    SettingsSection.THEMES -> "Themes"
                     SettingsSection.SUBSCRIPTION -> "Subscription"
                     SettingsSection.PROFILE -> "Profile"
                     SettingsSection.ACCOUNT -> "Account"
@@ -974,10 +984,11 @@ private fun SettingsModal(
             Crossfade(targetState = section, label = "settings_section") { current ->
                 when (current) {
                     SettingsSection.MENU -> SettingsMenu(onSectionChange)
+                    SettingsSection.THEMES -> SettingsThemesSection(currentTheme, onThemeChange)
                     SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection()
                     SettingsSection.PROFILE -> SettingsProfileSection(me)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(state, onLogout)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(currentTheme, onThemeChange)
+                    SettingsSection.PREFERENCES -> SettingsPreferencesSection()
                     SettingsSection.CHANGELOG -> SettingsChangelogSection()
                 }
             }
@@ -988,6 +999,7 @@ private fun SettingsModal(
 @Composable
 private fun SettingsMenu(onSectionChange: (SettingsSection) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SettingsRow("Themes", Icons.Outlined.Star) { onSectionChange(SettingsSection.THEMES) }
         SettingsRow("Subscription", Icons.Outlined.Star) { onSectionChange(SettingsSection.SUBSCRIPTION) }
         SettingsRow("Profile", Icons.Outlined.Info) { onSectionChange(SettingsSection.PROFILE) }
         SettingsRow("Account", Icons.Outlined.Menu) { onSectionChange(SettingsSection.ACCOUNT) }
@@ -998,7 +1010,10 @@ private fun SettingsMenu(onSectionChange: (SettingsSection) -> Unit) {
 
 @Composable
 private fun SettingsSubscriptionSection() {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         DetailCard(title = "Premium", body = "Web already includes premium, stars, wallet, gifts, profile skins, and premium themes. Android needs those full flows, not placeholders.")
         DetailCard(title = "Stars", body = "Stars belongs in the same settings/wallet orbit as web. This surface is reachable now, but wallet parity is still incomplete.")
     }
@@ -1006,7 +1021,10 @@ private fun SettingsSubscriptionSection() {
 
 @Composable
 private fun SettingsProfileSection(me: UserSummary?) {
-    Column(modifier = Modifier.fillMaxSize().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         ProfileCircle(name = me?.username ?: "Me", imageUrl = me?.avatarUrl, size = 90.dp)
         Spacer(Modifier.height(12.dp))
         Text(me?.username ?: "Me", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -1021,7 +1039,10 @@ private fun SettingsProfileSection(me: UserSummary?) {
 
 @Composable
 private fun SettingsAccountSection(state: AppUiState, onLogout: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         DetailRow("User ID", state.session?.userId ?: "Unknown")
         DetailRow("Session ID", state.session?.sessionId?.ifBlank { "Connected" } ?: "Unavailable")
         DetailRow("Expiry", formatExpiry(state.session))
@@ -1031,11 +1052,43 @@ private fun SettingsAccountSection(state: AppUiState, onLogout: () -> Unit) {
 }
 
 @Composable
-private fun SettingsPreferencesSection(currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+private fun SettingsPreferencesSection() {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         DetailCard(title = "Privacy", body = "Block group invites and related privacy controls belong here like web.")
         DetailCard(title = "Language", body = "English, فارسی, Русский, 中文")
         DetailCard(title = "Emoji Style", body = "Default or iOS")
+        DetailCard(title = "Theme", body = "Open Settings → Themes for the full theme catalog and presets.")
+    }
+}
+
+@Composable
+private fun SettingsThemesSection(currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
+    val themeSections = listOf(
+        ThemeSection(
+            title = "System",
+            subtitle = "Use Light or Dark manually until automatic system-follow mode is added.",
+            presets = emptyList()
+        ),
+        ThemeSection(
+            title = "Light",
+            subtitle = "Bright themes for daytime usage.",
+            presets = listOf(ThemePreset.LIGHT, ThemePreset.SKY_LIGHT)
+        ),
+        ThemeSection(
+            title = "Dark",
+            subtitle = "Low-light themes for nighttime usage.",
+            presets = listOf(ThemePreset.DARK, ThemePreset.OCEAN_DARK)
+        )
+    )
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        themeSections.forEach { section ->
+            ThemeSectionBlock(section = section, currentTheme = currentTheme, onThemeChange = onThemeChange)
         DetailCard(title = "Theme", body = "Themes are now grouped into sections (light, dark, and accent variants) for easier switching.")
 
         val themeSections = listOf(

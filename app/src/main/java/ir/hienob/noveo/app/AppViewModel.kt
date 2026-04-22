@@ -198,6 +198,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun searchPublicDirectory(query: String) {
+        val session = _uiState.value.session ?: return
+        val normalized = query.trim()
+        if (normalized.length < 2) return
+        viewModelScope.launch {
+            runCatching {
+                val foundUsers = withContext(Dispatchers.IO) { api.searchPublicUsers(session, normalized) }
+                if (foundUsers.isNotEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        usersById = _uiState.value.usersById + foundUsers.associateBy { it.id },
+                        error = null
+                    )
+                }
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(error = null)
+            }
+        }
+    }
+
     private suspend fun loadHome(session: Session, preserveShell: Boolean) {
         _uiState.value = _uiState.value.copy(
             startupState = StartupState.Home,
