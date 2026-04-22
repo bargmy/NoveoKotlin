@@ -27,11 +27,13 @@ def drive_service():
 
 
 def find_file(service, folder_id: str, name: str):
+    escaped_name = name.replace("'", "\\'")
+    query = (
+        f"name = '{escaped_name}' and "
+        f"'{folder_id}' in parents and trashed = false"
+    )
     response = service.files().list(
-        q=(
-            f"name = '{name.replace("'", "\\'")}' and "
-            f"'{folder_id}' in parents and trashed = false"
-        ),
+        q=query,
         spaces="drive",
         fields="files(id,name,webViewLink)",
         includeItemsFromAllDrives=True,
