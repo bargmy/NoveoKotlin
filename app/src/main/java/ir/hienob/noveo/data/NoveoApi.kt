@@ -5,8 +5,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -132,7 +134,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
-            .post(okhttp3.RequestBody.create(okhttp3.MediaType.get("application/json"), body))
+            .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("Profile update failed (${response.code})")

@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSocket
 import ir.hienob.noveo.data.ChatSummary
+import ir.hienob.noveo.data.MessageContent
 import ir.hienob.noveo.data.NoveoApi
 import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.SessionStore
