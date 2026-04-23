@@ -110,8 +110,12 @@ internal fun parseMessagesForChat(payload: JSONObject, usersById: Map<String, Us
 }
 
 internal fun parseRealtimeMessage(payload: JSONObject, usersById: Map<String, UserSummary>): ChatMessage {
-    val chatId = payload.optString("chatId").sanitizeServerString()
-    return parseChatMessage(payload, chatId, usersById)
+    val message = payload.unwrapRealtimePayload()
+    val chatId = message.optString("chatId").sanitizeServerString()
+        .ifBlank { message.optString("chat_id").sanitizeServerString() }
+        .ifBlank { payload.optString("chatId").sanitizeServerString() }
+        .ifBlank { payload.optString("chat_id").sanitizeServerString() }
+    return parseChatMessage(message, chatId, usersById)
 }
 
 private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map<String, UserSummary>): ChatMessage {
@@ -123,7 +127,9 @@ private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map
 
     return ChatMessage(
         id = messageId,
-        chatId = message.optString("chatId").sanitizeServerString().ifBlank { chatId },
+        chatId = message.optString("chatId").sanitizeServerString()
+            .ifBlank { message.optString("chat_id").sanitizeServerString() }
+            .ifBlank { chatId },
         senderId = senderId,
         senderName = resolveSenderName(senderId, message, usersById),
         content = parseMessageContent(message.opt("content")),
@@ -131,7 +137,7 @@ private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map
         seenBy = seenBy,
         pending = message.optBoolean("pending", false),
         clientTempId = message.optString("clientTempId").takeIf { it.isNotBlank() },
-        replyToId = message.optString("replyToId").takeIf { it.isNotBlank() },
+        replyToId = message.optString("replyToId").sanitizeServerString().takeIf { it.isNotBlank() },
         editedAt = message.optLong("editedAt").takeIf { it > 0 }
     )
 }
@@ -242,6 +248,13 @@ private fun parseStringList(array: JSONArray?): List<String> {
             array.optString(index).sanitizeServerString().takeIf { it.isNotBlank() }?.let(::add)
         }
     }
+}
+
+internal fun JSONObject.unwrapRealtimePayload(): JSONObject {
+    return optJSONObject("message")
+        ?: optJSONObject("payload")
+        ?: optJSONObject("data")
+        ?: this
 }
 
 private fun String?.sanitizeServerString(): String {
