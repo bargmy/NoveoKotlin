@@ -7,6 +7,14 @@ data class Session(
     val expiresAt: Long = 0L
 )
 
+data class ProfileSkin(
+    val mode: String = "",
+    val primaryColor: String = "",
+    val secondaryColor: String = "",
+    val tertiaryColor: String = "",
+    val gradientStops: Int = 2
+)
+
 data class UserSummary(
     val id: String,
     val username: String,
@@ -14,7 +22,9 @@ data class UserSummary(
     val handle: String? = null,
     val bio: String = "",
     val isOnline: Boolean = false,
-    val isVerified: Boolean = false
+    val isVerified: Boolean = false,
+    val profileSkin: ProfileSkin? = null,
+    val starsBalance: Double = 0.0
 )
 
 data class MessageFileAttachment(

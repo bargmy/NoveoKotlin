@@ -29,10 +29,23 @@ internal fun parseUsers(payload: JSONObject): Pair<Map<String, UserSummary>, Set
             handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
             bio = item.optString("bio").sanitizeServerString(),
             isOnline = onlineIds.contains(userId),
-            isVerified = item.optBoolean("isVerified", false)
+            isVerified = item.optBoolean("isVerified", false),
+            profileSkin = parseProfileSkin(item.optJSONObject("profileSkin")),
+            starsBalance = item.optDouble("starsBalance", 0.0)
         )
     }
     return users to onlineIds
+}
+
+private fun parseProfileSkin(json: JSONObject?): ProfileSkin? {
+    if (json == null) return null
+    return ProfileSkin(
+        mode = json.optString("mode").sanitizeServerString(),
+        primaryColor = json.optString("primaryColor").sanitizeServerString(),
+        secondaryColor = json.optString("secondaryColor").sanitizeServerString(),
+        tertiaryColor = json.optString("tertiaryColor").sanitizeServerString(),
+        gradientStops = json.optInt("gradientStops", 2)
+    )
 }
 
 internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>, selfUserId: String): List<ChatSummary> {

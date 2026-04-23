@@ -312,6 +312,7 @@ internal fun HomeScreen(
             exit = slideOutHorizontally(targetOffsetX = { -it / 2 }) + fadeOut(animationSpec = tween(180))
         ) {
             MenuSheet(
+                state = state,
                 onOpenContacts = {
                     showMenu = false
                     showContactsModal = true
@@ -1231,11 +1232,13 @@ private fun GroupInfoModal(chat: ChatSummary, usersById: Map<String, UserSummary
 
 @Composable
 private fun MenuSheet(
+    state: AppUiState,
     onOpenContacts: () -> Unit,
     onOpenCreate: () -> Unit,
     onOpenStars: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
+    val me = state.session?.userId?.let { state.usersById[it] }
     Column(
         modifier = Modifier
             .width(296.dp)
@@ -1247,7 +1250,21 @@ private fun MenuSheet(
         Spacer(Modifier.height(16.dp))
         MenuRow("All Contacts", Icons.Outlined.Info, onOpenContacts)
         MenuRow("New Chat", Icons.Outlined.Menu, onOpenCreate)
-        MenuRow("Stars", Icons.Outlined.Star, onOpenStars)
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenStars),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Star, contentDescription = null, tint = Color(0xFFFFD700))
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("Stars", fontWeight = FontWeight.SemiBold)
+                    Text("${me?.starsBalance ?: 0.0} Stars", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
         MenuRow("Settings", Icons.Outlined.Settings, onOpenSettings)
         Spacer(Modifier.weight(1f))
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
