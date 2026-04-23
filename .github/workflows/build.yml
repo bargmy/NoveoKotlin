@@ -140,51 +140,6 @@ jobs:
           urllib.request.urlopen(req).read()
           PY
 
-      - name: Notify Bale on build failure
-        if: steps.build_apk.outcome == 'failure'
-        shell: bash
-        env:
-          BALE_BOT_TOKEN: ${{ secrets.BALE_TOKEN }}
-          BALE_CHAT_ID: "5730731066"
-          REPO: ${{ github.repository }}
-          REF_NAME: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          if [ -z "${BALE_BOT_TOKEN}" ] || [ -z "${BALE_CHAT_ID}" ]; then
-            echo "Bale failure notification is not configured, skipping."
-            exit 0
-          fi
-
-          python3 - <<'PY'
-          import json
-          import os
-          import pathlib
-          import urllib.request
-
-          token = os.environ["BALE_BOT_TOKEN"]
-          chat_id = os.environ["BALE_CHAT_ID"]
-          repo = os.environ["REPO"]
-          ref_name = os.environ["REF_NAME"]
-          sha = os.environ["SHA"][:7]
-          run_url = f"https://github.com/{repo}/actions/runs/{os.environ['RUN_ID']}"
-          log_text = ""
-          log_file = pathlib.Path("build.log")
-          if log_file.exists():
-              lines = log_file.read_text(errors="ignore").strip().splitlines()
-              log_text = "\n".join(lines[-35:])[-3200:]
-          message = f"❌ Android release build failed\nrepo: {repo}\nbranch: {ref_name}\ncommit: {sha}\nrun: {run_url}"
-          if log_text:
-              message += f"\n\nLast log lines:\n{log_text}"
-          req = urllib.request.Request(
-              f"https://tapi.bale.ai/bot{token}/sendMessage",
-              data=json.dumps({"chat_id": chat_id, "text": message}).encode("utf-8"),
-              headers={"Content-Type": "application/json"},
-              method="POST",
-          )
-          urllib.request.urlopen(req).read()
-          PY
-
       - name: Fail workflow after failure notifications
         if: steps.build_apk.outcome == 'failure'
         run: exit 1
@@ -351,11 +306,11 @@ jobs:
             -F "document=@${APK_PATH};filename=${APK_NAME}" \
             -F "caption=${CAPTION}"
 
-      - name: Send APK to Bale
+      - name: Send APK to Bale through proxy
         shell: bash
         env:
           BALE_BOT_TOKEN: ${{ secrets.BALE_TOKEN }}
-          BALE_CHAT_ID: "5730731066"
+          PROXY_IP: ${{ secrets.PROXY_IP }}
           APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
           APK_NAME: ${{ steps.find_apk.outputs.apk_name }}
           REPO: ${{ github.repository }}
@@ -365,8 +320,11 @@ jobs:
           DRIVE_LINK: ${{ steps.drive_upload.outputs.drive_link }}
           APK_HASH: ${{ steps.drive_upload.outputs.sha256 }}
         run: |
-          if [ -z "${BALE_BOT_TOKEN}" ] || [ -z "${BALE_CHAT_ID}" ]; then
-            echo "Bale delivery is not configured, skipping."
+          BALE_BOT_TOKEN_CLEAN="$(printf '%s' "${BALE_BOT_TOKEN}" | tr -d '\r\n[:space:]')"
+          PROXY_IP_CLEAN="$(printf '%s' "${PROXY_IP}" | tr -d '\r\n[:space:]')"
+
+          if [ -z "${BALE_BOT_TOKEN_CLEAN}" ] || [ -z "${PROXY_IP_CLEAN}" ]; then
+            echo "Proxy delivery is not configured, skipping."
             exit 0
           fi
 
@@ -380,11 +338,21 @@ jobs:
           EOF
           )
 
-          curl --fail --silent --show-error \
-            -X POST "https://tapi.bale.ai/bot${BALE_BOT_TOKEN}/sendDocument" \
-            -F "chat_id=${BALE_CHAT_ID}" \
-            -F "document=@${APK_PATH};filename=${APK_NAME}" \
-            -F "caption=${CAPTION}"
+          RESPONSE="$(
+            curl --silent --show-error \
+              -X POST "http://${PROXY_IP_CLEAN}:8787/upload-apk" \
+              -H "X-Bot-Token: ${BALE_BOT_TOKEN_CLEAN}" \
+              -F "document=@${APK_PATH};filename=${APK_NAME}" \
+              -F "caption=${CAPTION}"
+          )"
+
+          echo "Proxy response:"
+          echo "${RESPONSE}"
+
+          if ! echo "${RESPONSE}" | grep -q '"ok":true'; then
+            echo "Proxy upload failed." >&2
+            exit 1
+          fi
 
       - name: Clean up rclone config
         if: always()
