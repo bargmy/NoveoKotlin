@@ -47,7 +47,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Info
@@ -109,7 +109,7 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
+private const val NOVEO_BASE_URL = "https://noveo.ir"
 private const val CLIENT_VERSION = "v0.1 mobile"
 
 private enum class SettingsSection {
@@ -655,7 +655,7 @@ private fun ChatPane(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (compact) {
-                HeaderIconButton(icon = Icons.Outlined.ArrowBack, onClick = onBackToChats)
+                HeaderIconButton(icon = Icons.AutoMirrored.Outlined.ArrowBack, onClick = onBackToChats)
                 Spacer(Modifier.width(8.dp))
             }
             Row(
@@ -1393,7 +1393,7 @@ private fun ModalHeader(title: String, onClose: () -> Unit, onBack: (() -> Unit)
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (onBack != null) {
-            HeaderIconButton(icon = Icons.Outlined.ArrowBack, onClick = onBack)
+            HeaderIconButton(icon = Icons.AutoMirrored.Outlined.ArrowBack, onClick = onBack)
             Spacer(Modifier.width(8.dp))
         }
         Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
