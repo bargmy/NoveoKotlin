@@ -302,9 +302,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 refreshHomeSilently()
                             }
                             is SocketEvent.HistoryUpdate -> {
+                                event.messagesByChat.forEach { (chatId, incomingMessages) ->
+                                    val mergedMessages = mergeMessages(
+                                        messageCacheByChat[chatId].orEmpty(),
+                                        incomingMessages
+                                    )
+                                    messageCacheByChat[chatId] = mergedMessages
+                                }
+                                val selectedChatMessages = _uiState.value.selectedChatId
+                                    ?.let { messageCacheByChat[it].orEmpty() }
+                                    ?: _uiState.value.messages
+                                appendDebugLog(
+                                    "historyUpdate: chats=${event.chats.size} cachedChats=${event.messagesByChat.size} selectedMessages=${selectedChatMessages.size}"
+                                )
                                 _uiState.value = _uiState.value.copy(
                                     chats = event.chats,
                                     usersById = _uiState.value.usersById + event.users,
+                                    messages = selectedChatMessages,
                                     connectionDetail = null
                                 )
                             }
