@@ -1,10 +1,14 @@
-name: Android Build
+name: Android Build And Deliver
 
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -25,12 +29,16 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
-      - name: Set up Gradle
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.7
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
 
       - name: Build release APK
         id: build_apk
@@ -38,37 +46,41 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          gradle assembleRelease 2>&1 | tee build.log
+          ./gradlew assembleRelease 2>&1 | tee build.log
 
       - name: Sign APK
         if: steps.build_apk.outcome == 'success'
+        shell: bash
         env:
           SIGN_KEYSTORE_BASE64: ${{ secrets.SIGN_KEYSTORE_BASE64 }}
           SIGN_KEYSTORE_PASSWORD: ${{ secrets.SIGN_KEYSTORE_PASSWORD }}
           SIGN_KEY_ALIAS: ${{ secrets.SIGN_KEY_ALIAS }}
           SIGN_KEY_PASSWORD: ${{ secrets.SIGN_KEY_PASSWORD }}
         run: |
-          if [ -z "$SIGN_KEYSTORE_BASE64" ]; then
+          if [ -z "${SIGN_KEYSTORE_BASE64}" ]; then
             echo "SIGN_KEYSTORE_BASE64 is empty, skipping signing."
             exit 0
           fi
+
           echo "$SIGN_KEYSTORE_BASE64" | base64 -d > release.keystore
-          
-          # Find build tools
-          BUILD_TOOLS_DIR=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -n 1)
-          APKSIGNER=$BUILD_TOOLS_DIR/apksigner
-          ZIPALIGN=$BUILD_TOOLS_DIR/zipalign
-          
-          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          
-          $ZIPALIGN -f -v 4 "$APK_PATH" aligned.apk
-          $APKSIGNER sign --ks release.keystore \
+          BUILD_TOOLS_DIR="$(ls -d "${ANDROID_SDK_ROOT}"/build-tools/* | sort -V | tail -n 1)"
+          APKSIGNER="${BUILD_TOOLS_DIR}/apksigner"
+          ZIPALIGN="${BUILD_TOOLS_DIR}/zipalign"
+          APK_PATH="$(find "$APK_FOLDER" -type f -name '*.apk' | head -n 1)"
+
+          if [ -z "$APK_PATH" ]; then
+            echo "No APK found to sign." >&2
+            exit 1
+          fi
+
+          "$ZIPALIGN" -f -v 4 "$APK_PATH" aligned.apk
+          "$APKSIGNER" sign \
+            --ks release.keystore \
             --ks-pass pass:"$SIGN_KEYSTORE_PASSWORD" \
             --ks-key-alias "$SIGN_KEY_ALIAS" \
             --key-pass pass:"$SIGN_KEY_PASSWORD" \
             --out signed.apk aligned.apk
-            
-          # Overwrite original APK so subsequent steps use the signed one
+
           mv signed.apk "$APK_PATH"
 
       - name: Upload build log artifact on failure
@@ -79,12 +91,12 @@ jobs:
           path: build.log
           if-no-files-found: ignore
 
-      - name: Send build failure to Telegram
-        if: steps.build_apk.outcome == 'failure'
+      - name: Notify Telegram on build failure
+        if: steps.build_apk.outcome == 'failure' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
         shell: bash
         env:
-          TOKEN: ${{ secrets.TOKEN }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           REPO: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
@@ -96,27 +108,66 @@ jobs:
           import urllib.parse
           import urllib.request
 
-          token = os.environ['TOKEN']
-          chat_id = os.environ['CHANNEL_ID']
-          repo = os.environ['REPO']
-          ref_name = os.environ['REF_NAME']
-          sha = os.environ['SHA'][:7]
-          run_id = os.environ['RUN_ID']
-          run_url = f"https://github.com/{repo}/actions/runs/{run_id}"
-          log_text = ''
-          log_file = pathlib.Path('build.log')
+          token = os.environ["TELEGRAM_BOT_TOKEN"]
+          chat_id = os.environ["TELEGRAM_CHAT_ID"]
+          repo = os.environ["REPO"]
+          ref_name = os.environ["REF_NAME"]
+          sha = os.environ["SHA"][:7]
+          run_url = f"https://github.com/{repo}/actions/runs/{os.environ['RUN_ID']}"
+          log_text = ""
+          log_file = pathlib.Path("build.log")
           if log_file.exists():
-              lines = log_file.read_text(errors='ignore').strip().splitlines()
-              log_text = '\n'.join(lines[-35:])[-3200:]
-          message = f"❌ NoveoKotlin release build failed\nrepo: {repo}\nbranch: {ref_name}\ncommit: {sha}\nrun: {run_url}"
+              lines = log_file.read_text(errors="ignore").strip().splitlines()
+              log_text = "\n".join(lines[-35:])[-3200:]
+          message = f"❌ Android release build failed\nrepo: {repo}\nbranch: {ref_name}\ncommit: {sha}\nrun: {run_url}"
           if log_text:
               message += f"\n\nLast log lines:\n{log_text}"
-          data = urllib.parse.urlencode({'chat_id': chat_id, 'text': message}).encode()
+          data = urllib.parse.urlencode({"chat_id": chat_id, "text": message}).encode()
           req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
           urllib.request.urlopen(req).read()
           PY
 
-      - name: Fail workflow after Telegram failure notice
+      - name: Notify Bale on build failure
+        if: steps.build_apk.outcome == 'failure' && secrets.BALE_BOT_TOKEN != '' && secrets.BALE_CHAT_ID != ''
+        shell: bash
+        env:
+          BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
+          BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import urllib.request
+
+          token = os.environ["BALE_BOT_TOKEN"]
+          chat_id = os.environ["BALE_CHAT_ID"]
+          repo = os.environ["REPO"]
+          ref_name = os.environ["REF_NAME"]
+          sha = os.environ["SHA"][:7]
+          run_url = f"https://github.com/{repo}/actions/runs/{os.environ['RUN_ID']}"
+          log_text = ""
+          log_file = pathlib.Path("build.log")
+          if log_file.exists():
+              lines = log_file.read_text(errors="ignore").strip().splitlines()
+              log_text = "\n".join(lines[-35:])[-3200:]
+          message = f"❌ Android release build failed\nrepo: {repo}\nbranch: {ref_name}\ncommit: {sha}\nrun: {run_url}"
+          if log_text:
+              message += f"\n\nLast log lines:\n{log_text}"
+          req = urllib.request.Request(
+              f"https://tapi.bale.ai/bot{token}/sendMessage",
+              data=json.dumps({"chat_id": chat_id, "text": message}).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          urllib.request.urlopen(req).read()
+          PY
+
+      - name: Fail workflow after failure notifications
         if: steps.build_apk.outcome == 'failure'
         run: exit 1
 
@@ -124,7 +175,7 @@ jobs:
         id: find_apk
         shell: bash
         run: |
-          APK_PATH=$(find "$APK_FOLDER" -type f -name "*.apk" | head -n 1)
+          APK_PATH="$(find "$APK_FOLDER" -type f -name '*.apk' | head -n 1)"
           if [ -z "$APK_PATH" ]; then
             echo "No APK found in $APK_FOLDER" >&2
             exit 1
@@ -135,26 +186,27 @@ jobs:
       - name: Upload APK artifact to GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: noveo-release-apk
+          name: release-apk
           path: ${{ steps.find_apk.outputs.apk_path }}
           if-no-files-found: error
 
       - name: Install rclone
+        if: secrets.RCLONE_CONFIG != ''
         run: curl -fsSL https://rclone.org/install.sh | sudo bash
 
       - name: Write rclone config from secret
+        if: secrets.RCLONE_CONFIG != ''
         shell: bash
         run: |
           mkdir -p ~/.config/rclone
           cat > ~/.config/rclone/rclone.conf <<'EOF'
-          ${{ secrets.RCLONE }}
+          ${{ secrets.RCLONE_CONFIG }}
           EOF
 
-      - name: Make rclone upload helper executable
-        run: chmod +x scripts/ci/upload_apk_with_rclone.sh
-
-      - name: Upload unique APK to Google Drive via rclone
+      - name: Upload APK to Google Drive via rclone
         id: drive_upload
+        if: secrets.RCLONE_CONFIG != ''
+        shell: bash
         env:
           APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
           APK_NAME: ${{ steps.find_apk.outputs.apk_name }}
@@ -165,115 +217,130 @@ jobs:
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: scripts/ci/upload_apk_with_rclone.sh
+        run: |
+          set -euo pipefail
 
-      - name: Notify Telegram on fresh APK upload
-        if: steps.drive_upload.outputs.uploaded == 'true'
+          sha256_value="$(sha256sum "$APK_PATH" | awk '{print $1}')"
+          meta_remote="${RCLONE_REMOTE}:${RCLONE_DIR}/${DRIVE_META_NAME}"
+          existing_meta=""
+          if rclone lsjson "$meta_remote" >/dev/null 2>&1; then
+            existing_meta="$(rclone cat "$meta_remote" 2>/dev/null || true)"
+          fi
+
+          existing_hash=""
+          existing_link=""
+          if [ -n "$existing_meta" ]; then
+            existing_hash="$(printf '%s' "$existing_meta" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get(\"sha256\", \"\"))' 2>/dev/null || true)"
+            existing_link="$(printf '%s' "$existing_meta" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get(\"drive_link\", \"\"))' 2>/dev/null || true)"
+          fi
+
+          if [ "$existing_hash" = "$sha256_value" ] && [ -n "$existing_link" ]; then
+            {
+              echo "uploaded=false"
+              echo "sha256=$sha256_value"
+              echo "drive_link=$existing_link"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          timestamp="$(date -u +%Y%m%d-%H%M%S)"
+          short_sha="${GITHUB_SHA:0:7}"
+          file_name="release-${GITHUB_REF_NAME}-${short_sha}-${timestamp}.apk"
+          remote_dir="${RCLONE_REMOTE}:${RCLONE_DIR}"
+          remote_apk="${remote_dir}/${file_name}"
+          drive_run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          rclone mkdir "$remote_dir"
+          rclone copyto "$APK_PATH" "$remote_apk"
+          drive_link="$(rclone link "$remote_apk")"
+
+          meta_file="$(mktemp)"
+          cat > "$meta_file" <<EOF
+          {
+            "sha256": "$sha256_value",
+            "file_name": "$file_name",
+            "drive_link": "$drive_link",
+            "commit_sha": "$GITHUB_SHA",
+            "branch": "$GITHUB_REF_NAME",
+            "run_url": "$drive_run_url",
+            "uploaded_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+          rclone copyto "$meta_file" "$meta_remote"
+          rm -f "$meta_file"
+
+          {
+            echo "uploaded=true"
+            echo "sha256=$sha256_value"
+            echo "drive_link=$drive_link"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send APK to Telegram
+        if: secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
         shell: bash
         env:
-          TOKEN: ${{ secrets.TOKEN }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
+          APK_NAME: ${{ steps.find_apk.outputs.apk_name }}
           REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
           DRIVE_LINK: ${{ steps.drive_upload.outputs.drive_link }}
           APK_HASH: ${{ steps.drive_upload.outputs.sha256 }}
-          RUN_ID: ${{ github.run_id }}
         run: |
-          python3 - <<'PY'
-          import os
-          import urllib.parse
-          import urllib.request
-
-          token = os.environ['TOKEN']
-          chat_id = os.environ['CHANNEL_ID']
-          repo = os.environ['REPO']
-          sha = os.environ['SHA'][:7]
-          drive_link = os.environ['DRIVE_LINK']
-          apk_hash = os.environ['APK_HASH']
-          run_id = os.environ['RUN_ID']
-          run_url = f"https://github.com/{repo}/actions/runs/{run_id}"
-          message = (
-              "✅ نسخه جدید نوعو کوطلین با موفقیت بیلد شد!\n"
-              f"commit: {sha}\n"
-              f"sha256: {apk_hash}\n"
-              f"drive: {drive_link}\n"
-              f"run: {run_url}"
+          SHORT_SHA="${SHA:0:7}"
+          RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
+          CAPTION=$(cat <<EOF
+          ✅ New Android APK build
+          repo: ${REPO}
+          branch: ${REF_NAME}
+          commit: ${SHORT_SHA}
+          sha256: ${APK_HASH:-unknown}
+          ${DRIVE_LINK:+drive: ${DRIVE_LINK}}
+          run: ${RUN_URL}
+          EOF
           )
-          data = urllib.parse.urlencode({'chat_id': chat_id, 'text': message}).encode()
-          req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
-          urllib.request.urlopen(req).read()
-          PY
 
-      - name: Notify Bale on fresh APK upload
-        if: steps.drive_upload.outputs.uploaded == 'true'
+          curl --fail --silent --show-error \
+            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            -F "chat_id=${TELEGRAM_CHAT_ID}" \
+            -F "document=@${APK_PATH};filename=${APK_NAME}" \
+            -F "caption=${CAPTION}"
+
+      - name: Send APK to Bale
+        if: secrets.BALE_BOT_TOKEN != '' && secrets.BALE_CHAT_ID != ''
         shell: bash
         env:
-          BALE_TOKEN: ${{ secrets.BALE_TOKEN }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
-          APK_HASH: ${{ steps.drive_upload.outputs.sha256 }}
+          BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
+          BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID }}
           APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
+          APK_NAME: ${{ steps.find_apk.outputs.apk_name }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
           RUN_ID: ${{ github.run_id }}
+          DRIVE_LINK: ${{ steps.drive_upload.outputs.drive_link }}
+          APK_HASH: ${{ steps.drive_upload.outputs.sha256 }}
         run: |
-          python3 - <<'PY'
-          import os
-          import urllib.parse
-          import urllib.request
-          import mimetypes
-
-          token = os.environ.get('BALE_TOKEN')
-          if not token:
-              print("BALE_TOKEN missing")
-              exit(0)
-          
-          # Use @noveo as per user's correction
-          chat_id = "@noveo"
-          
-          sha = os.environ['SHA'][:7]
-          apk_hash = os.environ['APK_HASH']
-          apk_path = os.environ['APK_PATH']
-          run_id = os.environ['RUN_ID']
-          repo = os.environ['REPO']
-          run_url = f"https://github.com/{repo}/actions/runs/{run_id}"
-
-          message = (
-              "✅ نسخه جدید نوعو کوطلین با موفقیت بیلد شد!\n"
-              f"commit: {sha}\n"
-              f"sha256: {apk_hash}\n"
-              f"run: {run_url}"
+          SHORT_SHA="${SHA:0:7}"
+          RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
+          CAPTION=$(cat <<EOF
+          ✅ New Android APK build
+          commit: ${SHORT_SHA}
+          sha256: ${APK_HASH:-unknown}
+          run: ${RUN_URL}
+          EOF
           )
-          
-          url = f"https://tapi.bale.ai/bot{token}/sendDocument"
-          
-          def send_file(url, chat_id, file_path, caption):
-              boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW'
-              filename = os.path.basename(file_path)
-              mime_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
-              
-              with open(file_path, 'rb') as f:
-                  content = f.read()
-              
-              parts = []
-              parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n{chat_id}\r\n'.encode())
-              parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n{caption}\r\n'.encode())
-              parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="document"; filename="{filename}"\r\nContent-Type: {mime_type}\r\n\r\n'.encode())
-              parts.append(content)
-              parts.append(f'\r\n--{boundary}--\r\n'.encode())
-              
-              body = b''.join(parts)
-              
-              req = urllib.request.Request(url, data=body)
-              req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
-              return urllib.request.urlopen(req).read()
 
-          try:
-              send_file(url, chat_id, apk_path, message)
-              print("Successfully sent to Bale")
-          except Exception as e:
-              print(f"Failed to send to Bale: {e}")
-          PY
+          curl --fail --silent --show-error \
+            -X POST "https://tapi.bale.ai/bot${BALE_BOT_TOKEN}/sendDocument" \
+            -F "chat_id=${BALE_CHAT_ID}" \
+            -F "document=@${APK_PATH};filename=${APK_NAME}" \
+            -F "caption=${CAPTION}"
 
       - name: Clean up rclone config
-        if: always()
+        if: always() && secrets.RCLONE_CONFIG != ''
         run: rm -f ~/.config/rclone/rclone.conf
