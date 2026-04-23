@@ -25,7 +25,11 @@ class ChatSocket(
     private val origin: String = "https://noveo.ir"
 ) {
 
-    fun connect(session: Session, getKnownUsers: () -> Map<String, UserSummary>): Flow<SocketEvent> = callbackFlow {
+    fun connect(
+        session: Session,
+        getKnownUsers: () -> Map<String, UserSummary>,
+        onDebug: (String) -> Unit = {}
+    ): Flow<SocketEvent> = callbackFlow {
         val request = Request.Builder()
             .url("wss://noveo.ir:8443/ws")
             .header("Origin", origin)
@@ -33,6 +37,7 @@ class ChatSocket(
 
         val socket: WebSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                onDebug("ws open")
                 webSocket.send(
                     JSONObject()
                         .put("type", "reconnect")
@@ -44,14 +49,17 @@ class ChatSocket(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                onDebug("ws raw=${text.truncateForDebug()}")
                 runCatching {
                     val json = JSONObject(text)
                     val type = json.optString("type")
                     val knownUsers = getKnownUsers()
                     val payload = json.unwrapRealtimePayload()
+                    onDebug("ws parsedType=$type")
 
                     when (type) {
                         "login_success" -> {
+                            onDebug("ws action=resync_state")
                             webSocket.send(JSONObject().put("type", "resync_state").toString())
                         }
                         "message", "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
@@ -90,6 +98,8 @@ class ChatSocket(
                             trySend(SocketEvent.HistoryUpdate(chats, users))
                         }
                     }
+                }.onFailure {
+                    onDebug("ws parseFailure=${it.message}")
                 }
             }
 
@@ -100,7 +110,12 @@ class ChatSocket(
                     401, 403 -> "Noveo rejected the realtime connection (HTTP $code)."
                     else -> t.message ?: t.javaClass.simpleName
                 }
+                onDebug("ws failure=$message")
                 close(IllegalStateException(message, t))
+            }
+
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                onDebug("ws closed code=$code reason=${reason.ifBlank { "<empty>" }}")
             }
         })
 
@@ -112,4 +127,9 @@ private fun String?.sanitizeRealtimeField(): String? {
     val value = this?.trim().orEmpty()
     if (value.isBlank()) return null
     return value.takeUnless { it.equals("null", ignoreCase = true) }
+}
+
+private fun String.truncateForDebug(maxLength: Int = 2000): String {
+    if (length <= maxLength) return this
+    return take(maxLength) + "...<truncated>"
 }
