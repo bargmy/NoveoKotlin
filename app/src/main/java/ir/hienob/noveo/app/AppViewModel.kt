@@ -52,6 +52,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val sessionStore = SessionStore(application)
     private val api = NoveoApi()
     private val socket = ChatSocket()
+    private val messageCacheByChat = mutableMapOf<String, List<ChatMessage>>()
 
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -108,6 +109,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun logout() {
         socketJob?.cancel()
+        messageCacheByChat.clear()
         sessionStore.clear()
         _uiState.value = AppUiState(startupState = StartupState.Auth)
     }
@@ -131,15 +133,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun openChat(chatId: String) {
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
+            val cachedMessages = messageCacheByChat[chatId].orEmpty().sortedBy { it.timestamp }
             val updatedChats = _uiState.value.chats.map {
                 if (it.id == chatId) it.copy(unreadCount = 0) else it
             }
-            _uiState.value = _uiState.value.copy(selectedChatId = chatId, chats = updatedChats, messages = emptyList(), loading = true)
+            _uiState.value = _uiState.value.copy(
+                selectedChatId = chatId,
+                chats = updatedChats,
+                messages = cachedMessages,
+                loading = true
+            )
             runCatching {
                 val result = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
-                _uiState.value = _uiState.value.copy(
-                    usersById = _uiState.value.usersById + result.usersById,
-                    messages = result.messages.sortedBy { it.timestamp },
+                val mergedMessages = mergeMessages(messageCacheByChat[chatId].orEmpty(), result.messages)
+                messageCacheByChat[chatId] = mergedMessages
+                val currentState = _uiState.value
+                _uiState.value = currentState.copy(
+                    usersById = currentState.usersById + result.usersById,
+                    messages = if (currentState.selectedChatId == chatId) mergedMessages else currentState.messages,
                     loading = false
                 )
             }.onFailure {
@@ -168,11 +179,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             messages = _uiState.value.messages + pendingMsg
         )
+        messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
 
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) { api.sendMessage(session, chatId, text, clientTempId = tempId) }
             }.onFailure {
+                messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().filter { it.id != tempId }
                 _uiState.value = _uiState.value.copy(
                     messages = _uiState.value.messages.filter { it.id != tempId }
                 )
@@ -270,48 +283,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleIncomingMessage(msg: ChatMessage) {
-        val state = _uiState.value
-        val session = state.session ?: return
-        
-        // Update Message List
-        val currentMessages = state.messages.toMutableList()
-        val existingIndex = if (msg.clientTempId != null) {
-            currentMessages.indexOfFirst { it.clientTempId == msg.clientTempId }
-        } else {
-            currentMessages.indexOfFirst { it.id == msg.id }
-        }
+        val session = _uiState.value.session ?: return
+        val cachedMessages = mergeMessages(messageCacheByChat[msg.chatId].orEmpty(), listOf(msg))
+        messageCacheByChat[msg.chatId] = cachedMessages
 
-        if (existingIndex != -1) {
-            currentMessages[existingIndex] = msg
-        } else if (msg.chatId == state.selectedChatId) {
-            currentMessages.add(msg)
-            markAsSeen(msg.id)
-        }
-
-        // Update Chat List
-        val currentChats = state.chats.toMutableList()
+        val latestState = _uiState.value
+        val currentChats = latestState.chats.toMutableList()
         val chatIndex = currentChats.indexOfFirst { it.id == msg.chatId }
-        
+
         if (chatIndex != -1) {
             val chat = currentChats.removeAt(chatIndex)
             val updatedChat = chat.copy(
                 lastMessagePreview = msg.content.previewText(),
                 unreadCount = when {
-                    msg.chatId == state.selectedChatId -> 0
+                    msg.chatId == latestState.selectedChatId -> 0
                     msg.senderId == session.userId -> chat.unreadCount
                     else -> chat.unreadCount + 1
                 }
             )
             currentChats.add(0, updatedChat)
         } else {
-            // New chat from unknown user/group
             refreshHomeSilently()
         }
 
-        _uiState.value = state.copy(
-            messages = currentMessages.sortedBy { it.timestamp },
+        val isSelectedChat = msg.chatId == latestState.selectedChatId
+        _uiState.value = latestState.copy(
+            messages = if (isSelectedChat) cachedMessages else latestState.messages,
             chats = currentChats
         )
+
+        if (isSelectedChat && msg.senderId != session.userId) {
+            markAsSeen(msg.id)
+        }
     }
 
     private fun handleTyping(chatId: String, userId: String) {
@@ -329,6 +332,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleSeenUpdate(chatId: String, messageId: String, userId: String) {
+        messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().map {
+            if (it.id == messageId) {
+                it.copy(seenBy = (it.seenBy + userId).distinct())
+            } else it
+        }
         if (chatId != _uiState.value.selectedChatId) return
         val messages = _uiState.value.messages.map {
             if (it.id == messageId) {
@@ -365,3 +373,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 }
 
+private fun mergeMessages(existing: List<ChatMessage>, incoming: List<ChatMessage>): List<ChatMessage> {
+    if (incoming.isEmpty()) return existing.sortedBy { it.timestamp }
+
+    val merged = existing.toMutableList()
+    for (message in incoming) {
+        val existingIndex = if (message.clientTempId != null) {
+            merged.indexOfFirst { it.clientTempId == message.clientTempId }
+        } else {
+            merged.indexOfFirst { it.id == message.id }
+        }
+
+        if (existingIndex >= 0) {
+            merged[existingIndex] = message
+        } else {
+            merged.add(message)
+        }
+    }
+    return merged.sortedBy { it.timestamp }
+}
