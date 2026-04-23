@@ -134,6 +134,7 @@ internal fun HomeScreen(
     onSearchPublic: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
+    onTyping: () -> Unit,
     onLogout: () -> Unit,
     onUpdateProfile: (String, String) -> Unit,
     currentTheme: ThemePreset,
@@ -231,6 +232,7 @@ internal fun HomeScreen(
                         selectedChat = selectedChat,
                         onBackToChats = onBackToChats,
                         onSend = onSend,
+                        onTyping = onTyping,
                         onOpenProfile = { userId -> profileUserId = userId },
                         onOpenGroupInfo = { showGroupInfo = true }
                     )
@@ -284,6 +286,7 @@ internal fun HomeScreen(
                             selectedChat = selectedChat,
                             onBackToChats = onBackToChats,
                             onSend = onSend,
+                            onTyping = onTyping,
                             onOpenProfile = { userId -> profileUserId = userId },
                             onOpenGroupInfo = { showGroupInfo = true },
                             modifier = Modifier.weight(1f)
@@ -616,6 +619,7 @@ private fun ChatPane(
     selectedChat: ChatSummary?,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
+    onTyping: () -> Unit,
     onOpenProfile: (String) -> Unit,
     onOpenGroupInfo: () -> Unit,
     modifier: Modifier = Modifier
@@ -735,7 +739,10 @@ private fun ChatPane(
 
         ComposerBar(
             draft = draft,
-            onDraftChange = { draft = it },
+            onDraftChange = { 
+                draft = it
+                onTyping()
+            },
             sendScale = sendScale,
             onSendClick = {
                 val text = draft.trim()

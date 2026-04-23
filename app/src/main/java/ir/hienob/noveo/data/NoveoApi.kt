@@ -127,6 +127,36 @@ class NoveoApi(
         failure.get()?.let { error(it) }
     }
 
+    fun markAsSeen(session: Session, chatId: String, messageId: String) {
+        val socket = client.newWebSocket(request(), object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                webSocket.send(reconnect(session).toString())
+            }
+            override fun onMessage(webSocket: WebSocket, textMsg: String) {
+                val msg = JSONObject(textMsg)
+                if (msg.optString("type") == "login_success") {
+                    webSocket.send(JSONObject().put("type", "message_seen").put("chatId", chatId).put("messageId", messageId).toString())
+                    webSocket.close(1000, null)
+                }
+            }
+        })
+    }
+
+    fun sendTyping(session: Session, chatId: String) {
+        val socket = client.newWebSocket(request(), object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                webSocket.send(reconnect(session).toString())
+            }
+            override fun onMessage(webSocket: WebSocket, textMsg: String) {
+                val msg = JSONObject(textMsg)
+                if (msg.optString("type") == "login_success") {
+                    webSocket.send(JSONObject().put("type", "typing").put("chatId", chatId).toString())
+                    webSocket.close(1000, null)
+                }
+            }
+        })
+    }
+
     fun searchPublicUsers(session: Session, query: String): List<UserSummary> {
         val normalizedQuery = query.trim()
         if (normalizedQuery.length < 2) return emptyList()

@@ -64,11 +64,11 @@ data class MessageContent(
     fun previewText(): String {
         return when {
             !text.isNullOrBlank() -> text
-            file != null -> "[File]"
-            !poll.isNullOrBlank() -> "[Poll]"
-            !theme.isNullOrBlank() -> "[Theme]"
-            !callLog.isNullOrBlank() -> "[Call]"
-            forwardedInfo -> "[Forwarded]"
+            file != null -> if (file.isImage()) "Photo" else if (file.isVideo()) "Video" else "File"
+            !poll.isNullOrBlank() -> "Poll"
+            !theme.isNullOrBlank() -> "Theme"
+            !callLog.isNullOrBlank() -> "Call"
+            forwardedInfo -> "Forwarded message"
             else -> ""
         }
     }

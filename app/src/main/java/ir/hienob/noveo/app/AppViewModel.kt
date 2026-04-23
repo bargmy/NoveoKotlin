@@ -177,6 +177,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun sendTyping() {
+        val session = _uiState.value.session ?: return
+        val chatId = _uiState.value.selectedChatId ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { api.sendTyping(session, chatId) }
+        }
+    }
+
+    fun markAsSeen(messageId: String) {
+        val session = _uiState.value.session ?: return
+        val chatId = _uiState.value.selectedChatId ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { api.markAsSeen(session, chatId, messageId) }
+        }
+    }
+
     private suspend fun loadHome(session: Session) {
         runCatching {
             val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
@@ -236,6 +252,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             messages[index] = msg
         } else if (msg.chatId == state.selectedChatId) {
             messages.add(msg)
+            markAsSeen(msg.id)
         }
 
         val updatedChats = state.chats.map {

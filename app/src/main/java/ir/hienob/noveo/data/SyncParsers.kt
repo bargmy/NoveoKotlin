@@ -196,6 +196,15 @@ private fun resolveChatAvatar(chat: JSONObject, usersById: Map<String, UserSumma
     return null
 }
 
+private fun resolveSenderName(senderId: String, payload: JSONObject, usersById: Map<String, UserSummary>): String {
+    if (senderId == "system") return "System"
+    if (senderId == "anonymous") return "Anonymous"
+    return usersById[senderId]?.username?.sanitizeServerString()?.takeIf { it.isNotBlank() }
+        ?: payload.optString("senderName").sanitizeServerString().takeIf { it.isNotBlank() }
+        ?: payload.optString("sender").sanitizeServerString().takeIf { it.isNotBlank() }
+        ?: "Unknown"
+}
+
 private fun resolveAssetUrl(source: JSONObject, vararg keys: String): String? {
     for (key in keys) {
         val direct = source.optString(key).sanitizeServerString()

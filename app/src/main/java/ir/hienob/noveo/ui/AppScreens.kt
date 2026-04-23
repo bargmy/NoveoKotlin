@@ -248,6 +248,7 @@ fun NoveoRoot(
     onSearchPublic: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
+    onTyping: () -> Unit,
     onLogout: () -> Unit,
     onUpdateProfile: (String, String) -> Unit
 ) {
@@ -296,6 +297,7 @@ fun NoveoRoot(
                         onSearchPublic = onSearchPublic,
                         onBackToChats = onBackToChats,
                         onSend = onSend,
+                        onTyping = onTyping,
                         onLogout = onLogout,
                         onUpdateProfile = onUpdateProfile,
                         currentTheme = currentTheme,
