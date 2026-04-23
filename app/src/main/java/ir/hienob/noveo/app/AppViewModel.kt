@@ -252,6 +252,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             is SocketEvent.ChatUpdated -> {
                                 refreshHomeSilently()
                             }
+                            is SocketEvent.HistoryUpdate -> {
+                                _uiState.value = _uiState.value.copy(
+                                    chats = event.chats,
+                                    usersById = _uiState.value.usersById + event.users,
+                                    connectionDetail = null
+                                )
+                            }
                         }
                     }
                 }.onFailure {

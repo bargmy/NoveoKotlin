@@ -16,7 +16,8 @@ sealed class SocketEvent {
     data class Typing(val chatId: String, val senderId: String) : SocketEvent()
     data class MessageSeenUpdate(val chatId: String, val messageId: String, val userId: String) : SocketEvent()
     data class UserListUpdate(val usersById: Map<String, UserSummary>, val onlineIds: Set<String>) : SocketEvent()
-    data class ChatUpdated(val chatId: String) : SocketEvent() // Simplified
+    data class ChatUpdated(val chatId: String) : SocketEvent()
+    data class HistoryUpdate(val chats: List<ChatSummary>, val users: Map<String, UserSummary>) : SocketEvent()
 }
 
 class ChatSocket(
@@ -37,6 +38,7 @@ class ChatSocket(
                         .put("type", "reconnect")
                         .put("userId", session.userId)
                         .put("token", session.token)
+                        .put("sessionId", session.sessionId)
                         .toString()
                 )
             }
@@ -47,9 +49,18 @@ class ChatSocket(
                 val knownUsers = getKnownUsers()
                 
                 when (type) {
+                    "login_success" -> {
+                        webSocket.send(JSONObject().put("type", "resync_state").toString())
+                    }
                     "message", "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
                     "message_sent" -> trySend(SocketEvent.MessageSent(parseRealtimeMessage(json, knownUsers)))
-                    "typing" -> trySend(SocketEvent.Typing(json.optString("chatId"), json.optString("senderId")))
+                    "typing" -> {
+                        val chatId = json.optString("chatId").takeIf { it != "null" }
+                        val senderId = json.optString("senderId").takeIf { it != "null" }
+                        if (chatId != null && senderId != null) {
+                            trySend(SocketEvent.Typing(chatId, senderId))
+                        }
+                    }
                     "message_seen", "message_seen_update" -> {
                          trySend(SocketEvent.MessageSeenUpdate(
                              json.optString("chatId"),
@@ -62,6 +73,11 @@ class ChatSocket(
                         trySend(SocketEvent.UserListUpdate(users, online))
                     }
                     "chat_updated" -> trySend(SocketEvent.ChatUpdated(json.optString("chatId")))
+                    "chat_history" -> {
+                        val users = parseUsers(json).first
+                        val chats = parseChats(json, knownUsers + users, session.userId)
+                        trySend(SocketEvent.HistoryUpdate(chats, users))
+                    }
                 }
             }
 
