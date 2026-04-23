@@ -45,7 +45,8 @@ data class AppUiState(
     val connectionDetail: String? = null,
     val wallet: Wallet? = null,
     val contacts: List<UserSummary> = emptyList(),
-    val typingUsers: Map<String, Set<String>> = emptyMap() // chatId -> set of userIds
+    val typingUsers: Map<String, Set<String>> = emptyMap(), // chatId -> set of userIds
+    val debugLogs: List<String> = emptyList()
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -63,16 +64,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         restoreSession()
     }
 
+    fun clearDebugLogs() {
+        _uiState.value = _uiState.value.copy(debugLogs = emptyList())
+    }
+
     fun restoreSession() {
+        appendDebugLog("restoreSession()")
         viewModelScope.launch {
             val session = sessionStore.read()
             if (session == null) {
+                appendDebugLog("restoreSession: no saved session")
                 _uiState.value = _uiState.value.copy(
                     startupState = StartupState.Onboarding,
                     loading = false,
                 )
                 return@launch
             }
+            appendDebugLog("restoreSession: restored user=${session.userId}")
 
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
@@ -93,21 +101,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun authenticate(handle: String, password: String) {
+        appendDebugLog("authenticate(handle=$handle)")
         viewModelScope.launch {
             runCatching {
                 _uiState.value = _uiState.value.copy(startupState = StartupState.Home, loading = true, connectionTitle = "Connecting...")
                 val session = withContext(Dispatchers.IO) {
                     if (_uiState.value.authModeSignup) api.signup(handle, password) else api.login(handle, password)
                 }
+                appendDebugLog("authenticate: success user=${session.userId}")
                 sessionStore.write(session)
                 loadHome(session)
             }.onFailure {
+                appendDebugLog("authenticate: failure=${it.message}")
                 _uiState.value = _uiState.value.copy(startupState = StartupState.Auth, loading = false, error = it.message ?: "Authentication failed")
             }
         }
     }
 
     fun logout() {
+        appendDebugLog("logout()")
         socketJob?.cancel()
         messageCacheByChat.clear()
         sessionStore.clear()
@@ -131,9 +143,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openChat(chatId: String) {
+        appendDebugLog("openChat(chatId=$chatId)")
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             val cachedMessages = messageCacheByChat[chatId].orEmpty().sortedBy { it.timestamp }
+            appendDebugLog("openChat: cachedMessages=${cachedMessages.size}")
             val updatedChats = _uiState.value.chats.map {
                 if (it.id == chatId) it.copy(unreadCount = 0) else it
             }
@@ -148,12 +162,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val mergedMessages = mergeMessages(messageCacheByChat[chatId].orEmpty(), result.messages)
                 messageCacheByChat[chatId] = mergedMessages
                 val currentState = _uiState.value
+                appendDebugLog("openChat: apiMessages=${result.messages.size} merged=${mergedMessages.size} selected=${currentState.selectedChatId}")
                 _uiState.value = currentState.copy(
                     usersById = currentState.usersById + result.usersById,
                     messages = if (currentState.selectedChatId == chatId) mergedMessages else currentState.messages,
                     loading = false
                 )
             }.onFailure {
+                appendDebugLog("openChat: failure=${it.message}")
                 _uiState.value = _uiState.value.copy(loading = false, error = it.message)
             }
         }
@@ -163,6 +179,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
         if (text.isBlank()) return
+        appendDebugLog("sendMessage(chatId=$chatId, len=${text.length})")
 
         val tempId = "temp-${System.currentTimeMillis()}"
         val pendingMsg = ChatMessage(
@@ -185,6 +202,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 withContext(Dispatchers.IO) { api.sendMessage(session, chatId, text, clientTempId = tempId) }
             }.onFailure {
+                appendDebugLog("sendMessage: failure tempId=$tempId error=${it.message}")
                 messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().filter { it.id != tempId }
                 _uiState.value = _uiState.value.copy(
                     messages = _uiState.value.messages.filter { it.id != tempId }
@@ -196,6 +214,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun sendTyping() {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
+        appendDebugLog("sendTyping(chatId=$chatId)")
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { api.sendTyping(session, chatId) }
         }
@@ -204,6 +223,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun markAsSeen(messageId: String) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
+        appendDebugLog("markAsSeen(chatId=$chatId, messageId=$messageId)")
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { api.markAsSeen(session, chatId, messageId) }
         }
@@ -211,9 +231,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshHomeSilently() {
         val session = _uiState.value.session ?: return
+        appendDebugLog("refreshHomeSilently()")
         viewModelScope.launch {
             runCatching {
                 val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
+                appendDebugLog("refreshHomeSilently: chats=${home.chats.size} users=${home.usersById.size}")
                 _uiState.value = _uiState.value.copy(
                     usersById = _uiState.value.usersById + home.usersById,
                     chats = home.chats,
@@ -224,10 +246,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun loadHome(session: Session) {
+        appendDebugLog("loadHome(user=${session.userId})")
         runCatching {
             val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
             val wallet = withContext(Dispatchers.IO) { runCatching { api.getStarsOverview(session) }.getOrNull() }
             val contacts = withContext(Dispatchers.IO) { runCatching { api.getContacts(session) }.getOrDefault(emptyList()) }
+            appendDebugLog("loadHome: chats=${home.chats.size} users=${home.usersById.size} contacts=${contacts.size}")
             
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
@@ -241,16 +265,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             observeSocket(session)
         }.onFailure {
+            appendDebugLog("loadHome: failure=${it.message}")
             _uiState.value = _uiState.value.copy(loading = false, error = it.message, connectionTitle = "Connecting...")
         }
     }
 
     private fun observeSocket(session: Session) {
+        appendDebugLog("observeSocket(user=${session.userId})")
         socketJob?.cancel()
         socketJob = viewModelScope.launch {
             while (true) {
                 runCatching {
-                    socket.connect(session) { _uiState.value.usersById }.collect { event ->
+                    socket.connect(
+                        session = session,
+                        getKnownUsers = { _uiState.value.usersById },
+                        onDebug = { message ->
+                            viewModelScope.launch {
+                                appendDebugLog(message)
+                            }
+                        }
+                    ).collect { event ->
+                        appendDebugLog("socket event=${event.javaClass.simpleName}")
                         when (event) {
                             is SocketEvent.NewMessage -> handleIncomingMessage(event.message)
                             is SocketEvent.MessageSent -> handleIncomingMessage(event.message)
@@ -275,6 +310,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }.onFailure {
+                    appendDebugLog("observeSocket: failure=${it.message}")
                     _uiState.value = _uiState.value.copy(connectionDetail = "Connection lost, retrying...")
                     delay(3000)
                 }
@@ -285,6 +321,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun handleIncomingMessage(msg: ChatMessage) {
         val latestState = _uiState.value
         val session = latestState.session ?: return
+        appendDebugLog(
+            "handleIncomingMessage(chatId=${msg.chatId}, messageId=${msg.id}, sender=${msg.senderId}, selected=${latestState.selectedChatId}, visible=${latestState.messages.size})"
+        )
         val baseMessages = if (msg.chatId == latestState.selectedChatId) {
             mergeMessages(messageCacheByChat[msg.chatId].orEmpty(), latestState.messages)
         } else {
@@ -312,6 +351,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val isSelectedChat = msg.chatId == latestState.selectedChatId
+        appendDebugLog(
+            "handleIncomingMessage: chatIndex=$chatIndex isSelected=$isSelectedChat cached=${cachedMessages.size} chats=${currentChats.size}"
+        )
         _uiState.value = latestState.copy(
             messages = if (isSelectedChat) cachedMessages else latestState.messages,
             chats = currentChats
@@ -323,6 +365,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleTyping(chatId: String, userId: String) {
+        appendDebugLog("handleTyping(chatId=$chatId, userId=$userId)")
         val currentTyping = _uiState.value.typingUsers[chatId].orEmpty()
         _uiState.value = _uiState.value.copy(
             typingUsers = _uiState.value.typingUsers + (chatId to (currentTyping + userId))
@@ -337,6 +380,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleSeenUpdate(chatId: String, messageId: String, userId: String) {
+        appendDebugLog("handleSeenUpdate(chatId=$chatId, messageId=$messageId, userId=$userId)")
         messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().map {
             if (it.id == messageId) {
                 it.copy(seenBy = (it.seenBy + userId).distinct())
@@ -367,6 +411,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun appendDebugLog(message: String) {
+        val entry = "${System.currentTimeMillis()} | $message"
+        val nextLogs = (_uiState.value.debugLogs + entry).takeLast(DEBUG_LOG_LIMIT)
+        _uiState.value = _uiState.value.copy(debugLogs = nextLogs)
+    }
+
     fun updateProfile(username: String, bio: String) {
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
@@ -377,6 +427,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+
+private const val DEBUG_LOG_LIMIT = 400
 
 private fun mergeMessages(existing: List<ChatMessage>, incoming: List<ChatMessage>): List<ChatMessage> {
     if (incoming.isEmpty()) return existing.sortedBy { it.timestamp }
