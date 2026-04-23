@@ -111,11 +111,12 @@ class ChatSocket(
                     else -> t.message ?: t.javaClass.simpleName
                 }
                 onDebug("ws failure=$message")
-                close(IllegalStateException(message, t))
+                channel.close(IllegalStateException(message, t))
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 onDebug("ws closed code=$code reason=${reason.ifBlank { "<empty>" }}")
+                channel.close()
             }
         })
 
