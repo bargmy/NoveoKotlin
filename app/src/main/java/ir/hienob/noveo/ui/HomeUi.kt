@@ -113,7 +113,7 @@ private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
 private const val CLIENT_VERSION = "v0.1 mobile"
 
 private enum class SettingsSection {
-    MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG
+    MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG, THEME
 }
 
 private data class ThemeSection(
@@ -336,7 +336,7 @@ internal fun HomeScreen(
 
         ModalHost(visible = showContactsModal, onDismiss = { showContactsModal = false }) {
             ContactsModal(
-                users = filteredUsers,
+                users = state.contacts,
                 chats = state.chats,
                 selfUserId = state.session?.userId,
                 onClose = { showContactsModal = false },
@@ -554,7 +554,14 @@ private fun SidebarHeader(
         HeaderIconButton(icon = Icons.Outlined.Menu, onClick = onMenuClick)
         Spacer(Modifier.width(8.dp))
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-            AnimatedContent(targetState = showSearch, label = "sidebar_header_swap") { searching ->
+            AnimatedContent(
+                targetState = showSearch,
+                label = "sidebar_header_swap",
+                transitionSpec = {
+                    (slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn())
+                        .togetherWith(slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut())
+                }
+            ) { searching ->
                 if (searching) {
                     OutlinedTextField(
                         value = searchQuery,
@@ -856,12 +863,18 @@ private fun AttachmentPreview(file: MessageFileAttachment?) {
     val normalizedUrl = remember(file?.url) { file?.url.normalizeNoveoUrl() }
     if (file == null) return
     if (normalizedUrl != null && file.isImage()) {
-        AsyncImage(
-            model = normalizedUrl,
-            contentDescription = file.name.ifBlank { "Image attachment" },
-            modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(18.dp)),
-            contentScale = ContentScale.Crop
-        )
+        Card(
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth().height(260.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        ) {
+            AsyncImage(
+                model = normalizedUrl,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+        }
         return
     }
     Card(
@@ -882,9 +895,8 @@ private fun AttachmentPreview(file: MessageFileAttachment?) {
             )
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(file.name.ifBlank { "Attachment" }, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                val subtitle = file.type.ifBlank { normalizedUrl ?: "File" }
-                Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                val subtitle = file.type.ifBlank { "Attachment" }
+                Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -991,6 +1003,7 @@ private fun SettingsModal(
                     SettingsSection.ACCOUNT -> "Account"
                     SettingsSection.PREFERENCES -> "Preferences"
                     SettingsSection.CHANGELOG -> "Changelog"
+                    SettingsSection.THEME -> "Themes"
                 },
                 onClose = onClose,
                 onBack = if (section != SettingsSection.MENU) ({ onSectionChange(SettingsSection.MENU) }) else null
@@ -1003,6 +1016,7 @@ private fun SettingsModal(
                     SettingsSection.ACCOUNT -> SettingsAccountSection(state, onLogout)
                     SettingsSection.PREFERENCES -> SettingsPreferencesSection(currentTheme, onThemeChange)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection()
+                    SettingsSection.THEME -> SettingsThemeSection(currentTheme, onThemeChange)
                 }
             }
         }
@@ -1015,6 +1029,7 @@ private fun SettingsMenu(onSectionChange: (SettingsSection) -> Unit) {
         SettingsRow("Subscription", Icons.Outlined.Star) { onSectionChange(SettingsSection.SUBSCRIPTION) }
         SettingsRow("Profile", Icons.Outlined.Info) { onSectionChange(SettingsSection.PROFILE) }
         SettingsRow("Account", Icons.Outlined.Menu) { onSectionChange(SettingsSection.ACCOUNT) }
+        SettingsRow("Themes", Icons.Outlined.Search) { onSectionChange(SettingsSection.THEME) }
         SettingsRow("Preferences", Icons.Outlined.Settings) { onSectionChange(SettingsSection.PREFERENCES) }
         SettingsRow("Changelog", Icons.Outlined.Search) { onSectionChange(SettingsSection.CHANGELOG) }
     }
@@ -1092,23 +1107,32 @@ private fun SettingsPreferencesSection(currentTheme: ThemePreset, onThemeChange:
         DetailCard(title = "Privacy", body = "Block group invites and related privacy controls belong here like web.")
         DetailCard(title = "Language", body = "English, فارسی, Русский, 中文")
         DetailCard(title = "Emoji Style", body = "Default or iOS")
-        DetailCard(title = "Theme", body = "Themes are now grouped into sections (light, dark, and accent variants) for easier switching.")
+        DetailCard(title = "Auto-Night Mode", body = "Schedule or system-follow mode selection.")
+    }
+}
 
+@Composable
+private fun SettingsThemeSection(currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
+    val scrollState = rememberScrollState()
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(scrollState),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         val themeSections = listOf(
-            ThemeSection(
-                title = "System",
-                subtitle = "Use Light or Dark manually until automatic system-follow mode is added.",
-                presets = emptyList()
-            ),
             ThemeSection(
                 title = "Light",
                 subtitle = "Bright themes for daytime usage.",
-                presets = listOf(ThemePreset.LIGHT, ThemePreset.SKY_LIGHT)
+                presets = listOf(ThemePreset.LIGHT, ThemePreset.SKY_LIGHT, ThemePreset.SUNSET_LIGHT, ThemePreset.SNOWY_DAYDREAM)
             ),
             ThemeSection(
                 title = "Dark",
                 subtitle = "Low-light themes for nighttime usage.",
-                presets = listOf(ThemePreset.DARK, ThemePreset.OCEAN_DARK)
+                presets = listOf(ThemePreset.DARK, ThemePreset.OCEAN_DARK, ThemePreset.PLUM_DARK, ThemePreset.OLED_DARK)
+            ),
+            ThemeSection(
+                title = "Premium",
+                subtitle = "Exclusive themes with rich color palettes.",
+                presets = listOf(ThemePreset.SUNSET_SHIMMER, ThemePreset.CHERRY_RED, ThemePreset.RAINBOW_RAGEBAIT, ThemePreset.SANOKI_MEOA)
             )
         )
 
@@ -1427,7 +1451,9 @@ private fun DetailRow(label: String, value: String) {
 @Composable
 private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 42.dp) {
     val resolvedImageUrl = remember(imageUrl) { imageUrl.normalizeNoveoUrl() }
-    if (!resolvedImageUrl.isNullOrBlank()) {
+    val isDefaultAvatar = remember(resolvedImageUrl) { resolvedImageUrl?.endsWith("default.png") == true }
+    
+    if (!resolvedImageUrl.isNullOrBlank() && !isDefaultAvatar) {
         AsyncImage(
             model = resolvedImageUrl,
             contentDescription = name,

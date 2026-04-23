@@ -3,6 +3,7 @@ package ir.hienob.noveo
 import android.app.Application
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
+import coil3.gif.AnimatedDecoder
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 
 import coil3.PlatformContext
@@ -12,6 +13,7 @@ class NoveoApplication : Application(), SingletonImageLoader.Factory {
         return ImageLoader.Builder(context)
             .components {
                 add(OkHttpNetworkFetcherFactory())
+                add(AnimatedDecoder.Factory())
             }
             .build()
     }

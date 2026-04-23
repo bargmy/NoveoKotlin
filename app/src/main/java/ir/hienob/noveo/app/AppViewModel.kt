@@ -42,7 +42,8 @@ data class AppUiState(
     val authModeSignup: Boolean = false,
     val connectionTitle: String = "Noveo",
     val connectionDetail: String? = null,
-    val wallet: Wallet? = null
+    val wallet: Wallet? = null,
+    val contacts: List<UserSummary> = emptyList()
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -249,6 +250,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         runCatching {
             val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
             val wallet = withContext(Dispatchers.IO) { runCatching { api.getStarsOverview(session) }.getOrNull() }
+            val contacts = withContext(Dispatchers.IO) { runCatching { api.getContacts(session) }.getOrDefault(emptyList()) }
             val selectedChatId = if (preserveShell) _uiState.value.selectedChatId else null
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
@@ -257,6 +259,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 usersById = home.usersById,
                 chats = home.chats,
                 wallet = wallet,
+                contacts = contacts,
                 selectedChatId = selectedChatId,
                 messages = if (selectedChatId == null) emptyList() else _uiState.value.messages,
                 error = null,
