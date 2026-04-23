@@ -493,15 +493,121 @@ private fun mergeMessages(existing: List<ChatMessage>, incoming: List<ChatMessag
     for (message in incoming) {
         val existingIndex = if (message.clientTempId != null) {
             merged.indexOfFirst { it.clientTempId == message.clientTempId }
-        } else {
+        } else if (message.id.isNotBlank()) {
             merged.indexOfFirst { it.id == message.id }
+        } else {
+            -1
         }
 
         if (existingIndex >= 0) {
             merged[existingIndex] = message
+            continue
+        }
+
+        val pendingIndex = if (message.pending) {
+            -1
+        } else {
+            findPendingReplacementIndex(merged, message)
+        }
+
+        if (pendingIndex >= 0) {
+            merged[pendingIndex] = message
         } else {
             merged.add(message)
         }
     }
-    return merged.sortedBy { it.timestamp }
+    return dedupeMergedMessages(merged).sortedBy { it.timestamp }
+}
+
+private fun findPendingReplacementIndex(messages: List<ChatMessage>, incoming: ChatMessage): Int {
+    val pendingIndexes = messages.indices.filter { messages[it].pending }
+    if (pendingIndexes.isEmpty()) return -1
+
+    val exactSignatureIndex = pendingIndexes.firstOrNull { index ->
+        messageMatchSignature(messages[index]) == messageMatchSignature(incoming)
+    }
+    if (exactSignatureIndex != null) return exactSignatureIndex
+
+    val sameSenderCandidates = pendingIndexes.filter { index ->
+        val current = messages[index]
+        current.chatId == incoming.chatId &&
+            current.senderId == incoming.senderId &&
+            current.replyToId == incoming.replyToId &&
+            isTimestampClose(current.timestamp, incoming.timestamp)
+    }
+    if (sameSenderCandidates.size == 1) return sameSenderCandidates.first()
+
+    return -1
+}
+
+private fun dedupeMergedMessages(messages: List<ChatMessage>): List<ChatMessage> {
+    val kept = mutableListOf<ChatMessage>()
+    val seenIds = mutableMapOf<String, ChatMessage>()
+    for (message in messages) {
+        val id = message.id.takeIf { it.isNotBlank() }
+        val existingById = id?.let(seenIds::get)
+        if (existingById != null) {
+            if (messageQualityScore(message) > messageQualityScore(existingById)) {
+                val replaceIndex = kept.indexOf(existingById)
+                if (replaceIndex >= 0) kept[replaceIndex] = message
+                seenIds[id] = message
+            }
+            continue
+        }
+
+        val duplicatePendingIndex = kept.indexOfFirst { current ->
+            current.pending != message.pending &&
+                current.chatId == message.chatId &&
+                current.senderId == message.senderId &&
+                current.replyToId == message.replyToId &&
+                messageMatchSignature(current) == messageMatchSignature(message) &&
+                isTimestampClose(current.timestamp, message.timestamp)
+        }
+        if (duplicatePendingIndex >= 0) {
+            if (messageQualityScore(message) >= messageQualityScore(kept[duplicatePendingIndex])) {
+                kept[duplicatePendingIndex] = message
+            }
+            if (id != null) seenIds[id] = message
+            continue
+        }
+
+        kept += message
+        if (id != null) seenIds[id] = message
+    }
+    return kept
+}
+
+private fun messageMatchSignature(message: ChatMessage): String = buildString {
+    append(message.chatId)
+    append('|')
+    append(message.senderId)
+    append('|')
+    append(message.replyToId.orEmpty())
+    append('|')
+    append(message.content.text.orEmpty().trim())
+    append('|')
+    append(message.content.file?.url.orEmpty())
+    append('|')
+    append(message.content.file?.name.orEmpty())
+    append('|')
+    append(message.content.file?.type.orEmpty())
+    append('|')
+    append(message.content.poll.orEmpty())
+    append('|')
+    append(message.content.theme.orEmpty())
+    append('|')
+    append(message.content.callLog.orEmpty())
+}
+
+private fun messageQualityScore(message: ChatMessage): Int {
+    var score = 0
+    if (!message.pending) score += 10
+    if (!message.id.startsWith("temp-")) score += 5
+    if (!message.clientTempId.isNullOrBlank()) score += 1
+    return score
+}
+
+private fun isTimestampClose(left: Long, right: Long, maxDeltaSeconds: Long = 120L): Boolean {
+    if (left <= 0L || right <= 0L) return false
+    return kotlin.math.abs(left - right) <= maxDeltaSeconds
 }
