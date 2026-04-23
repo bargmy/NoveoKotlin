@@ -90,7 +90,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -137,6 +139,7 @@ internal fun HomeScreen(
     onTyping: () -> Unit,
     onLogout: () -> Unit,
     onUpdateProfile: (String, String) -> Unit,
+    onClearDebugLogs: () -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit
 ) {
@@ -146,6 +149,7 @@ internal fun HomeScreen(
     var showContactsModal by rememberSaveable { mutableStateOf(false) }
     var showCreateModal by rememberSaveable { mutableStateOf(false) }
     var showSettingsModal by rememberSaveable { mutableStateOf(false) }
+    var showDebugConsole by rememberSaveable { mutableStateOf(false) }
     var settingsSection by rememberSaveable { mutableStateOf(SettingsSection.MENU) }
     var profileUserId by rememberSaveable { mutableStateOf<String?>(null) }
     var showGroupInfo by rememberSaveable { mutableStateOf(false) }
@@ -212,6 +216,7 @@ internal fun HomeScreen(
                             searchQuery = it
                             onSearchPublic(it)
                         },
+                        onOpenDebugConsole = { showDebugConsole = true },
                         onOpenChat = onOpenChat,
                         onOpenContacts = { showContactsModal = true },
                         onOpenCreate = { showCreateModal = true },
@@ -234,6 +239,7 @@ internal fun HomeScreen(
                         onBackToChats = onBackToChats,
                         onSend = onSend,
                         onTyping = onTyping,
+                        onOpenDebugConsole = { showDebugConsole = true },
                         onMediaClick = { selectedMediaUrl = it },
                         onOpenProfile = { userId -> profileUserId = userId },
                         onOpenGroupInfo = { showGroupInfo = true }
@@ -257,6 +263,7 @@ internal fun HomeScreen(
                         searchQuery = it
                         onSearchPublic(it)
                     },
+                    onOpenDebugConsole = { showDebugConsole = true },
                     onOpenChat = onOpenChat,
                     onOpenContacts = { showContactsModal = true },
                     onOpenCreate = { showCreateModal = true },
@@ -289,6 +296,7 @@ internal fun HomeScreen(
                             onBackToChats = onBackToChats,
                             onSend = onSend,
                             onTyping = onTyping,
+                            onOpenDebugConsole = { showDebugConsole = true },
                             onMediaClick = { selectedMediaUrl = it },
                             onOpenProfile = { userId -> profileUserId = userId },
                             onOpenGroupInfo = { showGroupInfo = true },
@@ -381,6 +389,14 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
             )
         }
 
+        ModalHost(visible = showDebugConsole, onDismiss = { showDebugConsole = false }) {
+            DebugConsoleModal(
+                logs = state.debugLogs,
+                onClose = { showDebugConsole = false },
+                onClear = onClearDebugLogs
+            )
+        }
+
         ModalHost(visible = showGroupInfo && selectedChat != null, onDismiss = { showGroupInfo = false }) {
             selectedChat?.let { chat ->
                 GroupInfoModal(
@@ -418,6 +434,7 @@ private fun SidebarPane(
     onMenuClick: () -> Unit,
     onSearchToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
+    onOpenDebugConsole: () -> Unit,
     onOpenChat: (String) -> Unit,
     onOpenContacts: () -> Unit,
     onOpenCreate: () -> Unit,
@@ -434,7 +451,8 @@ private fun SidebarPane(
                 connectionTitle = state.connectionTitle,
                 onMenuClick = onMenuClick,
                 onSearchToggle = onSearchToggle,
-                onSearchQueryChange = onSearchQueryChange
+                onSearchQueryChange = onSearchQueryChange,
+                onDebugClick = onOpenDebugConsole
             )
             state.error?.takeIf { it.isNotBlank() }?.let {
                 Box(
@@ -547,7 +565,8 @@ private fun SidebarHeader(
     connectionTitle: String,
     onMenuClick: () -> Unit,
     onSearchToggle: () -> Unit,
-    onSearchQueryChange: (String) -> Unit
+    onSearchQueryChange: (String) -> Unit,
+    onDebugClick: () -> Unit
 ) {
     val statusTransition = rememberInfiniteTransition(label = "connection_status_fade")
     val statusAlpha by statusTransition.animateFloat(
@@ -603,6 +622,8 @@ private fun SidebarHeader(
             }
         }
         Spacer(Modifier.width(8.dp))
+        HeaderIconButton(icon = Icons.Outlined.Info, onClick = onDebugClick)
+        Spacer(Modifier.width(8.dp))
         HeaderIconButton(
             icon = if (showSearch) Icons.Outlined.Close else Icons.Outlined.Search,
             onClick = onSearchToggle
@@ -629,6 +650,7 @@ private fun ChatPane(
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
+    onOpenDebugConsole: () -> Unit,
     onMediaClick: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
     onOpenGroupInfo: () -> Unit,
@@ -718,6 +740,8 @@ private fun ChatPane(
                     Text(subtitle, style = MaterialTheme.typography.bodySmall)
                 }
             }
+            HeaderIconButton(icon = Icons.Outlined.Info, onClick = onOpenDebugConsole)
+            Spacer(Modifier.width(6.dp))
             HeaderIconButton(icon = Icons.Outlined.Call, onClick = {})
         }
 
@@ -811,6 +835,68 @@ private fun ComposerBar(
             Spacer(Modifier.width(8.dp))
             Box(modifier = Modifier.scale(sendScale)) {
                 SendIconButton(enabled = draft.isNotBlank(), onClick = onSendClick)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebugConsoleModal(
+    logs: List<String>,
+    onClose: () -> Unit,
+    onClear: () -> Unit
+) {
+    val clipboardManager = LocalClipboardManager.current
+    val scrollState = rememberScrollState()
+    val renderedLogs = remember(logs) {
+        if (logs.isEmpty()) "No debug logs yet."
+        else logs.joinToString(separator = "\n")
+    }
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 8.dp,
+        modifier = Modifier
+            .fillMaxWidth(0.96f)
+            .fillMaxHeight(0.82f)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            ModalHeader(title = "Debug Console", onClose = onClose)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { clipboardManager.setText(AnnotatedString(renderedLogs)) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Copy")
+                }
+                OutlinedButton(
+                    onClick = onClear,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Clear")
+                }
+            }
+            HorizontalDivider()
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(12.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .verticalScroll(scrollState)
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = renderedLogs,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
