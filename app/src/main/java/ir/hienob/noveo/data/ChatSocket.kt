@@ -37,7 +37,6 @@ class ChatSocket(
                         .put("type", "reconnect")
                         .put("userId", session.userId)
                         .put("token", session.token)
-                        .put("sessionId", session.sessionId)
                         .toString()
                 )
             }

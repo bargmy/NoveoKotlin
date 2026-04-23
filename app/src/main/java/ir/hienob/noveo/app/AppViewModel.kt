@@ -265,42 +265,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun handleIncomingMessage(msg: ChatMessage) {
         val state = _uiState.value
         val session = state.session ?: return
-        val messages = state.messages.toMutableList()
         
-        val index = if (msg.clientTempId != null) {
-            messages.indexOfFirst { it.clientTempId == msg.clientTempId }
+        // Update Message List
+        val currentMessages = state.messages.toMutableList()
+        val existingIndex = if (msg.clientTempId != null) {
+            currentMessages.indexOfFirst { it.clientTempId == msg.clientTempId }
         } else {
-            messages.indexOfFirst { it.id == msg.id }
+            currentMessages.indexOfFirst { it.id == msg.id }
         }
 
-        if (index != -1) {
-            messages[index] = msg
+        if (existingIndex != -1) {
+            currentMessages[existingIndex] = msg
         } else if (msg.chatId == state.selectedChatId) {
-            messages.add(msg)
+            currentMessages.add(msg)
             markAsSeen(msg.id)
         }
 
-        val chatToUpdate = state.chats.find { it.id == msg.chatId }
-        val updatedChats = if (chatToUpdate != null) {
-            val newList = state.chats.toMutableList()
-            newList.remove(chatToUpdate)
-            newList.add(0, chatToUpdate.copy(
+        // Update Chat List
+        val currentChats = state.chats.toMutableList()
+        val chatIndex = currentChats.indexOfFirst { it.id == msg.chatId }
+        
+        if (chatIndex != -1) {
+            val chat = currentChats.removeAt(chatIndex)
+            val updatedChat = chat.copy(
                 lastMessagePreview = msg.content.previewText(),
                 unreadCount = when {
                     msg.chatId == state.selectedChatId -> 0
-                    msg.senderId == session.userId -> chatToUpdate.unreadCount
-                    else -> chatToUpdate.unreadCount + 1
+                    msg.senderId == session.userId -> chat.unreadCount
+                    else -> chat.unreadCount + 1
                 }
-            ))
-            newList
+            )
+            currentChats.add(0, updatedChat)
         } else {
+            // New chat from unknown user/group
             refreshHomeSilently()
-            state.chats
         }
 
         _uiState.value = state.copy(
-            messages = messages.sortedBy { it.timestamp },
-            chats = updatedChats
+            messages = currentMessages.sortedBy { it.timestamp },
+            chats = currentChats
         )
     }
 
