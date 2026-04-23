@@ -59,6 +59,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
     private var socketJob: Job? = null
+    private var selectedChatRefreshJob: Job? = null
 
     init {
         restoreSession()
@@ -121,12 +122,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun logout() {
         appendDebugLog("logout()")
         socketJob?.cancel()
+        selectedChatRefreshJob?.cancel()
         messageCacheByChat.clear()
         sessionStore.clear()
         _uiState.value = AppUiState(startupState = StartupState.Auth)
     }
 
     fun backToChatList() {
+        selectedChatRefreshJob?.cancel()
         _uiState.value = _uiState.value.copy(selectedChatId = null, messages = emptyList())
     }
 
@@ -146,6 +149,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         appendDebugLog("openChat(chatId=$chatId)")
         val session = _uiState.value.session ?: return
         ensureSocketObserved(session)
+        startSelectedChatRefresh(session, chatId)
         viewModelScope.launch {
             val cachedMessages = messageCacheByChat[chatId].orEmpty().sortedBy { it.timestamp }
             appendDebugLog("openChat: cachedMessages=${cachedMessages.size}")
@@ -197,11 +201,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             messages = _uiState.value.messages + pendingMsg
         )
+        appendDebugLog("sendMessage: pendingAdded messages=${_uiState.value.messages.size}")
         messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
 
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) { api.sendMessage(session, chatId, text, clientTempId = tempId) }
+                appendDebugLog("sendMessage: acknowledged tempId=$tempId")
+                refreshSelectedChat(session, chatId, reason = "send_success")
+                refreshHomeSilently()
             }.onFailure {
                 appendDebugLog("sendMessage: failure tempId=$tempId error=${it.message}")
                 messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().filter { it.id != tempId }
@@ -337,6 +345,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (socketJob?.isActive == true) return
         appendDebugLog("ensureSocketObserved: restarting socket observer")
         observeSocket(session)
+    }
+
+    private fun startSelectedChatRefresh(session: Session, chatId: String) {
+        selectedChatRefreshJob?.cancel()
+        selectedChatRefreshJob = viewModelScope.launch {
+            while (_uiState.value.session?.userId == session.userId && _uiState.value.selectedChatId == chatId) {
+                delay(3000)
+                refreshSelectedChat(session, chatId, reason = "poll")
+            }
+        }
+    }
+
+    private suspend fun refreshSelectedChat(session: Session, chatId: String, reason: String) {
+        runCatching {
+            val result = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
+            val mergedMessages = mergeMessages(messageCacheByChat[chatId].orEmpty(), result.messages)
+            messageCacheByChat[chatId] = mergedMessages
+            val currentState = _uiState.value
+            if (currentState.selectedChatId != chatId) return
+            appendDebugLog("refreshSelectedChat(reason=$reason, apiMessages=${result.messages.size}, merged=${mergedMessages.size})")
+            _uiState.value = currentState.copy(
+                usersById = currentState.usersById + result.usersById,
+                messages = mergedMessages
+            )
+        }.onFailure {
+            appendDebugLog("refreshSelectedChat(reason=$reason): failure=${it.message}")
+        }
     }
 
     private fun handleIncomingMessage(msg: ChatMessage) {
