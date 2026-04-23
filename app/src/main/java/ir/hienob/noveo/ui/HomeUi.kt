@@ -361,38 +361,12 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
     CreateChannelModal(onClose = { showCreateModal = false })
 }
 
-if (selectedMediaUrl != null) {
-    FullscreenMediaModal(
-        url = selectedMediaUrl!!,
-        onDismiss = { selectedMediaUrl = null }
-    )
-}
-}
-}
-
-@Composable
-private fun FullscreenMediaModal(url: String, onDismiss: () -> Unit) {
-Surface(
-color = Color.Black,
-modifier = Modifier.fillMaxSize()
-) {
-Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-    AsyncImage(
-        model = url,
-        contentDescription = null,
-        modifier = Modifier.fillMaxSize(),
-        contentScale = ContentScale.Fit
-    )
-
-    HeaderIconButton(
-        icon = Icons.Outlined.Close,
-        onClick = onDismiss,
-        modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp)
-    )
-
-}
-}
-}
+        if (selectedMediaUrl != null) {
+            FullscreenMediaModal(
+                url = selectedMediaUrl!!,
+                onDismiss = { selectedMediaUrl = null }
+            )
+        }
 
         ModalHost(visible = showSettingsModal, onDismiss = { showSettingsModal = false }) {
             SettingsModal(
@@ -1756,4 +1730,27 @@ private fun String?.normalizeNoveoUrl(): String? {
     
     val normalized = if (value.startsWith("/")) value else "/$value"
     return "$NOVEO_BASE_URL$normalized"
+}
+
+@Composable
+private fun FullscreenMediaModal(url: String, onDismiss: () -> Unit) {
+    Surface(
+        color = Color.Black,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+            
+            HeaderIconButton(
+                icon = Icons.Outlined.Close,
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp)
+            )
+        }
+    }
 }
