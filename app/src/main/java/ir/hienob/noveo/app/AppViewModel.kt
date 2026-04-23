@@ -283,11 +283,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleIncomingMessage(msg: ChatMessage) {
-        val session = _uiState.value.session ?: return
-        val cachedMessages = mergeMessages(messageCacheByChat[msg.chatId].orEmpty(), listOf(msg))
+        val latestState = _uiState.value
+        val session = latestState.session ?: return
+        val baseMessages = if (msg.chatId == latestState.selectedChatId) {
+            mergeMessages(messageCacheByChat[msg.chatId].orEmpty(), latestState.messages)
+        } else {
+            messageCacheByChat[msg.chatId].orEmpty()
+        }
+        val cachedMessages = mergeMessages(baseMessages, listOf(msg))
         messageCacheByChat[msg.chatId] = cachedMessages
 
-        val latestState = _uiState.value
         val currentChats = latestState.chats.toMutableList()
         val chatIndex = currentChats.indexOfFirst { it.id == msg.chatId }
 
