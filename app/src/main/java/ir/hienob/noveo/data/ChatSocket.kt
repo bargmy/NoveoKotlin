@@ -44,39 +44,51 @@ class ChatSocket(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                val json = JSONObject(text)
-                val type = json.optString("type")
-                val knownUsers = getKnownUsers()
-                
-                when (type) {
-                    "login_success" -> {
-                        webSocket.send(JSONObject().put("type", "resync_state").toString())
-                    }
-                    "message", "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
-                    "message_sent" -> trySend(SocketEvent.MessageSent(parseRealtimeMessage(json, knownUsers)))
-                    "typing" -> {
-                        val chatId = json.optString("chatId").takeIf { it != "null" }
-                        val senderId = json.optString("senderId").takeIf { it != "null" }
-                        if (chatId != null && senderId != null) {
-                            trySend(SocketEvent.Typing(chatId, senderId))
+                runCatching {
+                    val json = JSONObject(text)
+                    val type = json.optString("type")
+                    val knownUsers = getKnownUsers()
+                    val payload = json.unwrapRealtimePayload()
+
+                    when (type) {
+                        "login_success" -> {
+                            webSocket.send(JSONObject().put("type", "resync_state").toString())
                         }
-                    }
-                    "message_seen", "message_seen_update" -> {
-                         trySend(SocketEvent.MessageSeenUpdate(
-                             json.optString("chatId"),
-                             json.optString("messageId"),
-                             json.optString("userId")
-                         ))
-                    }
-                    "user_list_update" -> {
-                        val (users, online) = parseUsers(json)
-                        trySend(SocketEvent.UserListUpdate(users, online))
-                    }
-                    "chat_updated" -> trySend(SocketEvent.ChatUpdated(json.optString("chatId")))
-                    "chat_history" -> {
-                        val users = parseUsers(json).first
-                        val chats = parseChats(json, knownUsers + users, session.userId)
-                        trySend(SocketEvent.HistoryUpdate(chats, users))
+                        "message", "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
+                        "message_sent" -> trySend(SocketEvent.MessageSent(parseRealtimeMessage(json, knownUsers)))
+                        "typing" -> {
+                            val chatId = payload.optString("chatId").sanitizeRealtimeField()
+                                ?: json.optString("chatId").sanitizeRealtimeField()
+                            val senderId = payload.optString("senderId").sanitizeRealtimeField()
+                                ?: json.optString("senderId").sanitizeRealtimeField()
+                            if (chatId != null && senderId != null) {
+                                trySend(SocketEvent.Typing(chatId, senderId))
+                            }
+                        }
+                        "message_seen", "message_seen_update" -> {
+                            val chatId = payload.optString("chatId").sanitizeRealtimeField()
+                                ?: json.optString("chatId").sanitizeRealtimeField()
+                            val messageId = payload.optString("messageId").sanitizeRealtimeField()
+                                ?: json.optString("messageId").sanitizeRealtimeField()
+                            val userId = payload.optString("userId").sanitizeRealtimeField()
+                                ?: json.optString("userId").sanitizeRealtimeField()
+                            if (chatId != null && messageId != null && userId != null) {
+                                trySend(SocketEvent.MessageSeenUpdate(chatId, messageId, userId))
+                            }
+                        }
+                        "user_list_update" -> {
+                            val (users, online) = parseUsers(json)
+                            trySend(SocketEvent.UserListUpdate(users, online))
+                        }
+                        "chat_updated" -> {
+                            payload.optString("chatId").sanitizeRealtimeField()
+                                ?.let { trySend(SocketEvent.ChatUpdated(it)) }
+                        }
+                        "chat_history" -> {
+                            val users = parseUsers(json).first
+                            val chats = parseChats(json, knownUsers + users, session.userId)
+                            trySend(SocketEvent.HistoryUpdate(chats, users))
+                        }
                     }
                 }
             }
@@ -96,3 +108,8 @@ class ChatSocket(
     }
 }
 
+private fun String?.sanitizeRealtimeField(): String? {
+    val value = this?.trim().orEmpty()
+    if (value.isBlank()) return null
+    return value.takeUnless { it.equals("null", ignoreCase = true) }
+}
