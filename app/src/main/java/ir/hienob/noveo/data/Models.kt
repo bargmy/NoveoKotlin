@@ -15,6 +15,22 @@ data class ProfileSkin(
     val gradientStops: Int = 2
 )
 
+data class Transaction(
+    val id: String,
+    val amountTenths: Int,
+    val balanceAfterTenths: Int,
+    val type: String,
+    val description: String,
+    val createdAt: Long,
+    val relatedUserId: String? = null
+)
+
+data class Wallet(
+    val balanceTenths: Int,
+    val balanceLabel: String,
+    val transactions: List<Transaction> = emptyList()
+)
+
 data class UserSummary(
     val id: String,
     val username: String,

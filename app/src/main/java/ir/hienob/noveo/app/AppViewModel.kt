@@ -12,6 +12,7 @@ import ir.hienob.noveo.data.NoveoApi
 import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.SessionStore
 import ir.hienob.noveo.data.UserSummary
+import ir.hienob.noveo.data.Wallet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -41,6 +42,7 @@ data class AppUiState(
     val authModeSignup: Boolean = false,
     val connectionTitle: String = "Noveo",
     val connectionDetail: String? = null,
+    val wallet: Wallet? = null
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -246,6 +248,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
         runCatching {
             val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
+            val wallet = withContext(Dispatchers.IO) { runCatching { api.getStarsOverview(session) }.getOrNull() }
             val selectedChatId = if (preserveShell) _uiState.value.selectedChatId else null
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
@@ -253,6 +256,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 session = session,
                 usersById = home.usersById,
                 chats = home.chats,
+                wallet = wallet,
                 selectedChatId = selectedChatId,
                 messages = if (selectedChatId == null) emptyList() else _uiState.value.messages,
                 error = null,

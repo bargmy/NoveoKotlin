@@ -109,7 +109,7 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val NOVEO_BASE_URL = "https://noveo.ir"
+private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
 private const val CLIENT_VERSION = "v0.1 mobile"
 
 private enum class SettingsSection {
@@ -1260,7 +1260,7 @@ private fun MenuSheet(
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("Stars", fontWeight = FontWeight.SemiBold)
-                    Text("${me?.starsBalance ?: 0.0} Stars", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text("${state.wallet?.balanceLabel ?: "0.00"} Stars", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
             }
         }

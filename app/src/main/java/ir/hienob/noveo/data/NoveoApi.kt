@@ -18,10 +18,43 @@ import org.json.JSONObject
 class NoveoApi(
     private val client: OkHttpClient = OkHttpClient(),
     private val wsUrl: String = "wss://noveo.ir:8443/ws",
-    private val origin: String = "https://noveo.ir"
+    private val origin: String = "https://noveo.ir:8443"
 ) {
     fun login(handle: String, password: String): Session = auth(JSONObject().put("type", "login_with_password").put("username", handle).put("password", password).put("languageCode", "en"))
     fun signup(handle: String, password: String): Session = auth(JSONObject().put("type", "register").put("username", handle).put("password", password).put("languageCode", "en"))
+
+    fun getStarsOverview(session: Session): Wallet {
+        val url = "$origin/stars/overview".toHttpUrl()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Stars load failed (${response.code})")
+            val payload = JSONObject(response.body?.string().orEmpty())
+            val walletJson = payload.optJSONObject("wallet") ?: error("Missing wallet data")
+            val txArray = walletJson.optJSONArray("transactions") ?: JSONArray()
+            val transactions = (0 until txArray.length()).map { i ->
+                val tx = txArray.getJSONObject(i)
+                Transaction(
+                    id = tx.optString("transactionId"),
+                    amountTenths = tx.optInt("amountTenths"),
+                    balanceAfterTenths = tx.optInt("balanceAfterTenths"),
+                    type = tx.optString("type"),
+                    description = tx.optString("description"),
+                    createdAt = tx.optLong("createdAt"),
+                    relatedUserId = tx.optString("relatedUserId").takeIf { it.isNotBlank() && it != "null" }
+                )
+            }
+            return Wallet(
+                balanceTenths = walletJson.optInt("balanceTenths"),
+                balanceLabel = walletJson.optString("balanceLabel", "0.00"),
+                transactions = transactions
+            )
+        }
+    }
 
     fun getHomeData(session: Session): HomeData {
         val sync = sync(session)
