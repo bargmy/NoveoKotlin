@@ -11,6 +11,7 @@ import ir.hienob.noveo.data.MessageContent
 import ir.hienob.noveo.data.NoveoApi
 import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.SessionStore
+import ir.hienob.noveo.data.SocketEvent
 import ir.hienob.noveo.data.UserSummary
 import ir.hienob.noveo.data.Wallet
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +44,8 @@ data class AppUiState(
     val connectionTitle: String = "Noveo",
     val connectionDetail: String? = null,
     val wallet: Wallet? = null,
-    val contacts: List<UserSummary> = emptyList()
+    val contacts: List<UserSummary> = emptyList(),
+    val typingUsers: Map<String, Set<String>> = emptyMap() // chatId -> set of userIds
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -67,10 +69,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = _uiState.value.copy(
                     startupState = StartupState.Onboarding,
                     loading = false,
-                    selectedChatId = null,
-                    messages = emptyList(),
-                    connectionTitle = "Noveo",
-                    connectionDetail = null,
                 )
                 return@launch
             }
@@ -79,22 +77,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 startupState = StartupState.Home,
                 session = session,
                 loading = true,
-                error = null,
                 connectionTitle = "Connecting...",
-                connectionDetail = null,
             )
-            loadHome(session, preserveShell = true)
+            loadHome(session)
         }
     }
 
     fun dismissOnboarding() {
-        _uiState.value = _uiState.value.copy(
-            startupState = StartupState.Auth,
-            loading = false,
-            error = null,
-            connectionTitle = "Noveo",
-            connectionDetail = null,
-        )
+        _uiState.value = _uiState.value.copy(startupState = StartupState.Auth)
     }
 
     fun setAuthMode(signup: Boolean) {
@@ -104,26 +94,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun authenticate(handle: String, password: String) {
         viewModelScope.launch {
             runCatching {
-                _uiState.value = _uiState.value.copy(
-                    startupState = StartupState.Home,
-                    loading = true,
-                    error = null,
-                    connectionTitle = "Connecting...",
-                    connectionDetail = null,
-                )
+                _uiState.value = _uiState.value.copy(startupState = StartupState.Home, loading = true, connectionTitle = "Connecting...")
                 val session = withContext(Dispatchers.IO) {
                     if (_uiState.value.authModeSignup) api.signup(handle, password) else api.login(handle, password)
                 }
                 sessionStore.write(session)
-                loadHome(session, preserveShell = true)
+                loadHome(session)
             }.onFailure {
-                _uiState.value = _uiState.value.copy(
-                    startupState = StartupState.Auth,
-                    loading = false,
-                    error = it.message ?: "Authentication failed",
-                    connectionTitle = "Noveo",
-                    connectionDetail = null,
-                )
+                _uiState.value = _uiState.value.copy(startupState = StartupState.Auth, loading = false, error = it.message ?: "Authentication failed")
             }
         }
     }
@@ -135,53 +113,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun backToChatList() {
-        _uiState.value = _uiState.value.copy(
-            selectedChatId = null,
-            messages = emptyList(),
-            error = null,
-            loading = false,
-        )
+        _uiState.value = _uiState.value.copy(selectedChatId = null, messages = emptyList())
     }
 
     fun openDirectChat(userId: String) {
         val state = _uiState.value
         val existingChat = state.chats.firstOrNull { chat ->
-            chat.chatType == "private" &&
-                chat.memberIds.contains(userId) &&
-                state.session?.userId?.let(chat.memberIds::contains) == true
+            chat.chatType == "private" && chat.memberIds.contains(userId)
         }
         if (existingChat != null) {
             openChat(existingChat.id)
             return
         }
-        val name = state.usersById[userId]?.username?.ifBlank { "that contact" } ?: "that contact"
-        _uiState.value = state.copy(error = "No existing chat with $name yet.")
+        // If not exists, we can't open messages, but we can search for a temporary chatId pattern if server supports it
     }
 
     fun openChat(chatId: String) {
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(selectedChatId = chatId, messages = emptyList(), loading = true)
             runCatching {
-                _uiState.value = _uiState.value.copy(
-                    loading = true,
-                    selectedChatId = chatId,
-                    error = null,
-                    connectionTitle = "Updating...",
-                )
                 val result = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
                 _uiState.value = _uiState.value.copy(
                     usersById = _uiState.value.usersById + result.usersById,
-                    messages = result.messages.sortedWith(compareBy<ChatMessage> { it.createdAt }.thenBy { it.id }),
-                    loading = false,
-                    connectionTitle = "Noveo",
+                    messages = result.messages.sortedBy { it.timestamp },
+                    loading = false
                 )
             }.onFailure {
-                _uiState.value = _uiState.value.copy(
-                    loading = false,
-                    error = null,
-                    connectionTitle = "Connecting...",
-                    connectionDetail = it.message,
-                )
+                _uiState.value = _uiState.value.copy(loading = false, error = it.message)
             }
         }
     }
@@ -190,20 +149,134 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
         if (text.isBlank()) return
+
+        val tempId = "temp-${System.currentTimeMillis()}"
+        val pendingMsg = ChatMessage(
+            id = tempId,
+            chatId = chatId,
+            senderId = session.userId,
+            senderName = _uiState.value.usersById[session.userId]?.username ?: "Me",
+            content = MessageContent(text = text),
+            timestamp = System.currentTimeMillis() / 1000,
+            pending = true,
+            clientTempId = tempId
+        )
+
+        _uiState.value = _uiState.value.copy(
+            messages = _uiState.value.messages + pendingMsg
+        )
+
         viewModelScope.launch {
             runCatching {
-                api.sendMessage(session, chatId, text)
-                refreshHomeAndSelectedChat(session, chatId)
+                withContext(Dispatchers.IO) { api.sendMessage(session, chatId, text, clientTempId = tempId) }
             }.onFailure {
                 _uiState.value = _uiState.value.copy(
-                    error = null,
-                    connectionTitle = "Connecting...",
-                    connectionDetail = it.message,
+                    messages = _uiState.value.messages.filter { it.id != tempId }
                 )
             }
         }
     }
 
+    private suspend fun loadHome(session: Session) {
+        runCatching {
+            val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
+            val wallet = withContext(Dispatchers.IO) { runCatching { api.getStarsOverview(session) }.getOrNull() }
+            val contacts = withContext(Dispatchers.IO) { runCatching { api.getContacts(session) }.getOrDefault(emptyList()) }
+            
+            _uiState.value = _uiState.value.copy(
+                startupState = StartupState.Home,
+                loading = false,
+                session = session,
+                usersById = home.usersById,
+                chats = home.chats,
+                wallet = wallet,
+                contacts = contacts,
+                connectionTitle = "Noveo",
+            )
+            observeSocket(session)
+        }.onFailure {
+            _uiState.value = _uiState.value.copy(loading = false, error = it.message, connectionTitle = "Connecting...")
+        }
+    }
+
+    private fun observeSocket(session: Session) {
+        socketJob?.cancel()
+        socketJob = viewModelScope.launch {
+            socket.connect(session) { _uiState.value.usersById }.collect { event ->
+                when (event) {
+                    is SocketEvent.NewMessage -> handleIncomingMessage(event.message)
+                    is SocketEvent.MessageSent -> handleIncomingMessage(event.message)
+                    is SocketEvent.Typing -> handleTyping(event.chatId, event.senderId)
+                    is SocketEvent.MessageSeenUpdate -> handleSeenUpdate(event.chatId, event.messageId, event.userId)
+                    is SocketEvent.UserListUpdate -> {
+                        _uiState.value = _uiState.value.copy(
+                            usersById = _uiState.value.usersById + event.usersById,
+                            onlineUserIds = event.onlineIds
+                        )
+                    }
+                    is SocketEvent.ChatUpdated -> {
+                        // Could trigger a single chat refresh
+                    }
+                }
+            }
+        }
+    }
+
+    private fun handleIncomingMessage(msg: ChatMessage) {
+        val state = _uiState.value
+        val messages = state.messages.toMutableList()
+        
+        val index = if (msg.clientTempId != null) {
+            messages.indexOfFirst { it.clientTempId == msg.clientTempId }
+        } else {
+            messages.indexOfFirst { it.id == msg.id }
+        }
+
+        if (index != -1) {
+            messages[index] = msg
+        } else if (msg.chatId == state.selectedChatId) {
+            messages.add(msg)
+        }
+
+        val updatedChats = state.chats.map {
+            if (it.id == msg.chatId) {
+                it.copy(
+                    lastMessagePreview = msg.content.previewText(),
+                    unreadCount = if (msg.chatId == state.selectedChatId) 0 else it.unreadCount + 1
+                )
+            } else it
+        }
+
+        _uiState.value = state.copy(
+            messages = messages.sortedBy { it.timestamp },
+            chats = updatedChats
+        )
+    }
+
+    private fun handleTyping(chatId: String, userId: String) {
+        val currentTyping = _uiState.value.typingUsers[chatId].orEmpty()
+        _uiState.value = _uiState.value.copy(
+            typingUsers = _uiState.value.typingUsers + (chatId to (currentTyping + userId))
+        )
+        viewModelScope.launch {
+            delay(3000)
+            val stillTyping = _uiState.value.typingUsers[chatId].orEmpty() - userId
+            _uiState.value = _uiState.value.copy(
+                typingUsers = _uiState.value.typingUsers + (chatId to stillTyping)
+            )
+        }
+    }
+
+    private fun handleSeenUpdate(chatId: String, messageId: String, userId: String) {
+        if (chatId != _uiState.value.selectedChatId) return
+        val messages = _uiState.value.messages.map {
+            if (it.id == messageId) {
+                it.copy(seenBy = (it.seenBy + userId).distinct())
+            } else it
+        }
+        _uiState.value = _uiState.value.copy(messages = messages)
+    }
+    
     fun searchPublicDirectory(query: String) {
         val session = _uiState.value.session ?: return
         val normalized = query.trim()
@@ -213,149 +286,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val foundUsers = withContext(Dispatchers.IO) { api.searchPublicUsers(session, normalized) }
                 if (foundUsers.isNotEmpty()) {
                     _uiState.value = _uiState.value.copy(
-                        usersById = _uiState.value.usersById + foundUsers.associateBy { it.id },
-                        error = null
+                        usersById = _uiState.value.usersById + foundUsers.associateBy { it.id }
                     )
                 }
-            }.onFailure {
-                _uiState.value = _uiState.value.copy(error = null)
             }
         }
     }
-    
+
     fun updateProfile(username: String, bio: String) {
-        val session: Session = _uiState.value.session ?: return
+        val session = _uiState.value.session ?: return
         viewModelScope.launch {
             runCatching {
-                _uiState.value = _uiState.value.copy(loading = true)
-                withContext(Dispatchers.IO) {
-                    api.updateProfile(session, username, bio)
-                }
-                // Refresh contacts and home data to get updated profile
-                loadHome(session, preserveShell = true)
-            }.onFailure {
-                _uiState.value = _uiState.value.copy(loading = false, error = it.message)
-            }
-        }
-    }
-
-    private suspend fun loadHome(session: Session, preserveShell: Boolean) {
-        _uiState.value = _uiState.value.copy(
-            startupState = StartupState.Home,
-            session = session,
-            loading = true,
-            connectionTitle = "Updating...",
-            connectionDetail = null,
-        )
-        runCatching {
-            val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
-            val wallet = withContext(Dispatchers.IO) { runCatching { api.getStarsOverview(session) }.getOrNull() }
-            val contacts = withContext(Dispatchers.IO) { runCatching { api.getContacts(session) }.getOrDefault(emptyList()) }
-            val selectedChatId = if (preserveShell) _uiState.value.selectedChatId else null
-            _uiState.value = _uiState.value.copy(
-                startupState = StartupState.Home,
-                loading = false,
-                session = session,
-                usersById = home.usersById,
-                chats = home.chats,
-                wallet = wallet,
-                contacts = contacts,
-                selectedChatId = selectedChatId,
-                messages = if (selectedChatId == null) emptyList() else _uiState.value.messages,
-                error = null,
-                connectionTitle = "Noveo",
-                connectionDetail = null,
-            )
-            observeSocket(session)
-        }.onFailure {
-            _uiState.value = _uiState.value.copy(
-                startupState = StartupState.Home,
-                loading = false,
-                session = session,
-                error = it.message,
-                connectionTitle = "Connecting...",
-                connectionDetail = it.message,
-            )
-        }
-    }
-
-    private suspend fun refreshHomeAndSelectedChat(
-        session: Session,
-        chatId: String? = _uiState.value.selectedChatId,
-    ) {
-        runCatching {
-            _uiState.value = _uiState.value.copy(connectionTitle = "Updating...")
-            val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
-            val refreshedMessages = if (chatId.isNullOrBlank()) {
-                _uiState.value.messages
-            } else {
-                withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
-                    .messages
-                    .sortedWith(compareBy<ChatMessage> { it.createdAt }.thenBy { it.id })
-            }
-            _uiState.value = _uiState.value.copy(
-                usersById = home.usersById,
-                chats = home.chats,
-                messages = refreshedMessages,
-                loading = false,
-                error = null,
-                connectionTitle = "Noveo",
-                connectionDetail = null,
-            )
-        }.onFailure {
-            _uiState.value = _uiState.value.copy(
-                loading = false,
-                error = it.message,
-                connectionTitle = "Connecting...",
-                connectionDetail = it.message,
-            )
-        }
-    }
-
-    private fun observeSocket(session: Session) {
-        socketJob?.cancel()
-        socketJob = viewModelScope.launch {
-            runCatching {
-                socket.connect(session, _uiState.value.usersById).collect { incoming ->
-                    val state = _uiState.value
-                    val updatedMessages = if (incoming.chatId == state.selectedChatId) {
-                        (state.messages + incoming)
-                            .distinctBy { message ->
-                                message.id.ifBlank { "${message.chatId}-${message.createdAt}-${message.senderId}" }
-                            }
-                            .sortedWith(compareBy<ChatMessage> { it.createdAt }.thenBy { it.id })
-                    } else {
-                        state.messages
-                    }
-
-                    val movedChat = state.chats.firstOrNull { it.id == incoming.chatId }?.copy(
-                        lastMessagePreview = incoming.content.previewText().ifBlank {
-                            state.chats.firstOrNull { it.id == incoming.chatId }?.lastMessagePreview.orEmpty()
-                        },
-                        unreadCount = if (incoming.chatId == state.selectedChatId) {
-                            0
-                        } else {
-                            (state.chats.firstOrNull { it.id == incoming.chatId }?.unreadCount ?: 0) + 1
-                        },
-                    )
-                    val remainingChats = state.chats.filterNot { it.id == incoming.chatId }
-                    val updatedChats = listOfNotNull(movedChat) + remainingChats
-
-                    _uiState.value = state.copy(
-                        chats = updatedChats,
-                        messages = updatedMessages,
-                        error = null,
-                        connectionTitle = "Noveo",
-                        connectionDetail = null,
-                    )
-                }
-            }.onFailure {
-                _uiState.value = _uiState.value.copy(
-                    connectionTitle = "Connecting...",
-                    connectionDetail = it.message,
-                    error = null,
-                    loading = false,
-                )
+                withContext(Dispatchers.IO) { api.updateProfile(session, username, bio) }
+                loadHome(session)
             }
         }
     }

@@ -47,6 +47,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -639,8 +640,24 @@ private fun ChatPane(
     val onlineCount = remember(selectedChat, state.onlineUserIds) {
         selectedChat?.memberIds?.count { state.onlineUserIds.contains(it) } ?: 0
     }
-    val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount) {
+    
+    val typingUsers = state.typingUsers[selectedChat?.id].orEmpty()
+    val typingText = remember(typingUsers, state.usersById) {
+        if (typingUsers.isEmpty()) null
+        else {
+            val names = typingUsers.mapNotNull { state.usersById[it]?.username?.split(" ")?.firstOrNull() }
+            when {
+                names.isEmpty() -> "someone is typing..."
+                names.size == 1 -> "${names[0]} is typing..."
+                names.size == 2 -> "${names[0]} and ${names[1]} are typing..."
+                else -> "${names.size} people are typing..."
+            }
+        }
+    }
+
+    val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount, typingText) {
         if (selectedChat == null) return@remember "conversation"
+        if (typingText != null) return@remember typingText
         if (selectedChat.chatType == "private") {
             if (isOnline) "online" else "last seen recently"
         } else {
@@ -771,6 +788,29 @@ private fun ComposerBar(
 
 @Composable
 private fun MessageRow(message: ChatMessage, ownMessage: Boolean, senderAvatarUrl: String?) {
+    val isSystem = message.senderId == "system"
+    if (isSystem) {
+        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                shape = CircleShape
+            ) {
+                Text(
+                    message.content.text ?: "",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+
+    val timeStr = remember(message.timestamp) {
+        val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+        sdf.format(Date(message.timestamp * 1000))
+    }
+
     Column(
         horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
         modifier = Modifier.fillMaxWidth()
@@ -788,36 +828,71 @@ private fun MessageRow(message: ChatMessage, ownMessage: Boolean, senderAvatarUr
             ) {
                 if (!ownMessage) {
                     Text(
-                        message.senderName.ifBlank { "Unknown" },
+                        message.senderName,
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
                 }
                 Card(
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(22.dp).copy(
+                        bottomEnd = if (ownMessage) CornerSize(4.dp) else CornerSize(22.dp),
+                        bottomStart = if (!ownMessage) CornerSize(4.dp) else CornerSize(22.dp)
+                    ),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (ownMessage) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-                    )
+                        containerColor = if (ownMessage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
                     Column(modifier = Modifier.padding(if (hasVisualMedia) 6.dp else 12.dp)) {
                         AttachmentPreview(file = message.content.file)
-                        val preview = message.content.previewText().removePrefix("[File] ")
-                        if (preview.isNotBlank()) {
+                        val caption = message.content.text
+                        if (!caption.isNullOrBlank()) {
                             if (message.content.file != null) Spacer(Modifier.height(8.dp))
                             Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 0.dp)) {
-                                MarkdownText(preview)
+                                MarkdownText(
+                                    text = caption,
+                                    color = if (ownMessage) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                        
+                        Row(
+                            modifier = Modifier.align(Alignment.End).padding(top = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                timeStr,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (ownMessage) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (ownMessage) {
+                                Spacer(Modifier.width(4.dp))
+                                if (message.pending) {
+                                    Text("...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f))
+                                } else {
+                                    val seen = message.seenBy.isNotEmpty()
+                                    Icon(
+                                        imageVector = if (seen) Icons.AutoMirrored.Outlined.ArrowBack else Icons.Outlined.Info, // Placeholder ticks
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = if (seen) Color(0xFF90EE90) else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                    )
+                                }
                             }
                         }
                     }
                 }
+            }
+            if (!ownMessage) {
+                Spacer(Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun MarkdownText(text: String) {
+private fun MarkdownText(text: String, color: Color = MaterialTheme.colorScheme.onSurface) {
     val annotated = remember(text) {
         buildAnnotatedString {
             var index = 0
@@ -840,7 +915,7 @@ private fun MarkdownText(text: String) {
             }
         }
     }
-    Text(annotated)
+    Text(annotated, color = color)
 }
 
 @Composable

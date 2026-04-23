@@ -96,16 +96,25 @@ class NoveoApi(
         }
     }
 
-    fun sendMessage(session: Session, chatId: String, text: String) {
+    fun sendMessage(session: Session, chatId: String, text: String, clientTempId: String? = null, replyToId: String? = null) {
         val latch = CountDownLatch(1)
         val failure = AtomicReference<String?>(null)
         val done = AtomicBoolean(false)
+        val content = JSONObject().put("text", text).toString()
         val socket = client.newWebSocket(request(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.send(reconnect(session).toString()) }
             override fun onMessage(webSocket: WebSocket, textMsg: String) {
                 val msg = JSONObject(textMsg)
                 when (msg.optString("type")) {
-                    "login_success" -> webSocket.send(JSONObject().put("type", "message").put("chatId", chatId).put("content", text).toString())
+                    "login_success" -> {
+                        val payload = JSONObject()
+                            .put("type", "message")
+                            .put("chatId", chatId)
+                            .put("content", content)
+                            .put("replyToId", replyToId)
+                            .put("clientTempId", clientTempId)
+                        webSocket.send(payload.toString())
+                    }
                     "new_message", "message_sent", "chat_history" -> { if (done.compareAndSet(false, true)) latch.countDown(); webSocket.close(1000, null) }
                     "auth_failed", "error" -> { failure.set(msg.optString("message", "Unable to send")); if (done.compareAndSet(false, true)) latch.countDown(); webSocket.close(1000, null) }
                 }

@@ -74,7 +74,8 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
                     unreadCount = item.optInt("unreadCount", item.optInt("unread", 0)),
                     memberIds = memberIds,
                     handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
-                    isVerified = item.optBoolean("isVerified", false)
+                    isVerified = item.optBoolean("isVerified", false),
+                    ownerId = item.optString("ownerId").takeIf { it.isNotBlank() }
                 )
             )
         }
@@ -106,13 +107,22 @@ internal fun parseRealtimeMessage(payload: JSONObject, usersById: Map<String, Us
 private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map<String, UserSummary>): ChatMessage {
     val messageId = message.optString("messageId").sanitizeServerString().ifBlank { message.optString("id").sanitizeServerString() }
     val senderId = message.optString("senderId").sanitizeServerString().ifBlank { message.optString("sender").sanitizeServerString() }
+    val timestamp = message.optLong("timestamp", message.optLong("createdAt", 0L))
+    val seenByArray = message.optJSONArray("seenBy") ?: JSONArray()
+    val seenBy = (0 until seenByArray.length()).map { seenByArray.optString(it) }
+
     return ChatMessage(
         id = messageId,
         chatId = message.optString("chatId").sanitizeServerString().ifBlank { chatId },
         senderId = senderId,
         senderName = resolveSenderName(senderId, message, usersById),
         content = parseMessageContent(message.opt("content")),
-        createdAt = message.optLong("timestamp", message.optLong("createdAt", 0L))
+        timestamp = timestamp,
+        seenBy = seenBy,
+        pending = message.optBoolean("pending", false),
+        clientTempId = message.optString("clientTempId").takeIf { it.isNotBlank() },
+        replyToId = message.optString("replyToId").takeIf { it.isNotBlank() },
+        editedAt = message.optLong("editedAt").takeIf { it > 0 }
     )
 }
 
@@ -122,7 +132,11 @@ internal fun parseMessageContent(raw: Any?): MessageContent {
         is String -> {
             val text = raw.sanitizeServerString()
             if (text.isBlank()) return MessageContent()
-            runCatching { JSONObject(text) }.getOrNull() ?: return MessageContent(text = text)
+            if (text.startsWith("{") || text.startsWith("[")) {
+                runCatching { JSONObject(text) }.getOrNull() ?: return MessageContent(text = text)
+            } else {
+                return MessageContent(text = text)
+            }
         }
         else -> return MessageContent(text = raw?.toString().sanitizeServerString())
     }
@@ -131,6 +145,7 @@ internal fun parseMessageContent(raw: Any?): MessageContent {
         ?: payload.optJSONObject("attachment")
         ?: payload.optJSONObject("document")
         ?: payload.optJSONObject("media")
+    
     val file = fileObject?.let {
         MessageFileAttachment(
             url = resolveAssetUrl(it, "url", "src", "path", "downloadUrl", "fileUrl").orEmpty(),
@@ -139,19 +154,18 @@ internal fun parseMessageContent(raw: Any?): MessageContent {
             },
             type = it.optString("type").sanitizeServerString().ifBlank {
                 it.optString("mimeType").sanitizeServerString().ifBlank { it.optString("contentType").sanitizeServerString() }
-            },
-            caption = it.optString("caption").sanitizeServerString().ifBlank { payload.optString("caption").sanitizeServerString() }
+            }
         )
     }
+    
     return MessageContent(
-        text = payload.optString("text").sanitizeServerString(),
+        text = payload.optString("text").takeIf { it.isNotBlank() },
         file = file,
-        pollQuestion = payload.optJSONObject("poll")?.optString("question")?.sanitizeServerString()?.takeIf { it.isNotBlank() },
-        themeName = payload.optJSONObject("theme")?.optString("name")?.sanitizeServerString()?.takeIf { it.isNotBlank() },
-        callLabel = payload.optJSONObject("callLog")?.let {
-            if (it.optString("status").sanitizeServerString() == "missed") "Missed call" else "Call"
-        },
-        forwardedLabel = payload.optJSONObject("forwardedInfo")?.let { "Forwarded message" }
+        poll = payload.optJSONObject("poll")?.toString(),
+        theme = payload.optJSONObject("theme")?.toString(),
+        callLog = payload.optJSONObject("callLog")?.toString(),
+        forwardedInfo = payload.has("forwardedInfo"),
+        replyToId = payload.optString("replyToId").takeIf { it.isNotBlank() }
     )
 }
 
@@ -180,15 +194,6 @@ private fun resolveChatAvatar(chat: JSONObject, usersById: Map<String, UserSumma
             ?.takeIf { it.isNotBlank() }
     }
     return null
-}
-
-private fun resolveSenderName(senderId: String, payload: JSONObject, usersById: Map<String, UserSummary>): String {
-    if (senderId == "system") return "System"
-    if (senderId == "anonymous") return "Anonymous"
-    return usersById[senderId]?.username?.sanitizeServerString()?.takeIf { it.isNotBlank() }
-        ?: payload.optString("senderName").sanitizeServerString().takeIf { it.isNotBlank() }
-        ?: payload.optString("sender").sanitizeServerString().takeIf { it.isNotBlank() }
-        ?: "Unknown"
 }
 
 private fun resolveAssetUrl(source: JSONObject, vararg keys: String): String? {

@@ -10,12 +10,21 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 
+sealed class SocketEvent {
+    data class NewMessage(val message: ChatMessage) : SocketEvent()
+    data class MessageSent(val message: ChatMessage) : SocketEvent()
+    data class Typing(val chatId: String, val senderId: String) : SocketEvent()
+    data class MessageSeenUpdate(val chatId: String, val messageId: String, val userId: String) : SocketEvent()
+    data class UserListUpdate(val usersById: Map<String, UserSummary>, val onlineIds: Set<String>) : SocketEvent()
+    data class ChatUpdated(val chatId: String) : SocketEvent() // Simplified
+}
+
 class ChatSocket(
     private val client: OkHttpClient = OkHttpClient(),
     private val origin: String = "https://noveo.ir"
 ) {
 
-    fun connect(session: Session, knownUsers: Map<String, UserSummary>): Flow<ChatMessage> = callbackFlow {
+    fun connect(session: Session, getKnownUsers: () -> Map<String, UserSummary>): Flow<SocketEvent> = callbackFlow {
         val request = Request.Builder()
             .url("wss://noveo.ir:8443/ws")
             .header("Origin", origin)
@@ -35,15 +44,33 @@ class ChatSocket(
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val json = JSONObject(text)
-                if (json.optString("type") != "new_message") return
-                trySend(parseRealtimeMessage(json, knownUsers))
+                val type = json.optString("type")
+                val knownUsers = getKnownUsers()
+                
+                when (type) {
+                    "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
+                    "message_sent" -> trySend(SocketEvent.MessageSent(parseRealtimeMessage(json, knownUsers)))
+                    "typing" -> trySend(SocketEvent.Typing(json.optString("chatId"), json.optString("senderId")))
+                    "message_seen", "message_seen_update" -> {
+                         trySend(SocketEvent.MessageSeenUpdate(
+                             json.optString("chatId"),
+                             json.optString("messageId"),
+                             json.optString("userId")
+                         ))
+                    }
+                    "user_list_update" -> {
+                        val (users, online) = parseUsers(json)
+                        trySend(SocketEvent.UserListUpdate(users, online))
+                    }
+                    "chat_updated" -> trySend(SocketEvent.ChatUpdated(json.optString("chatId")))
+                }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 val code = response?.code
                 val message = when (code) {
-                    404 -> "Noveo realtime server was not found while opening the chat stream (HTTP 404). Check the websocket endpoint on the server."
-                    401, 403 -> "Noveo rejected the realtime connection while opening the chat stream (HTTP $code)."
+                    404 -> "Noveo realtime server was not found (HTTP 404)."
+                    401, 403 -> "Noveo rejected the realtime connection (HTTP $code)."
                     else -> t.message ?: t.javaClass.simpleName
                 }
                 close(IllegalStateException(message, t))

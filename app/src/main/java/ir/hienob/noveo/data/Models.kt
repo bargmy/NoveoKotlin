@@ -46,26 +46,29 @@ data class UserSummary(
 data class MessageFileAttachment(
     val url: String = "",
     val name: String = "",
-    val type: String = "",
-    val caption: String = ""
-)
+    val type: String = ""
+) {
+    fun isImage(): Boolean = type.startsWith("image/") || name.endsWith(".jpg", true) || name.endsWith(".png", true) || name.endsWith(".gif", true) || name.endsWith(".webp", true)
+    fun isVideo(): Boolean = type.startsWith("video/") || name.endsWith(".mp4", true) || name.endsWith(".webm", true)
+}
 
 data class MessageContent(
-    val text: String = "",
+    val text: String? = null,
     val file: MessageFileAttachment? = null,
-    val pollQuestion: String? = null,
-    val themeName: String? = null,
-    val callLabel: String? = null,
-    val forwardedLabel: String? = null
+    val poll: String? = null, // Simplified for now
+    val theme: String? = null,
+    val callLog: String? = null,
+    val forwardedInfo: Boolean = false,
+    val replyToId: String? = null
 ) {
     fun previewText(): String {
         return when {
-            text.isNotBlank() -> text
-            file != null -> file.caption.ifBlank { "[File] ${file.name.ifBlank { "Attachment" }}" }
-            !pollQuestion.isNullOrBlank() -> "[Poll] $pollQuestion"
-            !themeName.isNullOrBlank() -> "[Theme] $themeName"
-            !callLabel.isNullOrBlank() -> callLabel
-            !forwardedLabel.isNullOrBlank() -> forwardedLabel
+            !text.isNullOrBlank() -> text
+            file != null -> "[File]"
+            !poll.isNullOrBlank() -> "[Poll]"
+            !theme.isNullOrBlank() -> "[Theme]"
+            !callLog.isNullOrBlank() -> "[Call]"
+            forwardedInfo -> "[Forwarded]"
             else -> ""
         }
     }
@@ -80,16 +83,22 @@ data class ChatSummary(
     val unreadCount: Int = 0,
     val memberIds: List<String> = emptyList(),
     val handle: String? = null,
-    val isVerified: Boolean = false
+    val isVerified: Boolean = false,
+    val ownerId: String? = null
 )
 
 data class ChatMessage(
     val id: String,
     val chatId: String,
     val senderId: String,
-    val senderName: String,
+    val senderName: String = "User",
     val content: MessageContent,
-    val createdAt: Long = 0L
+    val timestamp: Long = 0L,
+    val seenBy: List<String> = emptyList(),
+    val pending: Boolean = false,
+    val clientTempId: String? = null,
+    val replyToId: String? = null,
+    val editedAt: Long? = null
 )
 
 data class HomeData(

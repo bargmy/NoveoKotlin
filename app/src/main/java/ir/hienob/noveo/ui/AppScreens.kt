@@ -123,13 +123,16 @@ private val sunsetShimmerScheme = darkColorScheme(
 private val cherryRedScheme = darkColorScheme(
     primary = Color(0xFFD2042D),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFF333333),
-    onPrimaryContainer = Color.White,
+    primaryContainer = Color(0xFF450a0a),
+    onPrimaryContainer = Color(0xFFfecaca),
     secondary = Color(0xFFFF2C55),
-    background = Color(0xFF1A1A1A),
-    surface = Color(0xFF2C2C2C),
-    onSurface = Color.White,
-    outline = Color(0xFF333333)
+    onSecondary = Color.White,
+    background = Color(0xFF0c0a09),
+    surface = Color(0xFF1c1917),
+    surfaceVariant = Color(0xFF292524),
+    onSurface = Color(0xFFf5f5f4),
+    onSurfaceVariant = Color(0xFFd6d3d1),
+    outline = Color(0xFF44403c)
 )
 
 private val snowyDaydreamScheme = lightColorScheme(
@@ -146,26 +149,32 @@ private val snowyDaydreamScheme = lightColorScheme(
 
 private val rainbowRagebaitScheme = darkColorScheme(
     primary = Color(0xFFFF4FD8),
-    onPrimary = Color.White,
+    onPrimary = Color.Black,
     primaryContainer = Color(0xFF331D52),
-    onPrimaryContainer = Color(0xFFFFF7FF),
+    onPrimaryContainer = Color(0xFFfdf4ff),
     secondary = Color(0xFFD8B4FE),
-    background = Color(0xFF130A20),
-    surface = Color(0xFF1D1130),
-    onSurface = Color(0xFFFFF7FF),
-    outline = Color(0xFF5B2D83)
+    onSecondary = Color(0xFF3b0764),
+    background = Color(0xFF020617),
+    surface = Color(0xFF0f172a),
+    surfaceVariant = Color(0xFF1e293b),
+    onSurface = Color(0xFFf8fafc),
+    onSurfaceVariant = Color(0xFFcbd5e1),
+    outline = Color(0xFF334155)
 )
 
 private val sanokiMeoaScheme = darkColorScheme(
     primary = Color(0xFFA855F7),
     onPrimary = Color.White,
     primaryContainer = Color(0xFF39145C),
-    onPrimaryContainer = Color(0xFFFAF5FF),
+    onPrimaryContainer = Color(0xFFf3e8ff),
     secondary = Color(0xFFC084FC),
-    background = Color(0xFF12051E),
-    surface = Color(0xFF1A0A2B),
-    onSurface = Color(0xFFFAF5FF),
-    outline = Color(0xFF6D28D9)
+    onSecondary = Color(0xFF4c1d95),
+    background = Color(0xFF09090b),
+    surface = Color(0xFF18181b),
+    surfaceVariant = Color(0xFF27272a),
+    onSurface = Color(0xFFf4f4f5),
+    onSurfaceVariant = Color(0xFFd4d4d8),
+    outline = Color(0xFF3f3f46)
 )
 
 private val skyLightScheme = lightColorScheme(
