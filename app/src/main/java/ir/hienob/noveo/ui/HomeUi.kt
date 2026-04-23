@@ -149,6 +149,7 @@ internal fun HomeScreen(
     var settingsSection by rememberSaveable { mutableStateOf(SettingsSection.MENU) }
     var profileUserId by rememberSaveable { mutableStateOf<String?>(null) }
     var showGroupInfo by rememberSaveable { mutableStateOf(false) }
+    var selectedMediaUrl by rememberSaveable { mutableStateOf<String?>(null) }
 
     val filteredChats = remember(state.chats, searchQuery) {
         state.chats.filter {
@@ -233,6 +234,7 @@ internal fun HomeScreen(
                         onBackToChats = onBackToChats,
                         onSend = onSend,
                         onTyping = onTyping,
+                        onMediaClick = { selectedMediaUrl = it },
                         onOpenProfile = { userId -> profileUserId = userId },
                         onOpenGroupInfo = { showGroupInfo = true }
                     )
@@ -287,6 +289,7 @@ internal fun HomeScreen(
                             onBackToChats = onBackToChats,
                             onSend = onSend,
                             onTyping = onTyping,
+                            onMediaClick = { selectedMediaUrl = it },
                             onOpenProfile = { userId -> profileUserId = userId },
                             onOpenGroupInfo = { showGroupInfo = true },
                             modifier = Modifier.weight(1f)
@@ -354,10 +357,42 @@ internal fun HomeScreen(
                 onOpenProfile = { userId -> profileUserId = userId }
             )
         }
+ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
+    CreateChannelModal(onClose = { showCreateModal = false })
+}
 
-        ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
-            CreateOptionsModal(onClose = { showCreateModal = false })
-        }
+if (selectedMediaUrl != null) {
+    FullscreenMediaModal(
+        url = selectedMediaUrl!!,
+        onDismiss = { selectedMediaUrl = null }
+    )
+}
+}
+}
+
+@Composable
+private fun FullscreenMediaModal(url: String, onDismiss: () -> Unit) {
+Surface(
+color = Color.Black,
+modifier = Modifier.fillMaxSize()
+) {
+Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    AsyncImage(
+        model = url,
+        contentDescription = null,
+        modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Fit
+    )
+
+    HeaderIconButton(
+        icon = Icons.Outlined.Close,
+        onClick = onDismiss,
+        modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp)
+    )
+
+}
+}
+}
 
         ModalHost(visible = showSettingsModal, onDismiss = { showSettingsModal = false }) {
             SettingsModal(
@@ -620,6 +655,7 @@ private fun ChatPane(
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
+    onMediaClick: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
     onOpenGroupInfo: () -> Unit,
     modifier: Modifier = Modifier
@@ -725,13 +761,26 @@ private fun ChatPane(
                 state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(0.dp) // Grouping handles spacing
             ) {
-                items(state.messages, key = { it.id }) { message ->
+                items(state.messages.size, key = { state.messages[it].id }) { index ->
+                    val message = state.messages[index]
+                    val prevMessage = if (index > 0) state.messages[index - 1] else null
+                    val nextMessage = if (index < state.messages.size - 1) state.messages[index + 1] else null
+                    
+                    val showSenderInfo = remember(message, prevMessage) {
+                        prevMessage == null || 
+                        prevMessage.senderId != message.senderId || 
+                        (message.timestamp - prevMessage.timestamp) > 300 ||
+                        prevMessage.senderId == "system"
+                    }
+
                     MessageRow(
                         message = message,
                         ownMessage = message.senderId == state.session?.userId,
-                        senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl
+                        senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl,
+                        showSenderInfo = showSenderInfo,
+                        onMediaClick = onMediaClick
                     )
                 }
             }
@@ -794,7 +843,13 @@ private fun ComposerBar(
 }
 
 @Composable
-private fun MessageRow(message: ChatMessage, ownMessage: Boolean, senderAvatarUrl: String?) {
+private fun MessageRow(
+    message: ChatMessage,
+    ownMessage: Boolean,
+    senderAvatarUrl: String?,
+    showSenderInfo: Boolean,
+    onMediaClick: (String) -> Unit
+) {
     val isSystem = message.senderId == "system"
     if (isSystem) {
         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
@@ -820,11 +875,15 @@ private fun MessageRow(message: ChatMessage, ownMessage: Boolean, senderAvatarUr
 
     Column(
         horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().padding(vertical = if (showSenderInfo) 4.dp else 1.dp)
     ) {
         Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
             if (!ownMessage) {
-                ProfileCircle(name = message.senderName, imageUrl = senderAvatarUrl, size = 34.dp)
+                if (showSenderInfo) {
+                    ProfileCircle(name = message.senderName, imageUrl = senderAvatarUrl, size = 34.dp)
+                } else {
+                    Spacer(Modifier.width(34.dp))
+                }
                 Spacer(Modifier.width(8.dp))
             } else {
                 Spacer(Modifier.weight(1f))
@@ -833,7 +892,7 @@ private fun MessageRow(message: ChatMessage, ownMessage: Boolean, senderAvatarUr
                 horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
                 modifier = if (ownMessage) Modifier else Modifier.weight(1f, false)
             ) {
-                if (!ownMessage) {
+                if (!ownMessage && showSenderInfo) {
                     Text(
                         message.senderName,
                         style = MaterialTheme.typography.labelSmall,
@@ -852,8 +911,9 @@ private fun MessageRow(message: ChatMessage, ownMessage: Boolean, senderAvatarUr
                 ) {
                     val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
                     Column(modifier = Modifier.padding(if (hasVisualMedia) 6.dp else 12.dp)) {
-                        AttachmentPreview(file = message.content.file)
+                        AttachmentPreview(file = message.content.file, onMediaClick = onMediaClick)
                         val caption = message.content.text
+
                         if (!caption.isNullOrBlank()) {
                             if (message.content.file != null) Spacer(Modifier.height(8.dp))
                             Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 0.dp)) {
@@ -948,7 +1008,7 @@ private fun PendingMessageBubble(text: String) {
 }
 
 @Composable
-private fun AttachmentPreview(file: MessageFileAttachment?) {
+private fun AttachmentPreview(file: MessageFileAttachment?, onMediaClick: (String) -> Unit) {
     val uriHandler = LocalUriHandler.current
     val normalizedUrl = remember(file?.url) { file?.url.normalizeNoveoUrl() }
     if (file == null) return
@@ -956,7 +1016,7 @@ private fun AttachmentPreview(file: MessageFileAttachment?) {
     if (normalizedUrl != null && file.isImage()) {
         Card(
             shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.size(128.dp),
+            modifier = Modifier.size(128.dp).clickable { onMediaClick(normalizedUrl) },
             colors = CardDefaults.cardColors(containerColor = Color(0x1F94A3B8))
         ) {
             AsyncImage(
@@ -972,7 +1032,7 @@ private fun AttachmentPreview(file: MessageFileAttachment?) {
     if (normalizedUrl != null && file.isVideo()) {
         Card(
             shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.width(320.dp).aspectRatio(16f / 9f),
+            modifier = Modifier.width(320.dp).aspectRatio(16f / 9f).clickable { onMediaClick(normalizedUrl) },
             colors = CardDefaults.cardColors(containerColor = Color.Black)
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1603,12 +1663,12 @@ private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 42.dp) {
 }
 
 @Composable
-private fun HeaderIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun HeaderIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
-        modifier = Modifier.size(46.dp).clickable(onClick = onClick)
+        modifier = modifier.size(46.dp).clickable(onClick = onClick)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = null)
@@ -1626,9 +1686,9 @@ private fun SendIconButton(enabled: Boolean, onClick: () -> Unit) {
         modifier = Modifier.size(52.dp).clickable(enabled = enabled, onClick = onClick)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.size(32.dp)) {
+            Canvas(modifier = Modifier.size(42.dp)) {
                 val path = androidx.compose.ui.graphics.vector.PathParser().parsePathString("M11.5003 12H5.41872M5.24634 12.7972L4.24158 15.7986C3.69128 17.4424 3.41613 18.2643 3.61359 18.7704C3.78506 19.21 4.15335 19.5432 4.6078 19.6701C5.13111 19.8161 5.92151 19.4604 7.50231 18.7491L17.6367 14.1886C19.1797 13.4942 19.9512 13.1471 20.1896 12.6648C20.3968 12.2458 20.3968 11.7541 20.1896 11.3351C19.9512 10.8529 19.1797 10.5057 17.6367 9.81135L7.48483 5.24303C5.90879 4.53382 5.12078 4.17921 4.59799 4.32468C4.14397 4.45101 3.77572 4.78336 3.60365 5.22209C3.40551 5.72728 3.67772 6.54741 4.22215 8.18767L5.24829 11.2793C5.34179 11.561 5.38855 11.7019 5.407 11.8459C5.42338 11.9738 5.42321 12.1032 5.40651 12.231C5.38768 12.375 5.34057 12.5157 5.24634 12.7972Z").toPath()
-                drawPath(path = path, color = tint, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+                drawPath(path = path, color = tint, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
             }
         }
     }

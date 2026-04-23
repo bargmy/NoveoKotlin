@@ -159,13 +159,13 @@ internal fun parseMessageContent(raw: Any?): MessageContent {
     }
     
     return MessageContent(
-        text = payload.optString("text").takeIf { it.isNotBlank() },
+        text = payload.optString("text").sanitizeServerString().takeIf { it.isNotBlank() },
         file = file,
         poll = payload.optJSONObject("poll")?.toString(),
         theme = payload.optJSONObject("theme")?.toString(),
         callLog = payload.optJSONObject("callLog")?.toString(),
         forwardedInfo = payload.has("forwardedInfo"),
-        replyToId = payload.optString("replyToId").takeIf { it.isNotBlank() }
+        replyToId = payload.optString("replyToId").sanitizeServerString().takeIf { it.isNotBlank() }
     )
 }
 
