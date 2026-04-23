@@ -2,25 +2,26 @@
 
 # Noveo
 
-**A high-fidelity Android shell for the Noveo Messenger ecosystem.**
+**A high-fidelity Android shell and Kotlin port of the Noveo Messenger web version.**
 
 [Features](#-features) • [Architecture](#-architecture) • [Themes](#-themes) • [Setup](#-setup)
 
 ---
 
-Noveo brings the rich, themeable, and real-time experience of the Noveo web platform to Android. <br/> Built with **Jetpack Compose** and a focus on "aesthetic-first" design.
+Noveo brings the rich, themeable, and real-time experience of the original web platform to Android. <br/> Built with **Jetpack Compose** as a modern Kotlin implementation of the Noveo ecosystem.
 
 </div>
 
 ## ⚡ Core Strengths
 
+*   **Kotlin Port**: A faithful mobile implementation of the Noveo web experience, bringing platform parity to Android.
 *   **Real-time Core**: Powered by WebSockets for instant sync. Stay connected with the same live account used on web, with full message and state parity.
 *   **Modern Stack**: Built entirely with Jetpack Compose, Kotlin Coroutines, and Material 3 for a fluid, reactive experience.
 *   **Modular Design**: Clean separation between UI, Network, and Storage modules for easy scaling.
 
 ## 🎨 Personalization
 
-Noveo is built to be seen. It features 12+ handcrafted theme presets that change the entire personality of the app:
+Noveo is built to be seen. It features 12+ handcrafted theme presets ported from the web version to change the entire personality of the app:
 
 | Light | Dark | Special |
 | :--- | :--- | :--- |
@@ -46,5 +47,5 @@ The project is structured into functional modules to maintain high cohesion and 
 ---
 
 <div align="center">
-Developed by <b>hienob</b>
+Developed by <b>HienoB</b>
 </div>
