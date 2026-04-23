@@ -18,13 +18,13 @@ import org.json.JSONObject
 class NoveoApi(
     private val client: OkHttpClient = OkHttpClient(),
     private val wsUrl: String = "wss://noveo.ir:8443/ws",
-    private val origin: String = "https://noveo.ir:8443"
+    private val origin: String = "https://noveo.ir"
 ) {
     fun login(handle: String, password: String): Session = auth(JSONObject().put("type", "login_with_password").put("username", handle).put("password", password).put("languageCode", "en"))
     fun signup(handle: String, password: String): Session = auth(JSONObject().put("type", "register").put("username", handle).put("password", password).put("languageCode", "en"))
 
     fun getStarsOverview(session: Session): Wallet {
-        val url = "$origin/stars/overview".toHttpUrl()
+        val url = "https://noveo.ir:8443/stars/overview".toHttpUrl()
         val request = Request.Builder()
             .url(url)
             .header("X-User-ID", session.userId)
@@ -67,7 +67,7 @@ class NoveoApi(
     }
 
     fun getContacts(session: Session): List<UserSummary> {
-        val url = "$origin/user/contacts".toHttpUrl()
+        val url = "https://noveo.ir:8443/user/contacts".toHttpUrl()
         val request = Request.Builder()
             .url(url)
             .header("X-User-ID", session.userId)
@@ -121,7 +121,7 @@ class NoveoApi(
     fun searchPublicUsers(session: Session, query: String): List<UserSummary> {
         val normalizedQuery = query.trim()
         if (normalizedQuery.length < 2) return emptyList()
-        val url = "$origin/user/public-search".toHttpUrl().newBuilder()
+        val url = "https://noveo.ir:8443/user/public-search".toHttpUrl().newBuilder()
             .addQueryParameter("q", normalizedQuery)
             .build()
         val request = Request.Builder()
@@ -158,7 +158,7 @@ class NoveoApi(
     }
 
     fun updateProfile(session: Session, username: String, bio: String) {
-        val url = "$origin/user/profile".toHttpUrl()
+        val url = "https://noveo.ir:8443/user/profile".toHttpUrl()
         val body = JSONObject()
             .put("username", username)
             .put("bio", bio)
