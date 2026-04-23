@@ -97,6 +97,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.compose.SubcomposeAsyncImage
 import ir.hienob.noveo.app.AppUiState
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSummary
@@ -636,12 +637,14 @@ private fun ChatPane(
     val onlineCount = remember(selectedChat, state.onlineUserIds) {
         selectedChat?.memberIds?.count { state.onlineUserIds.contains(it) } ?: 0
     }
-    val subtitle = if (profileUser != null) {
-        if (isOnline) "online" else "last seen recently"
-    } else {
-        selectedChat?.memberIds?.size?.let { total ->
+    val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount) {
+        if (selectedChat == null) return@remember "conversation"
+        if (selectedChat.chatType == "private") {
+            if (isOnline) "online" else "last seen recently"
+        } else {
+            val total = selectedChat.memberIds.size
             if (onlineCount > 0) "$total members, $onlineCount online" else "$total members"
-        } ?: "conversation"
+        }
     }
 
     LaunchedEffect(state.selectedChatId, state.messages.size) {
@@ -1453,14 +1456,7 @@ private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 42.dp) {
     val resolvedImageUrl = remember(imageUrl) { imageUrl.normalizeNoveoUrl() }
     val isDefaultAvatar = remember(resolvedImageUrl) { resolvedImageUrl?.endsWith("default.png") == true }
     
-    if (!resolvedImageUrl.isNullOrBlank() && !isDefaultAvatar) {
-        AsyncImage(
-            model = resolvedImageUrl,
-            contentDescription = name,
-            modifier = Modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
-            contentScale = ContentScale.Crop
-        )
-    } else {
+    val fallback = @Composable {
         Box(
             modifier = Modifier
                 .size(size)
@@ -1474,6 +1470,19 @@ private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 42.dp) {
         ) {
             Text(name.firstOrNull()?.uppercase() ?: "N", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         }
+    }
+
+    if (!resolvedImageUrl.isNullOrBlank() && !isDefaultAvatar) {
+        SubcomposeAsyncImage(
+            model = resolvedImageUrl,
+            contentDescription = name,
+            modifier = Modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
+            contentScale = ContentScale.Crop,
+            loading = { fallback() },
+            error = { fallback() }
+        )
+    } else {
+        fallback()
     }
 }
 
