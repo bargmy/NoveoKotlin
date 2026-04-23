@@ -797,12 +797,15 @@ private fun MessageRow(message: ChatMessage, ownMessage: Boolean, senderAvatarUr
                         containerColor = if (ownMessage) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
                     )
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
+                    Column(modifier = Modifier.padding(if (hasVisualMedia) 6.dp else 12.dp)) {
                         AttachmentPreview(file = message.content.file)
                         val preview = message.content.previewText().removePrefix("[File] ")
                         if (preview.isNotBlank()) {
                             if (message.content.file != null) Spacer(Modifier.height(8.dp))
-                            MarkdownText(preview)
+                            Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 0.dp)) {
+                                MarkdownText(preview)
+                            }
                         }
                     }
                 }
@@ -865,11 +868,12 @@ private fun AttachmentPreview(file: MessageFileAttachment?) {
     val uriHandler = LocalUriHandler.current
     val normalizedUrl = remember(file?.url) { file?.url.normalizeNoveoUrl() }
     if (file == null) return
+
     if (normalizedUrl != null && file.isImage()) {
         Card(
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth().height(260.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.size(128.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0x1F94A3B8))
         ) {
             AsyncImage(
                 model = normalizedUrl,
@@ -880,9 +884,31 @@ private fun AttachmentPreview(file: MessageFileAttachment?) {
         }
         return
     }
+
+    if (normalizedUrl != null && file.isVideo()) {
+        Card(
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.width(320.dp).aspectRatio(16f / 9f),
+            colors = CardDefaults.cardColors(containerColor = Color.Black)
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                // In a real app we'd use a VideoPlayer, for now we show a play icon placeholder exactly like a non-playing preview
+                Icon(Icons.Outlined.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
+                AsyncImage(
+                    model = normalizedUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().alpha(0.5f),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+        return
+    }
+
     Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
     ) {
         Row(
             modifier = Modifier
@@ -891,15 +917,21 @@ private fun AttachmentPreview(file: MessageFileAttachment?) {
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = if (file.isVideo()) Icons.Outlined.PlayArrow else Icons.Outlined.Info,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.width(10.dp))
+            Box(
+                modifier = Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Info, // Standard file icon
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                val subtitle = file.type.ifBlank { "Attachment" }
-                Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                Text(file.name.ifBlank { "File" }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text("Click to download", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
