@@ -92,7 +92,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Notify Telegram on build failure
-        if: steps.build_apk.outcome == 'failure' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        if: steps.build_apk.outcome == 'failure'
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -102,6 +102,11 @@ jobs:
           SHA: ${{ github.sha }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          if [ -z "${TELEGRAM_BOT_TOKEN}" ] || [ -z "${TELEGRAM_CHAT_ID}" ]; then
+            echo "Telegram failure notification is not configured, skipping."
+            exit 0
+          fi
+
           python3 - <<'PY'
           import os
           import pathlib
@@ -128,7 +133,7 @@ jobs:
           PY
 
       - name: Notify Bale on build failure
-        if: steps.build_apk.outcome == 'failure' && secrets.BALE_BOT_TOKEN != '' && secrets.BALE_CHAT_ID != ''
+        if: steps.build_apk.outcome == 'failure'
         shell: bash
         env:
           BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
@@ -138,6 +143,11 @@ jobs:
           SHA: ${{ github.sha }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          if [ -z "${BALE_BOT_TOKEN}" ] || [ -z "${BALE_CHAT_ID}" ]; then
+            echo "Bale failure notification is not configured, skipping."
+            exit 0
+          fi
+
           python3 - <<'PY'
           import json
           import os
@@ -191,13 +201,25 @@ jobs:
           if-no-files-found: error
 
       - name: Install rclone
-        if: secrets.RCLONE_CONFIG != ''
-        run: curl -fsSL https://rclone.org/install.sh | sudo bash
+        shell: bash
+        env:
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          if [ -z "${RCLONE_CONFIG}" ]; then
+            echo "RCLONE_CONFIG is empty, skipping rclone install."
+            exit 0
+          fi
+          curl -fsSL https://rclone.org/install.sh | sudo bash
 
       - name: Write rclone config from secret
-        if: secrets.RCLONE_CONFIG != ''
         shell: bash
+        env:
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
         run: |
+          if [ -z "${RCLONE_CONFIG}" ]; then
+            echo "RCLONE_CONFIG is empty, skipping rclone config."
+            exit 0
+          fi
           mkdir -p ~/.config/rclone
           cat > ~/.config/rclone/rclone.conf <<'EOF'
           ${{ secrets.RCLONE_CONFIG }}
@@ -205,9 +227,9 @@ jobs:
 
       - name: Upload APK to Google Drive via rclone
         id: drive_upload
-        if: secrets.RCLONE_CONFIG != ''
         shell: bash
         env:
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
           APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
           APK_NAME: ${{ steps.find_apk.outputs.apk_name }}
           DRIVE_META_NAME: ${{ env.DRIVE_META_NAME }}
@@ -219,6 +241,13 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+
+          if [ -z "${RCLONE_CONFIG}" ]; then
+            echo "uploaded=false" >> "$GITHUB_OUTPUT"
+            echo "sha256=$(sha256sum "$APK_PATH" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+            echo "drive_link=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           sha256_value="$(sha256sum "$APK_PATH" | awk '{print $1}')"
           meta_remote="${RCLONE_REMOTE}:${RCLONE_DIR}/${DRIVE_META_NAME}"
@@ -277,7 +306,6 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Send APK to Telegram
-        if: secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -291,6 +319,11 @@ jobs:
           DRIVE_LINK: ${{ steps.drive_upload.outputs.drive_link }}
           APK_HASH: ${{ steps.drive_upload.outputs.sha256 }}
         run: |
+          if [ -z "${TELEGRAM_BOT_TOKEN}" ] || [ -z "${TELEGRAM_CHAT_ID}" ]; then
+            echo "Telegram delivery is not configured, skipping."
+            exit 0
+          fi
+
           SHORT_SHA="${SHA:0:7}"
           RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
           CAPTION=$(cat <<EOF
@@ -311,7 +344,6 @@ jobs:
             -F "caption=${CAPTION}"
 
       - name: Send APK to Bale
-        if: secrets.BALE_BOT_TOKEN != '' && secrets.BALE_CHAT_ID != ''
         shell: bash
         env:
           BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
@@ -325,13 +357,18 @@ jobs:
           DRIVE_LINK: ${{ steps.drive_upload.outputs.drive_link }}
           APK_HASH: ${{ steps.drive_upload.outputs.sha256 }}
         run: |
+          if [ -z "${BALE_BOT_TOKEN}" ] || [ -z "${BALE_CHAT_ID}" ]; then
+            echo "Bale delivery is not configured, skipping."
+            exit 0
+          fi
+
           SHORT_SHA="${SHA:0:7}"
           RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
           CAPTION=$(cat <<EOF
-          ✅ New Android APK build
-          commit: ${SHORT_SHA}
-          sha256: ${APK_HASH:-unknown}
-          run: ${RUN_URL}
+          ✅ نسخه جدید نوعو کوطلین بیلد  شد!
+          کامیت: ${SHORT_SHA}
+          هش: ${APK_HASH:-unknown}
+          گیتهاب: ${RUN_URL}
           EOF
           )
 
@@ -342,5 +379,5 @@ jobs:
             -F "caption=${CAPTION}"
 
       - name: Clean up rclone config
-        if: always() && secrets.RCLONE_CONFIG != ''
+        if: always()
         run: rm -f ~/.config/rclone/rclone.conf
