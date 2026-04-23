@@ -40,6 +40,37 @@ jobs:
           set -o pipefail
           gradle assembleRelease 2>&1 | tee build.log
 
+      - name: Sign APK
+        if: steps.build_apk.outcome == 'success'
+        env:
+          SIGN_KEYSTORE_BASE64: ${{ secrets.SIGN_KEYSTORE_BASE64 }}
+          SIGN_KEYSTORE_PASSWORD: ${{ secrets.SIGN_KEYSTORE_PASSWORD }}
+          SIGN_KEY_ALIAS: ${{ secrets.SIGN_KEY_ALIAS }}
+          SIGN_KEY_PASSWORD: ${{ secrets.SIGN_KEY_PASSWORD }}
+        run: |
+          if [ -z "$SIGN_KEYSTORE_BASE64" ]; then
+            echo "SIGN_KEYSTORE_BASE64 is empty, skipping signing."
+            exit 0
+          fi
+          echo "$SIGN_KEYSTORE_BASE64" | base64 -d > release.keystore
+          
+          # Find build tools
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -n 1)
+          APKSIGNER=$BUILD_TOOLS_DIR/apksigner
+          ZIPALIGN=$BUILD_TOOLS_DIR/zipalign
+          
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          
+          $ZIPALIGN -f -v 4 "$APK_PATH" aligned.apk
+          $APKSIGNER sign --ks release.keystore \
+            --ks-pass pass:"$SIGN_KEYSTORE_PASSWORD" \
+            --ks-key-alias "$SIGN_KEY_ALIAS" \
+            --key-pass pass:"$SIGN_KEY_PASSWORD" \
+            --out signed.apk aligned.apk
+            
+          # Overwrite original APK so subsequent steps use the signed one
+          mv signed.apk "$APK_PATH"
+
       - name: Upload build log artifact on failure
         if: steps.build_apk.outcome == 'failure'
         uses: actions/upload-artifact@v4
@@ -143,11 +174,9 @@ jobs:
           TOKEN: ${{ secrets.TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
           REPO: ${{ github.repository }}
-          REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
           DRIVE_LINK: ${{ steps.drive_upload.outputs.drive_link }}
           APK_HASH: ${{ steps.drive_upload.outputs.sha256 }}
-          APK_NAME: ${{ steps.drive_upload.outputs.file_name }}
           RUN_ID: ${{ github.run_id }}
         run: |
           python3 - <<'PY'
@@ -158,19 +187,14 @@ jobs:
           token = os.environ['TOKEN']
           chat_id = os.environ['CHANNEL_ID']
           repo = os.environ['REPO']
-          ref_name = os.environ['REF_NAME']
           sha = os.environ['SHA'][:7]
           drive_link = os.environ['DRIVE_LINK']
           apk_hash = os.environ['APK_HASH']
-          apk_name = os.environ['APK_NAME']
           run_id = os.environ['RUN_ID']
           run_url = f"https://github.com/{repo}/actions/runs/{run_id}"
           message = (
-              f"✅ New NoveoKotlin APK uploaded\n"
-              f"repo: {repo}\n"
-              f"branch: {ref_name}\n"
+              "✅ نسخه جدید نوعو کوطلین با موفقیت بیلد شد!\n"
               f"commit: {sha}\n"
-              f"file: {apk_name}\n"
               f"sha256: {apk_hash}\n"
               f"drive: {drive_link}\n"
               f"run: {run_url}"
@@ -178,6 +202,76 @@ jobs:
           data = urllib.parse.urlencode({'chat_id': chat_id, 'text': message}).encode()
           req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
           urllib.request.urlopen(req).read()
+          PY
+
+      - name: Notify Bale on fresh APK upload
+        if: steps.drive_upload.outputs.uploaded == 'true'
+        shell: bash
+        env:
+          BALE_TOKEN: ${{ secrets.BALE_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          APK_HASH: ${{ steps.drive_upload.outputs.sha256 }}
+          APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import urllib.parse
+          import urllib.request
+          import mimetypes
+
+          token = os.environ.get('BALE_TOKEN')
+          if not token:
+              print("BALE_TOKEN missing")
+              exit(0)
+          
+          # Use @noveo as per user's correction
+          chat_id = "@noveo"
+          
+          sha = os.environ['SHA'][:7]
+          apk_hash = os.environ['APK_HASH']
+          apk_path = os.environ['APK_PATH']
+          run_id = os.environ['RUN_ID']
+          repo = os.environ['REPO']
+          run_url = f"https://github.com/{repo}/actions/runs/{run_id}"
+
+          message = (
+              "✅ نسخه جدید نوعو کوطلین با موفقیت بیلد شد!\n"
+              f"commit: {sha}\n"
+              f"sha256: {apk_hash}\n"
+              f"run: {run_url}"
+          )
+          
+          url = f"https://tapi.bale.ai/bot{token}/sendDocument"
+          
+          def send_file(url, chat_id, file_path, caption):
+              boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW'
+              filename = os.path.basename(file_path)
+              mime_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+              
+              with open(file_path, 'rb') as f:
+                  content = f.read()
+              
+              parts = []
+              parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n{chat_id}\r\n'.encode())
+              parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n{caption}\r\n'.encode())
+              parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="document"; filename="{filename}"\r\nContent-Type: {mime_type}\r\n\r\n'.encode())
+              parts.append(content)
+              parts.append(f'\r\n--{boundary}--\r\n'.encode())
+              
+              body = b''.join(parts)
+              
+              req = urllib.request.Request(url, data=body)
+              req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
+              return urllib.request.urlopen(req).read()
+
+          try:
+              send_file(url, chat_id, apk_path, message)
+              print("Successfully sent to Bale")
+          except Exception as e:
+              print(f"Failed to send to Bale: {e}")
           PY
 
       - name: Clean up rclone config
