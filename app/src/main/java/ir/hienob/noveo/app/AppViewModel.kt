@@ -145,6 +145,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun openChat(chatId: String) {
         appendDebugLog("openChat(chatId=$chatId)")
         val session = _uiState.value.session ?: return
+        ensureSocketObserved(session)
         viewModelScope.launch {
             val cachedMessages = messageCacheByChat[chatId].orEmpty().sortedBy { it.timestamp }
             appendDebugLog("openChat: cachedMessages=${cachedMessages.size}")
@@ -316,6 +317,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    private fun ensureSocketObserved(session: Session) {
+        if (socketJob?.isActive == true) return
+        appendDebugLog("ensureSocketObserved: restarting socket observer")
+        observeSocket(session)
     }
 
     private fun handleIncomingMessage(msg: ChatMessage) {
