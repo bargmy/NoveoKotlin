@@ -236,5 +236,7 @@ private fun parseStringList(array: JSONArray?): List<String> {
 
 private fun String?.sanitizeServerString(): String {
     val value = this?.trim().orEmpty()
-    return if (value.equals("null", ignoreCase = true) || value.equals("undefined", ignoreCase = true)) "" else value
+    val lower = value.lowercase()
+    if (lower == "null" || lower == "undefined" || lower == "none") return ""
+    return value
 }

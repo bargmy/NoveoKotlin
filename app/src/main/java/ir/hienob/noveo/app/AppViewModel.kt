@@ -131,7 +131,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun openChat(chatId: String) {
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(selectedChatId = chatId, messages = emptyList(), loading = true)
+            val updatedChats = _uiState.value.chats.map {
+                if (it.id == chatId) it.copy(unreadCount = 0) else it
+            }
+            _uiState.value = _uiState.value.copy(selectedChatId = chatId, chats = updatedChats, messages = emptyList(), loading = true)
             runCatching {
                 val result = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
                 _uiState.value = _uiState.value.copy(
@@ -193,6 +196,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun refreshHomeSilently() {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            runCatching {
+                val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
+                _uiState.value = _uiState.value.copy(
+                    usersById = _uiState.value.usersById + home.usersById,
+                    chats = home.chats,
+                    onlineUserIds = home.onlineUserIds
+                )
+            }
+        }
+    }
+
     private suspend fun loadHome(session: Session) {
         runCatching {
             val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
@@ -231,7 +248,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                     is SocketEvent.ChatUpdated -> {
-                        // Could trigger a single chat refresh
+                        refreshHomeSilently()
                     }
                 }
             }
@@ -255,13 +272,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             markAsSeen(msg.id)
         }
 
-        val updatedChats = state.chats.map {
-            if (it.id == msg.chatId) {
-                it.copy(
-                    lastMessagePreview = msg.content.previewText(),
-                    unreadCount = if (msg.chatId == state.selectedChatId) 0 else it.unreadCount + 1
-                )
-            } else it
+        val chatToUpdate = state.chats.find { it.id == msg.chatId }
+        val updatedChats = if (chatToUpdate != null) {
+            val newList = state.chats.toMutableList()
+            newList.remove(chatToUpdate)
+            newList.add(0, chatToUpdate.copy(
+                lastMessagePreview = msg.content.previewText(),
+                unreadCount = if (msg.chatId == state.selectedChatId) 0 else chatToUpdate.unreadCount + 1
+            ))
+            newList
+        } else {
+            // New chat that wasn't in our list (e.g. someone messaged us)
+            refreshHomeSilently()
+            state.chats
         }
 
         _uiState.value = state.copy(

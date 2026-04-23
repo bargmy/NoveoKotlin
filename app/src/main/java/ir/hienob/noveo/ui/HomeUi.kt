@@ -1122,7 +1122,7 @@ private fun ContactRow(
 }
 
 @Composable
-private fun CreateOptionsModal(onClose: () -> Unit) {
+private fun CreateChannelModal(onClose: () -> Unit) {
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
             ModalHeader(title = "Create", onClose = onClose)
