@@ -17,7 +17,11 @@ sealed class SocketEvent {
     data class MessageSeenUpdate(val chatId: String, val messageId: String, val userId: String) : SocketEvent()
     data class UserListUpdate(val usersById: Map<String, UserSummary>, val onlineIds: Set<String>) : SocketEvent()
     data class ChatUpdated(val chatId: String) : SocketEvent()
-    data class HistoryUpdate(val chats: List<ChatSummary>, val users: Map<String, UserSummary>) : SocketEvent()
+    data class HistoryUpdate(
+        val chats: List<ChatSummary>,
+        val users: Map<String, UserSummary>,
+        val messagesByChat: Map<String, List<ChatMessage>>
+    ) : SocketEvent()
 }
 
 class ChatSocket(
@@ -94,8 +98,10 @@ class ChatSocket(
                         }
                         "chat_history" -> {
                             val users = parseUsers(json).first
-                            val chats = parseChats(json, knownUsers + users, session.userId)
-                            trySend(SocketEvent.HistoryUpdate(chats, users))
+                            val combinedUsers = knownUsers + users
+                            val chats = parseChats(json, combinedUsers, session.userId)
+                            val messagesByChat = parseMessagesByChat(json, combinedUsers)
+                            trySend(SocketEvent.HistoryUpdate(chats, users, messagesByChat))
                         }
                     }
                 }.onFailure {
