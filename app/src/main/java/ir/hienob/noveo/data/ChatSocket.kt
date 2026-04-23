@@ -48,7 +48,7 @@ class ChatSocket(
                 val knownUsers = getKnownUsers()
                 
                 when (type) {
-                    "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
+                    "message", "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
                     "message_sent" -> trySend(SocketEvent.MessageSent(parseRealtimeMessage(json, knownUsers)))
                     "typing" -> trySend(SocketEvent.Typing(json.optString("chatId"), json.optString("senderId")))
                     "message_seen", "message_seen_update" -> {

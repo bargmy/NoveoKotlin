@@ -235,21 +235,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeSocket(session: Session) {
         socketJob?.cancel()
         socketJob = viewModelScope.launch {
-            socket.connect(session) { _uiState.value.usersById }.collect { event ->
-                when (event) {
-                    is SocketEvent.NewMessage -> handleIncomingMessage(event.message)
-                    is SocketEvent.MessageSent -> handleIncomingMessage(event.message)
-                    is SocketEvent.Typing -> handleTyping(event.chatId, event.senderId)
-                    is SocketEvent.MessageSeenUpdate -> handleSeenUpdate(event.chatId, event.messageId, event.userId)
-                    is SocketEvent.UserListUpdate -> {
-                        _uiState.value = _uiState.value.copy(
-                            usersById = _uiState.value.usersById + event.usersById,
-                            onlineUserIds = event.onlineIds
-                        )
+            while (true) {
+                runCatching {
+                    socket.connect(session) { _uiState.value.usersById }.collect { event ->
+                        when (event) {
+                            is SocketEvent.NewMessage -> handleIncomingMessage(event.message)
+                            is SocketEvent.MessageSent -> handleIncomingMessage(event.message)
+                            is SocketEvent.Typing -> handleTyping(event.chatId, event.senderId)
+                            is SocketEvent.MessageSeenUpdate -> handleSeenUpdate(event.chatId, event.messageId, event.userId)
+                            is SocketEvent.UserListUpdate -> {
+                                _uiState.value = _uiState.value.copy(
+                                    usersById = _uiState.value.usersById + event.usersById,
+                                    onlineUserIds = event.onlineIds
+                                )
+                            }
+                            is SocketEvent.ChatUpdated -> {
+                                refreshHomeSilently()
+                            }
+                        }
                     }
-                    is SocketEvent.ChatUpdated -> {
-                        refreshHomeSilently()
-                    }
+                }.onFailure {
+                    _uiState.value = _uiState.value.copy(connectionDetail = "Connection lost, retrying...")
+                    delay(3000)
                 }
             }
         }
@@ -257,6 +264,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun handleIncomingMessage(msg: ChatMessage) {
         val state = _uiState.value
+        val session = state.session ?: return
         val messages = state.messages.toMutableList()
         
         val index = if (msg.clientTempId != null) {
@@ -278,11 +286,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             newList.remove(chatToUpdate)
             newList.add(0, chatToUpdate.copy(
                 lastMessagePreview = msg.content.previewText(),
-                unreadCount = if (msg.chatId == state.selectedChatId) 0 else chatToUpdate.unreadCount + 1
+                unreadCount = when {
+                    msg.chatId == state.selectedChatId -> 0
+                    msg.senderId == session.userId -> chatToUpdate.unreadCount
+                    else -> chatToUpdate.unreadCount + 1
+                }
             ))
             newList
         } else {
-            // New chat that wasn't in our list (e.g. someone messaged us)
             refreshHomeSilently()
             state.chats
         }

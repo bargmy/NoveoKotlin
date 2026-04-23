@@ -59,6 +59,16 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
             if (chatId.isBlank()) continue
             val memberIds = parseStringList(item.optJSONArray("members"))
             val messages = item.optJSONArray("messages") ?: JSONArray()
+            
+            // Calculate unread count based on seenBy array as per web logic
+            val unreadCount = (0 until messages.length()).count { i ->
+                val msg = messages.optJSONObject(i) ?: return@count false
+                val senderId = msg.optString("senderId").ifBlank { msg.optString("sender") }
+                if (senderId == selfUserId) return@count false
+                val seenBy = parseStringList(msg.optJSONArray("seenBy"))
+                !seenBy.contains(selfUserId)
+            }
+
             val preview = if (messages.length() > 0) {
                 parseMessageContent(messages.optJSONObject(messages.length() - 1)?.opt("content")).previewText()
             } else {
@@ -71,7 +81,7 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
                     title = resolveChatTitle(item, usersById, memberIds, selfUserId),
                     avatarUrl = resolveChatAvatar(item, usersById, memberIds, selfUserId),
                     lastMessagePreview = preview,
-                    unreadCount = item.optInt("unreadCount", item.optInt("unread", 0)),
+                    unreadCount = unreadCount,
                     memberIds = memberIds,
                     handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
                     isVerified = item.optBoolean("isVerified", false),
