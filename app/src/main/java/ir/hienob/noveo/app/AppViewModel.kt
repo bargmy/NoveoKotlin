@@ -213,20 +213,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         
         val sent = socket.send(payload)
         if (!sent) {
-            appendDebugLog("sendMessage: socket unavailable, falling back to API")
-            viewModelScope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) { api.sendMessage(session, chatId, text, clientTempId = tempId) }
-                    appendDebugLog("sendMessage API: acknowledged tempId=$tempId")
-                    refreshSelectedChat(session, chatId, reason = "send_success")
-                }.onFailure {
-                    appendDebugLog("sendMessage API: failure tempId=$tempId error=${it.message}")
-                    messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().filter { it.id != tempId }
-                    _uiState.value = _uiState.value.copy(
-                        messages = _uiState.value.messages.filter { it.id != tempId }
-                    )
-                }
-            }
+            appendDebugLog("sendMessage: socket unavailable, message remains pending")
         } else {
             appendDebugLog("sendMessage: sent via persistent socket")
         }
@@ -239,11 +226,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val payload = org.json.JSONObject()
             .put("type", "typing")
             .put("chatId", chatId)
-        if (!socket.send(payload)) {
-            viewModelScope.launch(Dispatchers.IO) {
-                runCatching { api.sendTyping(session, chatId) }
-            }
-        }
+        socket.send(payload)
     }
 
     fun markAsSeen(messageId: String) {
@@ -254,30 +237,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("type", "message_seen")
             .put("chatId", chatId)
             .put("messageId", messageId)
-        if (!socket.send(payload)) {
-            viewModelScope.launch(Dispatchers.IO) {
-                runCatching { api.markAsSeen(session, chatId, messageId) }
-            }
-        }
+        socket.send(payload)
     }
 
     fun refreshHomeSilently() {
         val session = _uiState.value.session ?: return
         appendDebugLog("refreshHomeSilently()")
         val payload = org.json.JSONObject().put("type", "resync_state")
-        if (!socket.send(payload)) {
-            viewModelScope.launch {
-                runCatching {
-                    val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
-                    appendDebugLog("refreshHomeSilently API: chats=${home.chats.size} users=${home.usersById.size}")
-                    _uiState.value = _uiState.value.copy(
-                        usersById = _uiState.value.usersById + home.usersById,
-                        chats = home.chats,
-                        onlineUserIds = home.onlineUserIds
-                    )
-                }
-            }
-        }
+        socket.send(payload)
     }
 
     private suspend fun loadHome(session: Session) {
@@ -285,25 +252,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // Start observing socket first
         observeSocket(session)
         
-        // Load initial data via API to show something immediately
+        // Initial load for wallet/contacts via HTTP (not WebSocket)
         runCatching {
-            val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
             val wallet = withContext(Dispatchers.IO) { runCatching { api.getStarsOverview(session) }.getOrNull() }
             val contacts = withContext(Dispatchers.IO) { runCatching { api.getContacts(session) }.getOrDefault(emptyList()) }
-            appendDebugLog("loadHome API: chats=${home.chats.size} users=${home.usersById.size} contacts=${contacts.size}")
+            appendDebugLog("loadHome HTTP: walletLoaded=${wallet != null} contacts=${contacts.size}")
             
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
                 loading = false,
                 session = session,
-                usersById = _uiState.value.usersById + home.usersById,
-                chats = home.chats,
                 wallet = wallet,
                 contacts = contacts,
                 connectionTitle = "Noveo",
             )
         }.onFailure {
-            appendDebugLog("loadHome API failure: ${it.message}")
+            appendDebugLog("loadHome HTTP failure: ${it.message}")
             _uiState.value = _uiState.value.copy(loading = false, connectionTitle = "Noveo")
         }
     }
@@ -387,20 +351,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
 
     private suspend fun refreshSelectedChat(session: Session, chatId: String, reason: String) {
-        runCatching {
-            val result = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
-            val mergedMessages = mergeMessages(messageCacheByChat[chatId].orEmpty(), result.messages)
-            messageCacheByChat[chatId] = mergedMessages
-            val currentState = _uiState.value
-            if (currentState.selectedChatId != chatId) return
-            appendDebugLog("refreshSelectedChat(reason=$reason, apiMessages=${result.messages.size}, merged=${mergedMessages.size})")
-            _uiState.value = currentState.copy(
-                usersById = currentState.usersById + result.usersById,
-                messages = mergedMessages
-            )
-        }.onFailure {
-            appendDebugLog("refreshSelectedChat(reason=$reason): failure=${it.message}")
-        }
+        // We now rely on WebSocket for real-time updates.
+        // If a specific refresh is needed, we could send a targeted message sync request via socket.
+        appendDebugLog("refreshSelectedChat(reason=$reason): skipped (using WebSocket)")
     }
 
     private fun handleIncomingMessage(msg: ChatMessage) {
