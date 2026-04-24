@@ -600,6 +600,7 @@ private fun SidebarHeader(
             AnimatedContent(
                 targetState = showSearch,
                 label = "sidebar_header_swap",
+                contentAlignment = Alignment.Center,
                 transitionSpec = {
                     (slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn())
                         .togetherWith(slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut())

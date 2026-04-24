@@ -211,11 +211,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("content", org.json.JSONObject().put("text", text).toString())
             .put("clientTempId", tempId)
         
-        val sent = socket.send(payload)
-        if (!sent) {
-            appendDebugLog("sendMessage: socket unavailable, message remains pending")
-        } else {
-            appendDebugLog("sendMessage: sent via persistent socket")
+        if (socket.isConnected) {
+            val sent = socket.send(payload)
+            if (sent) {
+                appendDebugLog("sendMessage: sent via persistent socket")
+                return
+            }
+        }
+        
+        appendDebugLog("sendMessage: socket unavailable, using API fallback")
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.sendMessage(session, chatId, text, clientTempId = tempId) }
+                appendDebugLog("sendMessage API: acknowledged tempId=$tempId")
+                // Success will eventually come back via WebSocket too, but we refresh just in case
+            }.onFailure {
+                appendDebugLog("sendMessage API: failure tempId=$tempId error=${it.message}")
+                messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().filter { it.id != tempId }
+                _uiState.value = _uiState.value.copy(
+                    messages = _uiState.value.messages.filter { it.id != tempId }
+                )
+            }
         }
     }
 
@@ -226,7 +242,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val payload = org.json.JSONObject()
             .put("type", "typing")
             .put("chatId", chatId)
-        socket.send(payload)
+        if (!socket.send(payload)) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { api.sendTyping(session, chatId) }
+            }
+        }
     }
 
     fun markAsSeen(messageId: String) {
@@ -237,60 +257,69 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("type", "message_seen")
             .put("chatId", chatId)
             .put("messageId", messageId)
-        socket.send(payload)
+        if (!socket.send(payload)) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { api.markAsSeen(session, chatId, messageId) }
+            }
+        }
     }
 
     fun refreshHomeSilently() {
         val session = _uiState.value.session ?: return
         appendDebugLog("refreshHomeSilently()")
         val payload = org.json.JSONObject().put("type", "resync_state")
-        socket.send(payload)
+        if (!socket.send(payload)) {
+            viewModelScope.launch {
+                runCatching {
+                    val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
+                    appendDebugLog("refreshHomeSilently API fallback: chats=${home.chats.size}")
+                    _uiState.value = _uiState.value.copy(
+                        usersById = _uiState.value.usersById + home.usersById,
+                        chats = home.chats,
+                        onlineUserIds = home.onlineUserIds
+                    )
+                }
+            }
+        }
     }
 
     private suspend fun loadHome(session: Session) {
         appendDebugLog("loadHome(user=${session.userId})")
-        // Start observing socket first
         observeSocket(session)
         
-        // Initial load for wallet/contacts via HTTP (not WebSocket)
         runCatching {
+            val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
             val wallet = withContext(Dispatchers.IO) { runCatching { api.getStarsOverview(session) }.getOrNull() }
             val contacts = withContext(Dispatchers.IO) { runCatching { api.getContacts(session) }.getOrDefault(emptyList()) }
-            appendDebugLog("loadHome HTTP: walletLoaded=${wallet != null} contacts=${contacts.size}")
+            appendDebugLog("loadHome initial sync: chats=${home.chats.size}")
             
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
                 loading = false,
                 session = session,
+                usersById = _uiState.value.usersById + home.usersById,
+                chats = home.chats,
                 wallet = wallet,
                 contacts = contacts,
                 connectionTitle = "Noveo",
             )
         }.onFailure {
-            appendDebugLog("loadHome HTTP failure: ${it.message}")
+            appendDebugLog("loadHome initial sync failure: ${it.message}")
             _uiState.value = _uiState.value.copy(loading = false, connectionTitle = "Noveo")
         }
     }
 
     private fun observeSocket(session: Session) {
-        appendDebugLog("observeSocket(user=${session.userId})")
         if (socketJob?.isActive == true) return
+        appendDebugLog("observeSocket(user=${session.userId})")
         socketJob = viewModelScope.launch {
             while (true) {
                 runCatching {
                     socket.connect(
                         session = session,
                         getKnownUsers = { _uiState.value.usersById },
-                        onDebug = { message ->
-                            viewModelScope.launch {
-                                appendDebugLog(message)
-                            }
-                        },
-                        onSocketFrame = { frame ->
-                            viewModelScope.launch {
-                                appendSocketFrame(frame)
-                            }
-                        }
+                        onDebug = { message -> viewModelScope.launch { appendDebugLog(message) } },
+                        onSocketFrame = { frame -> viewModelScope.launch { appendSocketFrame(frame) } }
                     ).collect { event ->
                         appendDebugLog("socket event=${event.javaClass.simpleName}")
                         when (event) {
@@ -304,35 +333,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                     onlineUserIds = event.onlineIds
                                 )
                             }
-                            is SocketEvent.ChatUpdated -> {
-                                refreshHomeSilently()
-                            }
+                            is SocketEvent.ChatUpdated -> refreshHomeSilently()
                             is SocketEvent.HistoryUpdate -> {
                                 event.messagesByChat.forEach { (chatId, incomingMessages) ->
-                                    val mergedMessages = mergeMessages(
+                                    messageCacheByChat[chatId] = mergeMessages(
                                         messageCacheByChat[chatId].orEmpty(),
                                         incomingMessages
                                     )
-                                    messageCacheByChat[chatId] = mergedMessages
                                 }
                                 val selectedChatMessages = _uiState.value.selectedChatId
                                     ?.let { messageCacheByChat[it].orEmpty() }
                                     ?: _uiState.value.messages
-                                appendDebugLog(
-                                    "historyUpdate: chats=${event.chats.size} cachedChats=${event.messagesByChat.size} selectedMessages=${selectedChatMessages.size}"
-                                )
+                                
                                 _uiState.value = _uiState.value.copy(
                                     chats = event.chats,
                                     usersById = _uiState.value.usersById + event.users,
                                     messages = selectedChatMessages,
-                                    connectionDetail = null
+                                    connectionDetail = null,
+                                    connectionTitle = "Noveo"
                                 )
                             }
                         }
                     }
                 }.onFailure {
                     appendDebugLog("observeSocket: failure=${it.message}")
-                    _uiState.value = _uiState.value.copy(connectionDetail = "Connection lost, retrying...")
+                    _uiState.value = _uiState.value.copy(
+                        connectionTitle = "Connecting...",
+                        connectionDetail = "Connection lost, retrying..."
+                    )
                     delay(3000)
                 }
             }

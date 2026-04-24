@@ -29,6 +29,7 @@ class ChatSocket(
     private val origin: String = "https://noveo.ir"
 ) {
     private var activeSocket: WebSocket? = null
+    val isConnected: Boolean get() = activeSocket != null
 
     fun send(payload: JSONObject): Boolean {
         val socket = activeSocket
