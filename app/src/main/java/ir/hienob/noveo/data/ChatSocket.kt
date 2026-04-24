@@ -76,10 +76,8 @@ class ChatSocket(
 
                     when (type) {
                         "login_success" -> {
-                            onDebug("ws action=resync_state")
-                            val resyncPayload = JSONObject().put("type", "resync_state")
-                            onSocketFrame("TX $resyncPayload")
-                            webSocket.send(resyncPayload.toString())
+                            onDebug("ws action=logged_in")
+                            // Server triggers sync automatically, no need to request it here
                         }
                         "message", "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
                         "message_sent" -> trySend(SocketEvent.MessageSent(parseRealtimeMessage(json, knownUsers)))

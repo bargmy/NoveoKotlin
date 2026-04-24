@@ -118,7 +118,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.1 mobile"
+private const val CLIENT_VERSION = "v0.1.1 mobile"
 
 private enum class SettingsSection {
     MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG, THEME
