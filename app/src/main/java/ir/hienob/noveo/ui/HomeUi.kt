@@ -217,7 +217,6 @@ internal fun HomeScreen(
 
     LaunchedEffect(state.selectedChatId) {
         chatBackOffset.snapTo(0f)
-        rawDragOffset = 0f
     }
 
     val filteredChats = remember(state.chats, searchQuery) {
@@ -299,7 +298,7 @@ internal fun HomeScreen(
         val compact = maxWidth < 760.dp
 
         if (compact) {
-            val chatTranslation = if (state.selectedChatId != null) (chatBackOffset.value + rawDragOffset) else 0f
+            val chatTranslation = if (state.selectedChatId != null) chatBackOffset.value else 0f
             Box(modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { translationX = chatTranslation }
