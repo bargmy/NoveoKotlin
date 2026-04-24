@@ -1,6 +1,7 @@
 package ir.hienob.noveo.ui
 
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -23,6 +24,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -823,17 +825,7 @@ private fun ChatPane(
         }
     }
 
-    LaunchedEffect(state.selectedChatId, state.messages.size) {
-        if (state.messages.isNotEmpty()) {
-            listState.scrollToItem(state.messages.lastIndex)
-        }
-    }
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty()) {
-            delay(50)
-            listState.animateScrollToItem(state.messages.lastIndex)
-        }
-    }
+    var highlightedMessageId by remember { mutableStateOf<String?>(null) }
 
     val canLoadOlder = selectedChat?.hasMoreHistory == true && !state.loading
     val firstVisibleItemIndex by remember { derivedStateOf { listState.firstVisibleItemIndex } }
@@ -844,11 +836,34 @@ private fun ChatPane(
         }
     }
 
+    // Handle history loading vs new messages
+    val lastMessageId = remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.messages) {
+        if (state.messages.isEmpty()) return@LaunchedEffect
+        val newLastId = state.messages.last().id
+        val wasAtBottom = !listState.canScrollForward
+        
+        if (lastMessageId.value != null && newLastId != lastMessageId.value) {
+            // If a new message arrived and user was at bottom, or it's their own message
+            val lastMsg = state.messages.last()
+            val isOwn = lastMsg.senderId == state.session?.userId
+            if (wasAtBottom || isOwn) {
+                listState.animateScrollToItem(state.messages.lastIndex)
+            }
+        }
+        lastMessageId.value = newLastId
+    }
+
     val onScrollToMessage = { messageId: String ->
         val index = state.messages.indexOfFirst { it.id == messageId }
         if (index >= 0) {
             scope.launch {
+                highlightedMessageId = messageId
                 listState.animateScrollToItem(index)
+                delay(2000)
+                if (highlightedMessageId == messageId) {
+                    highlightedMessageId = null
+                }
             }
         }
     }
@@ -978,7 +993,8 @@ private fun MessageRow(
     onMediaClick: (String) -> Unit,
     repliedMessage: ChatMessage? = null,
     onReply: () -> Unit,
-    onScrollToMessage: (String) -> Unit
+    onScrollToMessage: (String) -> Unit,
+    isHighlighted: Boolean = false
 ) {
     val isSystem = message.senderId == "system"
     if (isSystem) {
@@ -1061,6 +1077,11 @@ private fun MessageRow(
                 transformOrigin = TransformOrigin(if (ownMessage) 1f else 0f, 1f)
             }
     ) {
+        val highlightColor by androidx.compose.animation.animateColorAsState(
+            targetValue = if (isHighlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Transparent,
+            animationSpec = tween(500),
+            label = "message_highlight_glow"
+        )
         Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
             if (!ownMessage) {
                 if (showSenderInfo) {
@@ -1091,7 +1112,9 @@ private fun MessageRow(
                     colors = CardDefaults.cardColors(
                         containerColor = if (ownMessage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    border = if (isHighlighted) BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
+                    modifier = Modifier.background(highlightColor, RoundedCornerShape(22.dp))
                 ) {
                     val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
                     Column(modifier = Modifier.padding(if (hasVisualMedia) 6.dp else 12.dp)) {
@@ -1114,7 +1137,6 @@ private fun MessageRow(
                         if (repliedMessage != null) {
                             Surface(
                                 modifier = Modifier
-                                    .fillMaxWidth()
                                     .padding(bottom = 4.dp)
                                     .clickable { onScrollToMessage(repliedMessage.id) },
                                 color = if (ownMessage) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
