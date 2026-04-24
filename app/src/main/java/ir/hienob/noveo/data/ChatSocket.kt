@@ -36,8 +36,14 @@ class ChatSocket(
     fun send(payload: JSONObject): Boolean {
         val socket = activeSocket
         if (socket == null) return false
-        return socket.send(payload.toString())
+        val sent = socket.send(payload.toString())
+        if (!sent) {
+            onSocketFrame?.invoke("!! SEND_FAILED: Socket is closed/closing")
+        }
+        return sent
     }
+
+    private var onSocketFrame: ((String) -> Unit)? = null
 
     fun connect(
         session: Session,
@@ -45,6 +51,7 @@ class ChatSocket(
         onDebug: (String) -> Unit = {},
         onSocketFrame: (String) -> Unit = {}
     ): Flow<SocketEvent> = callbackFlow {
+        this@ChatSocket.onSocketFrame = onSocketFrame
         val request = Request.Builder()
             .url("wss://noveo.ir:8443/ws")
             .header("Origin", origin)
@@ -53,6 +60,7 @@ class ChatSocket(
         val socket: WebSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 activeSocket = webSocket
+                onSocketFrame("!! CONNECTED")
                 onDebug("ws open")
                 val reconnectPayload = JSONObject()
                     .put("type", "reconnect")
