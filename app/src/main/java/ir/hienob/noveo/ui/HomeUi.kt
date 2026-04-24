@@ -187,6 +187,7 @@ internal fun HomeScreen(
     var selectedMediaUrl by rememberSaveable { mutableStateOf<String?>(null) }
 
     val swipeOffset = remember { androidx.compose.animation.core.Animatable(0f) }
+    var dragOffset by remember { mutableStateOf(0f) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val menuWidth = 296.dp
@@ -222,68 +223,58 @@ internal fun HomeScreen(
             .navigationBarsPadding()
             .imePadding()
             .pointerInput(state.selectedChatId, showMenu) {
-                coroutineScope {
-                    while (true) {
-                        awaitPointerEventScope {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            var dragAmount = 0f
-                            
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Release || 
-                                    event.changes.any { !it.pressed }) break
-                                
-                                val change = event.changes.first()
-                                val delta = change.position.x - change.previousPosition.x
-                                
-                                // Threshold to start drag
-                                if (dragAmount == 0f && Math.abs(change.position.x - down.position.x) < 10) {
-                                    continue
-                                }
-
-                                if (delta > 0 || Math.abs(dragAmount) > 0) {
-                                    change.consume()
-                                    dragAmount += delta
-                                    
-                                    val currentOffset = swipeOffset.value
-                                    val newOffset = if (showMenu) {
-                                        (currentOffset + delta).coerceIn(-menuWidthPx, 0f)
-                                    } else if (state.selectedChatId == null) {
-                                        (currentOffset + delta).coerceIn(0f, menuWidthPx)
-                                    } else {
-                                        (currentOffset + delta).coerceIn(0f, 1000f)
-                                    }
-                                    
-                                    launch { swipeOffset.snapTo(newOffset) }
-                                }
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        scope.launch { swipeOffset.stop() }
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        val totalOffset = swipeOffset.value + dragOffset + dragAmount
+                        
+                        // Apply constraints during drag
+                        if (showMenu) {
+                            if (totalOffset <= 0) {
+                                dragOffset += dragAmount
                             }
-
-                            // Settle
-                            launch {
-                                if (showMenu) {
-                                    if (swipeOffset.value < -menuWidthPx / 3) {
-                                        swipeOffset.animateTo(-menuWidthPx)
-                                        showMenu = false
-                                    } else {
-                                        swipeOffset.animateTo(0f)
-                                    }
-                                } else if (state.selectedChatId == null) {
-                                    if (swipeOffset.value > menuWidthPx / 3) {
-                                        swipeOffset.animateTo(menuWidthPx)
-                                        showMenu = true
-                                    } else {
-                                        swipeOffset.animateTo(0f)
-                                    }
+                        } else if (state.selectedChatId == null) {
+                            if (totalOffset >= 0) {
+                                dragOffset += dragAmount
+                            }
+                        } else {
+                            if (totalOffset >= 0) {
+                                dragOffset += dragAmount
+                            }
+                        }
+                    },
+                    onDragEnd = {
+                        scope.launch {
+                            val total = (swipeOffset.value + dragOffset)
+                            swipeOffset.snapTo(total)
+                            dragOffset = 0f
+                            
+                            if (showMenu) {
+                                if (swipeOffset.value < -menuWidthPx / 3) {
+                                    swipeOffset.animateTo(-menuWidthPx)
+                                    showMenu = false
                                 } else {
-                                    if (swipeOffset.value > 150) {
-                                        onBackToChats()
-                                    }
                                     swipeOffset.animateTo(0f)
                                 }
+                            } else if (state.selectedChatId == null) {
+                                if (swipeOffset.value > menuWidthPx / 3) {
+                                    swipeOffset.animateTo(menuWidthPx)
+                                    showMenu = true
+                                } else {
+                                    swipeOffset.animateTo(0f)
+                                }
+                            } else {
+                                if (swipeOffset.value > 150) {
+                                    onBackToChats()
+                                }
+                                swipeOffset.animateTo(0f)
                             }
                         }
                     }
-                }
+                )
             }
     ) {
         val compact = maxWidth < 760.dp
@@ -291,13 +282,14 @@ internal fun HomeScreen(
         // Reset offset when states change
         LaunchedEffect(showMenu, state.selectedChatId) {
             swipeOffset.snapTo(0f)
+            dragOffset = 0f
         }
 
         if (compact) {
-            val contentOffset = if (state.selectedChatId != null) swipeOffset.value else 0f
+            val interactiveOffset = if (state.selectedChatId != null) (swipeOffset.value + dragOffset) else 0f
             Box(modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { translationX = contentOffset }
+                .graphicsLayer { translationX = interactiveOffset }
             ) {
                 AnimatedContent(
                     targetState = state.selectedChatId == null,
@@ -416,13 +408,13 @@ internal fun HomeScreen(
             }
         }
 
-        val animatedMenuOffset = if (showMenu) swipeOffset.value else (swipeOffset.value - menuWidthPx)
+        val totalMenuOffset = if (showMenu) (swipeOffset.value + dragOffset) else (swipeOffset.value + dragOffset - menuWidthPx)
 
-        if (showMenu || swipeOffset.value > 0) {
+        if (showMenu || (swipeOffset.value + dragOffset) > 0) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = (if (showMenu) 0.5f + (swipeOffset.value / menuWidthPx * 0.5f) else (swipeOffset.value / menuWidthPx * 0.5f)).coerceIn(0f, 0.5f)))
+                    .background(Color.Black.copy(alpha = (if (showMenu) 0.5f + ((swipeOffset.value + dragOffset) / menuWidthPx * 0.5f) else ((swipeOffset.value + dragOffset) / menuWidthPx * 0.5f)).coerceIn(0f, 0.5f)))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -439,7 +431,7 @@ internal fun HomeScreen(
                 modifier = Modifier
                     .width(menuWidth)
                     .fillMaxHeight()
-                    .graphicsLayer { translationX = animatedMenuOffset }
+                    .graphicsLayer { translationX = totalMenuOffset }
             ) {
                 MenuSheet(
                     state = state,
