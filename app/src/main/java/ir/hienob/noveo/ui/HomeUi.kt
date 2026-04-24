@@ -64,6 +64,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Info
@@ -424,7 +425,7 @@ internal fun HomeScreen(
 
         // Sidebar Menu Overlay & Sheet
         if (state.selectedChatId == null) {
-            val currentMenuOffset = sidebarOffset.value + rawDragOffset
+            val currentMenuOffset = sidebarOffset.value
             val progress = (currentMenuOffset + menuWidthPx) / menuWidthPx
             if (progress > 0.01f) {
                 Box(
