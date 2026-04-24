@@ -32,7 +32,8 @@ class ChatSocket(
     fun connect(
         session: Session,
         getKnownUsers: () -> Map<String, UserSummary>,
-        onDebug: (String) -> Unit = {}
+        onDebug: (String) -> Unit = {},
+        onSocketFrame: (String) -> Unit = {}
     ): Flow<SocketEvent> = callbackFlow {
         val request = Request.Builder()
             .url("wss://noveo.ir:8443/ws")
@@ -42,17 +43,18 @@ class ChatSocket(
         val socket: WebSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 onDebug("ws open")
-                webSocket.send(
-                    JSONObject()
-                        .put("type", "reconnect")
-                        .put("userId", session.userId)
-                        .put("token", session.token)
-                        .put("sessionId", session.sessionId)
-                        .toString()
-                )
+                val reconnectPayload = JSONObject()
+                    .put("type", "reconnect")
+                    .put("userId", session.userId)
+                    .put("token", session.token)
+                    .put("sessionId", session.sessionId)
+                    .toString()
+                onSocketFrame("TX $reconnectPayload")
+                webSocket.send(reconnectPayload)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                onSocketFrame("RX $text")
                 onDebug("ws raw=${text.truncateForDebug()}")
                 runCatching {
                     val json = JSONObject(text)
@@ -64,7 +66,9 @@ class ChatSocket(
                     when (type) {
                         "login_success" -> {
                             onDebug("ws action=resync_state")
-                            webSocket.send(JSONObject().put("type", "resync_state").toString())
+                            val resyncPayload = JSONObject().put("type", "resync_state").toString()
+                            onSocketFrame("TX $resyncPayload")
+                            webSocket.send(resyncPayload)
                         }
                         "message", "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
                         "message_sent" -> trySend(SocketEvent.MessageSent(parseRealtimeMessage(json, knownUsers)))
