@@ -108,6 +108,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -976,16 +977,17 @@ private fun MessageRow(
         sdf.format(Date(message.timestamp * 1000))
     }
 
-    // Sending animation state
-    val animOffset = remember { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 40f else 0f) }
-    val animAlpha = remember { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 0f else 1f) }
-    val animScale = remember { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 0.8f else 1f) }
+    // Sending animation state: larger offset and smaller scale for a more dramatic "spawn"
+    val animOffset = remember(message.id) { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 120f else 0f) }
+    val animAlpha = remember(message.id) { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 0f else 1f) }
+    val animScale = remember(message.id) { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 0.5f else 1f) }
 
     LaunchedEffect(message.id) {
         if (ownMessage && message.pending) {
-            launch { animOffset.animateTo(0f, tween(350, easing = FastOutSlowInEasing)) }
-            launch { animAlpha.animateTo(1f, tween(200)) }
-            launch { animScale.animateTo(1f, tween(400, easing = FastOutSlowInEasing)) }
+            // Snappy animations: quick alpha, slightly longer move/scale
+            launch { animAlpha.animateTo(1f, tween(150)) }
+            launch { animOffset.animateTo(0f, tween(300, easing = FastOutSlowInEasing)) }
+            launch { animScale.animateTo(1f, tween(350, easing = FastOutSlowInEasing)) }
         }
     }
 
@@ -996,10 +998,12 @@ private fun MessageRow(
             .padding(vertical = if (showSenderInfo) 4.dp else 1.dp)
             .graphicsLayer {
                 translationY = animOffset.value
-                translationX = if (ownMessage && message.pending) -animOffset.value * 2f else 0f
+                // Slightly offset X as well to spawn more from the right-middle (input area)
+                translationX = if (ownMessage && message.pending) animOffset.value * 0.2f else 0f
                 alpha = animAlpha.value
                 scaleX = animScale.value
                 scaleY = animScale.value
+                transformOrigin = TransformOrigin(if (ownMessage) 1f else 0f, 1f)
             }
     ) {
         Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
