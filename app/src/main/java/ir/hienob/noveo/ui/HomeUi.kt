@@ -104,6 +104,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -187,6 +188,9 @@ internal fun HomeScreen(
 
     val swipeOffset = remember { androidx.compose.animation.core.Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val menuWidth = 296.dp
+    val menuWidthPx = with(density) { menuWidth.toPx() }
 
     val filteredChats = remember(state.chats, searchQuery) {
         state.chats.filter {
@@ -218,57 +222,83 @@ internal fun HomeScreen(
             .navigationBarsPadding()
             .imePadding()
             .pointerInput(state.selectedChatId, showMenu) {
-                detectHorizontalDragGestures(
-                    onDragEnd = {
-                        scope.launch {
-                            if (showMenu) {
-                                if (swipeOffset.value < -100) {
-                                    swipeOffset.animateTo(-300f)
-                                    showMenu = false
-                                } else {
-                                    swipeOffset.animateTo(0f)
+                coroutineScope {
+                    while (true) {
+                        awaitPointerEventScope {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            var dragAmount = 0f
+                            
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Release || 
+                                    event.changes.any { !it.pressed }) break
+                                
+                                val change = event.changes.first()
+                                val delta = change.position.x - change.previousPosition.x
+                                
+                                // Threshold to start drag
+                                if (dragAmount == 0f && Math.abs(change.position.x - down.position.x) < 10) {
+                                    continue
                                 }
-                            } else if (state.selectedChatId == null) {
-                                if (swipeOffset.value > 100) {
-                                    swipeOffset.animateTo(300f)
-                                    showMenu = true
-                                } else {
-                                    swipeOffset.animateTo(0f)
+
+                                if (delta > 0 || Math.abs(dragAmount) > 0) {
+                                    change.consume()
+                                    dragAmount += delta
+                                    
+                                    val currentOffset = swipeOffset.value
+                                    val newOffset = if (showMenu) {
+                                        (currentOffset + delta).coerceIn(-menuWidthPx, 0f)
+                                    } else if (state.selectedChatId == null) {
+                                        (currentOffset + delta).coerceIn(0f, menuWidthPx)
+                                    } else {
+                                        (currentOffset + delta).coerceIn(0f, 1000f)
+                                    }
+                                    
+                                    launch { swipeOffset.snapTo(newOffset) }
                                 }
-                            } else {
-                                if (swipeOffset.value > 150) {
-                                    onBackToChats()
-                                }
-                                swipeOffset.animateTo(0f)
                             }
-                        }
-                    },
-                    onHorizontalDrag = { change, dragAmount ->
-                        change.consume()
-                        scope.launch {
-                            val newOffset = (swipeOffset.value + dragAmount)
-                            if (showMenu) {
-                                swipeOffset.snapTo(newOffset.coerceIn(-300f, 0f))
-                            } else if (state.selectedChatId == null) {
-                                swipeOffset.snapTo(newOffset.coerceIn(0f, 300f))
-                            } else {
-                                swipeOffset.snapTo(newOffset.coerceIn(0f, 1000f))
+
+                            // Settle
+                            launch {
+                                if (showMenu) {
+                                    if (swipeOffset.value < -menuWidthPx / 3) {
+                                        swipeOffset.animateTo(-menuWidthPx)
+                                        showMenu = false
+                                    } else {
+                                        swipeOffset.animateTo(0f)
+                                    }
+                                } else if (state.selectedChatId == null) {
+                                    if (swipeOffset.value > menuWidthPx / 3) {
+                                        swipeOffset.animateTo(menuWidthPx)
+                                        showMenu = true
+                                    } else {
+                                        swipeOffset.animateTo(0f)
+                                    }
+                                } else {
+                                    if (swipeOffset.value > 150) {
+                                        onBackToChats()
+                                    }
+                                    swipeOffset.animateTo(0f)
+                                }
                             }
                         }
                     }
-                )
+                }
             }
     ) {
         val compact = maxWidth < 760.dp
 
-        // Reset offset when menu state changes externally or chat changes
+        // Reset offset when states change
         LaunchedEffect(showMenu, state.selectedChatId) {
             swipeOffset.snapTo(0f)
         }
 
         if (compact) {
-            val contentOffset = if (state.selectedChatId != null) swipeOffset.value.dp else 0.dp
-            Box(modifier = Modifier.fillMaxSize().offset(x = contentOffset)) {
+            val contentOffset = if (state.selectedChatId != null) swipeOffset.value else 0f
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { translationX = contentOffset }
+            ) {
                 AnimatedContent(
                     targetState = state.selectedChatId == null,
                     label = "compact_shell_transition",
@@ -386,8 +416,6 @@ internal fun HomeScreen(
             }
         }
 
-        val menuWidth = 296.dp
-        val menuWidthPx = with(LocalDensity.current) { menuWidth.toPx() }
         val animatedMenuOffset = if (showMenu) swipeOffset.value else (swipeOffset.value - menuWidthPx)
 
         if (showMenu || swipeOffset.value > 0) {
@@ -411,7 +439,7 @@ internal fun HomeScreen(
                 modifier = Modifier
                     .width(menuWidth)
                     .fillMaxHeight()
-                    .offset(x = animatedMenuOffset.dp)
+                    .graphicsLayer { translationX = animatedMenuOffset }
             ) {
                 MenuSheet(
                     state = state,
@@ -519,7 +547,7 @@ private fun SidebarPane(
     onOpenProfile: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
             SidebarHeader(
                 showSearch = showSearch,
