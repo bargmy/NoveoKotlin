@@ -29,7 +29,8 @@ class MainActivity : ComponentActivity() {
                 onTyping = viewModel::sendTyping,
                 onLogout = viewModel::logout,
                 onUpdateProfile = { u, b -> viewModel.updateProfile(u, b) },
-                onLoadOlder = viewModel::loadOlderMessages
+                onLoadOlder = viewModel::loadOlderMessages,
+                onReply = viewModel::setReplyingTo
             )
         }
     }

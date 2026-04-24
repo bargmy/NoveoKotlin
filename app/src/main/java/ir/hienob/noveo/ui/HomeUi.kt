@@ -120,6 +120,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -178,6 +179,7 @@ internal fun HomeScreen(
     onLogout: () -> Unit,
     onUpdateProfile: (String, String) -> Unit,
     onLoadOlder: () -> Unit,
+    onReply: (ChatMessage?) -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit
 ) {
@@ -358,7 +360,8 @@ internal fun HomeScreen(
                             onLoadOlder = onLoadOlder,
                             onMediaClick = { selectedMediaUrl = it },
                             onOpenProfile = { userId -> profileUserId = userId },
-                            onOpenGroupInfo = { showGroupInfo = true }
+                            onOpenGroupInfo = { showGroupInfo = true },
+                            onReply = { onReply(it) }
                         )
                     }
                 }
@@ -416,6 +419,7 @@ internal fun HomeScreen(
                             onMediaClick = { selectedMediaUrl = it },
                             onOpenProfile = { userId -> profileUserId = userId },
                             onOpenGroupInfo = { showGroupInfo = true },
+                            onReply = { onReply(it) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -761,6 +765,7 @@ private fun ChatPane(
     onMediaClick: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
     onOpenGroupInfo: () -> Unit,
+    onReply: (ChatMessage?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
@@ -897,37 +902,51 @@ private fun ChatPane(
                         prevMessage.senderId == "system"
                     }
 
+                    val repliedMessage = remember(message.replyToId, state.messages) {
+                        message.replyToId?.let { rid -> state.messages.find { it.id == rid } }
+                    }
+
                     MessageRow(
                         message = message,
                         ownMessage = message.senderId == state.session?.userId,
                         senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl,
                         showSenderInfo = showSenderInfo,
-                        onMediaClick = onMediaClick
+                        onMediaClick = onMediaClick,
+                        repliedMessage = repliedMessage,
+                        onReply = { onReply(message) }
                     )
                 }
             }
         }
 
         if (selectedChat?.canChat != false) {
-            ChatInput(
-                draft = draft,
-                onDraftChange = { 
-                    draft = it
-                    onTyping()
-                },
-                sendScale = sendScale,
-                onActionClick = {
-                    val text = draft.trim()
-                    if (text.isBlank()) return@ChatInput
-                    onSend(text)
-                    draft = ""
-                    sendPulse = true
-                    scope.launch {
-                        delay(220)
-                        sendPulse = false
-                    }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                state.replyingToMessage?.let { reply ->
+                    ReplyPreview(
+                        message = reply,
+                        onCancel = { onReply(null) }
+                    )
                 }
-            )
+                ChatInput(
+                    draft = draft,
+                    onDraftChange = { 
+                        draft = it
+                        onTyping()
+                    },
+                    sendScale = sendScale,
+                    onActionClick = {
+                        val text = draft.trim()
+                        if (text.isBlank()) return@ChatInput
+                        onSend(text)
+                        draft = ""
+                        sendPulse = true
+                        scope.launch {
+                            delay(220)
+                            sendPulse = false
+                        }
+                    }
+                )
+            }
         } else {
             Box(
                 modifier = Modifier
@@ -952,7 +971,9 @@ private fun MessageRow(
     ownMessage: Boolean,
     senderAvatarUrl: String?,
     showSenderInfo: Boolean,
-    onMediaClick: (String) -> Unit
+    onMediaClick: (String) -> Unit,
+    repliedMessage: ChatMessage? = null,
+    onReply: () -> Unit
 ) {
     val isSystem = message.senderId == "system"
     if (isSystem) {
@@ -982,6 +1003,10 @@ private fun MessageRow(
     val animAlpha = remember(message.id) { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 0f else 1f) }
     val animScale = remember(message.id) { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 0.5f else 1f) }
 
+    // Swipe state
+    val swipeOffset = remember { androidx.compose.animation.core.Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
     LaunchedEffect(message.id) {
         if (ownMessage && message.pending) {
             // Snappy animations: quick alpha, slightly longer move/scale
@@ -996,10 +1021,35 @@ private fun MessageRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = if (showSenderInfo) 4.dp else 1.dp)
+            .pointerInput(message.id) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        if (dragAmount < 0) { // Only swipe left
+                            scope.launch {
+                                swipeOffset.snapTo((swipeOffset.value + dragAmount).coerceIn(-100f, 0f))
+                            }
+                        }
+                    },
+                    onDragEnd = {
+                        if (swipeOffset.value < -60f) {
+                            onReply()
+                        }
+                        scope.launch {
+                            swipeOffset.animateTo(0f, tween(200))
+                        }
+                    },
+                    onDragCancel = {
+                        scope.launch {
+                            swipeOffset.animateTo(0f, tween(200))
+                        }
+                    }
+                )
+            }
             .graphicsLayer {
                 translationY = animOffset.value
                 // Slightly offset X as well to spawn more from the right-middle (input area)
-                translationX = if (ownMessage && message.pending) animOffset.value * 0.2f else 0f
+                translationX = (if (ownMessage && message.pending) animOffset.value * 0.2f else 0f) + swipeOffset.value
                 alpha = animAlpha.value
                 scaleX = animScale.value
                 scaleY = animScale.value
@@ -1040,6 +1090,58 @@ private fun MessageRow(
                 ) {
                     val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
                     Column(modifier = Modifier.padding(if (hasVisualMedia) 6.dp else 12.dp)) {
+                        if (message.content.forwardedInfo) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
+                                Icon(
+                                    Icons.Outlined.PlayArrow, // Changed to a more "forward" looking icon if possible
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp).alpha(0.7f),
+                                    tint = if (ownMessage) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    "Forwarded",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                                    color = if (ownMessage) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        if (repliedMessage != null) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                                    .clickable { /* Scroll to original message */ },
+                                color = if (ownMessage) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(2.dp)
+                                            .height(24.dp)
+                                            .background(if (ownMessage) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary, RoundedCornerShape(1.dp))
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = repliedMessage.senderName,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (ownMessage) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = repliedMessage.content.previewText(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = if (ownMessage) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         AttachmentPreview(file = message.content.file, onMediaClick = onMediaClick)
                         val caption = message.content.text
 
@@ -1087,6 +1189,51 @@ private fun MessageRow(
             }
             if (!ownMessage) {
                 Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReplyPreview(message: ChatMessage, onCancel: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp).scale(-1f, 1f)
+            )
+            Spacer(Modifier.width(12.dp))
+            Box(
+                modifier = Modifier
+                    .width(2.dp)
+                    .height(32.dp)
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(1.dp))
+            )
+            Spacer(Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = message.senderName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = message.content.previewText(),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
+                Icon(Icons.Outlined.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
             }
         }
     }

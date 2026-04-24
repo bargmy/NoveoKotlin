@@ -251,7 +251,8 @@ fun NoveoRoot(
     onTyping: () -> Unit,
     onLogout: () -> Unit,
     onUpdateProfile: (String, String) -> Unit,
-    onLoadOlder: () -> Unit
+    onLoadOlder: () -> Unit,
+    onReply: (ChatMessage?) -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember(context) { context.getSharedPreferences("noveo_ui", Context.MODE_PRIVATE) }
@@ -302,6 +303,7 @@ fun NoveoRoot(
                         onLogout = onLogout,
                         onUpdateProfile = onUpdateProfile,
                         onLoadOlder = onLoadOlder,
+                        onReply = onReply,
                         currentTheme = currentTheme,
                         onThemeChange = { currentTheme = it }
                     )

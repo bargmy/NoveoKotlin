@@ -45,7 +45,8 @@ data class AppUiState(
     val connectionDetail: String? = null,
     val wallet: Wallet? = null,
     val contacts: List<UserSummary> = emptyList(),
-    val typingUsers: Map<String, Set<String>> = emptyMap() // chatId -> set of userIds
+    val typingUsers: Map<String, Set<String>> = emptyMap(), // chatId -> set of userIds
+    val replyingToMessage: ChatMessage? = null
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -120,7 +121,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun backToChatList() {
         selectedChatRefreshJob?.cancel()
-        _uiState.value = _uiState.value.copy(selectedChatId = null, messages = emptyList())
+        _uiState.value = _uiState.value.copy(selectedChatId = null, messages = emptyList(), replyingToMessage = null)
     }
 
     fun openDirectChat(userId: String) {
@@ -148,15 +149,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 selectedChatId = chatId,
                 chats = updatedChats,
                 messages = cachedMessages,
-                loading = cachedMessages.isEmpty()
+                loading = cachedMessages.isEmpty(),
+                replyingToMessage = null
             )
             refreshHomeSilently()
         }
     }
 
+    fun setReplyingTo(message: ChatMessage?) {
+        _uiState.value = _uiState.value.copy(replyingToMessage = message)
+    }
+
     fun sendMessage(text: String) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
+        val replyingTo = _uiState.value.replyingToMessage
         if (text.isBlank()) return
 
         val tempId = "temp-${System.currentTimeMillis()}"
@@ -165,22 +172,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             chatId = chatId,
             senderId = session.userId,
             senderName = _uiState.value.usersById[session.userId]?.username ?: "Me",
-            content = MessageContent(text = text),
+            content = MessageContent(text = text, replyToId = replyingTo?.id),
             timestamp = System.currentTimeMillis() / 1000,
             pending = true,
-            clientTempId = tempId
+            clientTempId = tempId,
+            replyToId = replyingTo?.id
         )
 
         _uiState.value = _uiState.value.copy(
-            messages = _uiState.value.messages + pendingMsg
+            messages = _uiState.value.messages + pendingMsg,
+            replyingToMessage = null
         )
         messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
+
+        val contentObj = org.json.JSONObject().put("text", text)
+        if (replyingTo != null) {
+            contentObj.put("replyToId", replyingTo.id)
+        }
 
         val payload = org.json.JSONObject()
             .put("type", "message")
             .put("chatId", chatId)
-            .put("content", org.json.JSONObject().put("text", text).toString())
+            .put("content", contentObj.toString())
             .put("clientTempId", tempId)
+            .put("replyToId", replyingTo?.id)
         
         val sent = socket.send(payload)
     }
