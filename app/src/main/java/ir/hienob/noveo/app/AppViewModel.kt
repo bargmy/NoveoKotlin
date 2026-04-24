@@ -60,6 +60,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
     private var socketJob: Job? = null
+    private var socketResyncJob: Job? = null
     private var selectedChatRefreshJob: Job? = null
 
     init {
@@ -123,6 +124,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun logout() {
         appendDebugLog("logout()")
         socketJob?.cancel()
+        socketResyncJob?.cancel()
         selectedChatRefreshJob?.cancel()
         messageCacheByChat.clear()
         sessionStore.clear()
@@ -161,23 +163,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 selectedChatId = chatId,
                 chats = updatedChats,
                 messages = cachedMessages,
-                loading = true
+                loading = cachedMessages.isEmpty()
             )
-            runCatching {
-                val result = withContext(Dispatchers.IO) { api.getMessages(session, chatId) }
-                val mergedMessages = mergeMessages(messageCacheByChat[chatId].orEmpty(), result.messages)
-                messageCacheByChat[chatId] = mergedMessages
-                val currentState = _uiState.value
-                appendDebugLog("openChat: apiMessages=${result.messages.size} merged=${mergedMessages.size} selected=${currentState.selectedChatId}")
-                _uiState.value = currentState.copy(
-                    usersById = currentState.usersById + result.usersById,
-                    messages = if (currentState.selectedChatId == chatId) mergedMessages else currentState.messages,
-                    loading = false
-                )
-            }.onFailure {
-                appendDebugLog("openChat: failure=${it.message}")
-                _uiState.value = _uiState.value.copy(loading = false, error = it.message)
-            }
+            refreshHomeSilently()
         }
     }
 
@@ -275,6 +263,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeSocket(session: Session) {
         if (socketJob?.isActive == true) return
         appendDebugLog("observeSocket(user=${session.userId})")
+        startSocketResyncLoop()
         socketJob = viewModelScope.launch {
             while (true) {
                 runCatching {
@@ -312,6 +301,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                     chats = event.chats,
                                     usersById = _uiState.value.usersById + event.users,
                                     messages = selectedChatMessages,
+                                    loading = false,
                                     connectionDetail = null,
                                     connectionTitle = "Noveo"
                                 )
@@ -324,7 +314,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         connectionTitle = "Connecting...",
                         connectionDetail = "Connection lost, retrying..."
                     )
-                    delay(500) // Aggressive retry
+                    delay(1500)
                 }
             }
         }
@@ -335,9 +325,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun startSelectedChatRefresh(session: Session, chatId: String) {
-        // Polling loop removed as we now rely on WebSocket for updates.
-        // If we want to ensure history is up to date when opening a chat, we can trigger a resync.
-        refreshHomeSilently()
+        selectedChatRefreshJob?.cancel()
+        selectedChatRefreshJob = viewModelScope.launch {
+            refreshHomeSilently()
+            while (_uiState.value.session?.userId == session.userId && _uiState.value.selectedChatId == chatId) {
+                delay(5000)
+                refreshHomeSilently()
+            }
+        }
     }
 
 
@@ -345,6 +340,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // We now rely on WebSocket for real-time updates.
         // If a specific refresh is needed, we could send a targeted message sync request via socket.
         appendDebugLog("refreshSelectedChat(reason=$reason): skipped (using WebSocket)")
+    }
+
+    private fun startSocketResyncLoop() {
+        if (socketResyncJob?.isActive == true) return
+        socketResyncJob = viewModelScope.launch {
+            while (true) {
+                delay(15000)
+                if (_uiState.value.session != null) {
+                    refreshHomeSilently()
+                }
+            }
+        }
     }
 
     private fun handleIncomingMessage(msg: ChatMessage) {
