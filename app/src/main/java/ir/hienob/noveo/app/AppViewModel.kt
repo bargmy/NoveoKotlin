@@ -205,19 +205,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         appendDebugLog("sendMessage: pendingAdded messages=${_uiState.value.messages.size}")
         messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
 
-        viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { api.sendMessage(session, chatId, text, clientTempId = tempId) }
-                appendDebugLog("sendMessage: acknowledged tempId=$tempId")
-                refreshSelectedChat(session, chatId, reason = "send_success")
-                refreshHomeSilently()
-            }.onFailure {
-                appendDebugLog("sendMessage: failure tempId=$tempId error=${it.message}")
-                messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().filter { it.id != tempId }
-                _uiState.value = _uiState.value.copy(
-                    messages = _uiState.value.messages.filter { it.id != tempId }
-                )
+        val payload = org.json.JSONObject()
+            .put("type", "message")
+            .put("chatId", chatId)
+            .put("content", org.json.JSONObject().put("text", text).toString())
+            .put("clientTempId", tempId)
+        
+        val sent = socket.send(payload)
+        if (!sent) {
+            appendDebugLog("sendMessage: socket unavailable, falling back to API")
+            viewModelScope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) { api.sendMessage(session, chatId, text, clientTempId = tempId) }
+                    appendDebugLog("sendMessage API: acknowledged tempId=$tempId")
+                    refreshSelectedChat(session, chatId, reason = "send_success")
+                }.onFailure {
+                    appendDebugLog("sendMessage API: failure tempId=$tempId error=${it.message}")
+                    messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().filter { it.id != tempId }
+                    _uiState.value = _uiState.value.copy(
+                        messages = _uiState.value.messages.filter { it.id != tempId }
+                    )
+                }
             }
+        } else {
+            appendDebugLog("sendMessage: sent via persistent socket")
         }
     }
 
@@ -225,8 +236,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
         appendDebugLog("sendTyping(chatId=$chatId)")
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching { api.sendTyping(session, chatId) }
+        val payload = org.json.JSONObject()
+            .put("type", "typing")
+            .put("chatId", chatId)
+        if (!socket.send(payload)) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { api.sendTyping(session, chatId) }
+            }
         }
     }
 
@@ -234,55 +250,67 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
         appendDebugLog("markAsSeen(chatId=$chatId, messageId=$messageId)")
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching { api.markAsSeen(session, chatId, messageId) }
+        val payload = org.json.JSONObject()
+            .put("type", "message_seen")
+            .put("chatId", chatId)
+            .put("messageId", messageId)
+        if (!socket.send(payload)) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { api.markAsSeen(session, chatId, messageId) }
+            }
         }
     }
 
     fun refreshHomeSilently() {
         val session = _uiState.value.session ?: return
         appendDebugLog("refreshHomeSilently()")
-        viewModelScope.launch {
-            runCatching {
-                val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
-                appendDebugLog("refreshHomeSilently: chats=${home.chats.size} users=${home.usersById.size}")
-                _uiState.value = _uiState.value.copy(
-                    usersById = _uiState.value.usersById + home.usersById,
-                    chats = home.chats,
-                    onlineUserIds = home.onlineUserIds
-                )
+        val payload = org.json.JSONObject().put("type", "resync_state")
+        if (!socket.send(payload)) {
+            viewModelScope.launch {
+                runCatching {
+                    val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
+                    appendDebugLog("refreshHomeSilently API: chats=${home.chats.size} users=${home.usersById.size}")
+                    _uiState.value = _uiState.value.copy(
+                        usersById = _uiState.value.usersById + home.usersById,
+                        chats = home.chats,
+                        onlineUserIds = home.onlineUserIds
+                    )
+                }
             }
         }
     }
 
     private suspend fun loadHome(session: Session) {
         appendDebugLog("loadHome(user=${session.userId})")
+        // Start observing socket first
+        observeSocket(session)
+        
+        // Load initial data via API to show something immediately
         runCatching {
             val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
             val wallet = withContext(Dispatchers.IO) { runCatching { api.getStarsOverview(session) }.getOrNull() }
             val contacts = withContext(Dispatchers.IO) { runCatching { api.getContacts(session) }.getOrDefault(emptyList()) }
-            appendDebugLog("loadHome: chats=${home.chats.size} users=${home.usersById.size} contacts=${contacts.size}")
+            appendDebugLog("loadHome API: chats=${home.chats.size} users=${home.usersById.size} contacts=${contacts.size}")
             
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
                 loading = false,
                 session = session,
-                usersById = home.usersById,
+                usersById = _uiState.value.usersById + home.usersById,
                 chats = home.chats,
                 wallet = wallet,
                 contacts = contacts,
                 connectionTitle = "Noveo",
             )
-            observeSocket(session)
         }.onFailure {
-            appendDebugLog("loadHome: failure=${it.message}")
-            _uiState.value = _uiState.value.copy(loading = false, error = it.message, connectionTitle = "Connecting...")
+            appendDebugLog("loadHome API failure: ${it.message}")
+            _uiState.value = _uiState.value.copy(loading = false, connectionTitle = "Noveo")
         }
     }
 
     private fun observeSocket(session: Session) {
         appendDebugLog("observeSocket(user=${session.userId})")
-        socketJob?.cancel()
+        if (socketJob?.isActive == true) return
         socketJob = viewModelScope.launch {
             while (true) {
                 runCatching {
@@ -348,20 +376,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun ensureSocketObserved(session: Session) {
-        if (socketJob?.isActive == true) return
-        appendDebugLog("ensureSocketObserved: restarting socket observer")
         observeSocket(session)
     }
 
     private fun startSelectedChatRefresh(session: Session, chatId: String) {
-        selectedChatRefreshJob?.cancel()
-        selectedChatRefreshJob = viewModelScope.launch {
-            while (_uiState.value.session?.userId == session.userId && _uiState.value.selectedChatId == chatId) {
-                delay(3000)
-                refreshSelectedChat(session, chatId, reason = "poll")
-            }
-        }
+        // Polling loop removed as we now rely on WebSocket for updates.
+        // If we want to ensure history is up to date when opening a chat, we can trigger a resync.
+        refreshHomeSilently()
     }
+
 
     private suspend fun refreshSelectedChat(session: Session, chatId: String, reason: String) {
         runCatching {

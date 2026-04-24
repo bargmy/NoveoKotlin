@@ -28,6 +28,13 @@ class ChatSocket(
     private val client: OkHttpClient = OkHttpClient(),
     private val origin: String = "https://noveo.ir"
 ) {
+    private var activeSocket: WebSocket? = null
+
+    fun send(payload: JSONObject): Boolean {
+        val socket = activeSocket
+        if (socket == null) return false
+        return socket.send(payload.toString())
+    }
 
     fun connect(
         session: Session,
@@ -42,15 +49,16 @@ class ChatSocket(
 
         val socket: WebSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                activeSocket = webSocket
                 onDebug("ws open")
                 val reconnectPayload = JSONObject()
                     .put("type", "reconnect")
                     .put("userId", session.userId)
                     .put("token", session.token)
                     .put("sessionId", session.sessionId)
-                    .toString()
+                
                 onSocketFrame("TX $reconnectPayload")
-                webSocket.send(reconnectPayload)
+                webSocket.send(reconnectPayload.toString())
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -66,9 +74,9 @@ class ChatSocket(
                     when (type) {
                         "login_success" -> {
                             onDebug("ws action=resync_state")
-                            val resyncPayload = JSONObject().put("type", "resync_state").toString()
+                            val resyncPayload = JSONObject().put("type", "resync_state")
                             onSocketFrame("TX $resyncPayload")
-                            webSocket.send(resyncPayload)
+                            webSocket.send(resyncPayload.toString())
                         }
                         "message", "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
                         "message_sent" -> trySend(SocketEvent.MessageSent(parseRealtimeMessage(json, knownUsers)))
@@ -114,6 +122,7 @@ class ChatSocket(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                activeSocket = null
                 val code = response?.code
                 val message = when (code) {
                     404 -> "Noveo realtime server was not found (HTTP 404)."
@@ -125,14 +134,19 @@ class ChatSocket(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                activeSocket = null
                 onDebug("ws closed code=$code reason=${reason.ifBlank { "<empty>" }}")
                 channel.close()
             }
         })
 
-        awaitClose { socket.cancel() }
+        awaitClose { 
+            activeSocket = null
+            socket.cancel() 
+        }
     }
 }
+
 
 private fun String?.sanitizeRealtimeField(): String? {
     val value = this?.trim().orEmpty()
