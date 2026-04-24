@@ -186,12 +186,32 @@ internal fun HomeScreen(
     var showGroupInfo by rememberSaveable { mutableStateOf(false) }
     var selectedMediaUrl by rememberSaveable { mutableStateOf<String?>(null) }
 
-    val swipeOffset = remember { androidx.compose.animation.core.Animatable(0f) }
-    var dragOffset by remember { mutableStateOf(0f) }
-    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val menuWidth = 296.dp
     val menuWidthPx = with(density) { menuWidth.toPx() }
+    
+    // Core offsets
+    val sidebarOffset = remember { androidx.compose.animation.core.Animatable(-menuWidthPx) }
+    val chatBackOffset = remember { androidx.compose.animation.core.Animatable(0f) }
+    
+    // Temporary drag state to avoid coroutine overhead during finger movement
+    var rawDragOffset by remember { mutableStateOf(0f) }
+    
+    val scope = rememberCoroutineScope()
+
+    // Sync menu state with animation
+    LaunchedEffect(showMenu) {
+        if (showMenu) {
+            sidebarOffset.animateTo(0f, tween(250, easing = FastOutSlowInEasing))
+        } else {
+            sidebarOffset.animateTo(-menuWidthPx, tween(250, easing = FastOutSlowInEasing))
+        }
+    }
+
+    LaunchedEffect(state.selectedChatId) {
+        chatBackOffset.snapTo(0f)
+        rawDragOffset = 0f
+    }
 
     val filteredChats = remember(state.chats, searchQuery) {
         state.chats.filter {
@@ -225,52 +245,49 @@ internal fun HomeScreen(
             .pointerInput(state.selectedChatId, showMenu) {
                 detectHorizontalDragGestures(
                     onDragStart = {
-                        scope.launch { swipeOffset.stop() }
+                        scope.launch {
+                            sidebarOffset.stop()
+                            chatBackOffset.stop()
+                        }
+                        rawDragOffset = 0f
                     },
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
-                        val totalOffset = swipeOffset.value + dragOffset + dragAmount
-                        
-                        // Apply constraints during drag
-                        if (showMenu) {
-                            if (totalOffset <= 0) {
-                                dragOffset += dragAmount
-                            }
-                        } else if (state.selectedChatId == null) {
-                            if (totalOffset >= 0) {
-                                dragOffset += dragAmount
-                            }
+                        if (state.selectedChatId != null) {
+                            // Chat back: only positive drag
+                            val target = chatBackOffset.value + rawDragOffset + dragAmount
+                            if (target >= 0) rawDragOffset += dragAmount
                         } else {
-                            if (totalOffset >= 0) {
-                                dragOffset += dragAmount
+                            // Sidebar: constrain to valid range
+                            val current = if (showMenu) 0f else -menuWidthPx
+                            val target = current + sidebarOffset.value - (if (showMenu) 0f else -menuWidthPx) + rawDragOffset + dragAmount
+                            if (target <= 0f && target >= -menuWidthPx) {
+                                rawDragOffset += dragAmount
                             }
                         }
                     },
                     onDragEnd = {
                         scope.launch {
-                            val total = (swipeOffset.value + dragOffset)
-                            swipeOffset.snapTo(total)
-                            dragOffset = 0f
-                            
-                            if (showMenu) {
-                                if (swipeOffset.value < -menuWidthPx / 3) {
-                                    swipeOffset.animateTo(-menuWidthPx)
-                                    showMenu = false
-                                } else {
-                                    swipeOffset.animateTo(0f)
-                                }
-                            } else if (state.selectedChatId == null) {
-                                if (swipeOffset.value > menuWidthPx / 3) {
-                                    swipeOffset.animateTo(menuWidthPx)
-                                    showMenu = true
-                                } else {
-                                    swipeOffset.animateTo(0f)
-                                }
-                            } else {
-                                if (swipeOffset.value > 150) {
+                            if (state.selectedChatId != null) {
+                                val total = chatBackOffset.value + rawDragOffset
+                                if (total > 150) {
                                     onBackToChats()
                                 }
-                                swipeOffset.animateTo(0f)
+                                chatBackOffset.snapTo(total)
+                                rawDragOffset = 0f
+                                chatBackOffset.animateTo(0f)
+                            } else {
+                                val currentBase = if (showMenu) 0f else -menuWidthPx
+                                val total = (currentBase + sidebarOffset.value - currentBase + rawDragOffset).coerceIn(-menuWidthPx, 0f)
+                                sidebarOffset.snapTo(total)
+                                rawDragOffset = 0f
+                                if (sidebarOffset.value > -menuWidthPx * 0.6f) {
+                                    showMenu = true
+                                    sidebarOffset.animateTo(0f)
+                                } else {
+                                    showMenu = false
+                                    sidebarOffset.animateTo(-menuWidthPx)
+                                }
                             }
                         }
                     }
@@ -279,17 +296,11 @@ internal fun HomeScreen(
     ) {
         val compact = maxWidth < 760.dp
 
-        // Reset offset when states change
-        LaunchedEffect(showMenu, state.selectedChatId) {
-            swipeOffset.snapTo(0f)
-            dragOffset = 0f
-        }
-
         if (compact) {
-            val interactiveOffset = if (state.selectedChatId != null) (swipeOffset.value + dragOffset) else 0f
+            val chatTranslation = if (state.selectedChatId != null) (chatBackOffset.value + rawDragOffset) else 0f
             Box(modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { translationX = interactiveOffset }
+                .graphicsLayer { translationX = chatTranslation }
             ) {
                 AnimatedContent(
                     targetState = state.selectedChatId == null,
@@ -408,52 +419,50 @@ internal fun HomeScreen(
             }
         }
 
-        val totalMenuOffset = if (showMenu) (swipeOffset.value + dragOffset) else (swipeOffset.value + dragOffset - menuWidthPx)
+        // Sidebar Menu Overlay & Sheet
+        if (state.selectedChatId == null) {
+            val currentMenuOffset = sidebarOffset.value + rawDragOffset
+            val progress = (currentMenuOffset + menuWidthPx) / menuWidthPx
+            if (progress > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = (0.5f * progress).coerceIn(0f, 0.5f)))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { showMenu = false }
+                        )
+                )
 
-        if (showMenu || (swipeOffset.value + dragOffset) > 0) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = (if (showMenu) 0.5f + ((swipeOffset.value + dragOffset) / menuWidthPx * 0.5f) else ((swipeOffset.value + dragOffset) / menuWidthPx * 0.5f)).coerceIn(0f, 0.5f)))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { 
-                            scope.launch {
-                                swipeOffset.animateTo(-menuWidthPx)
-                                showMenu = false 
-                            }
+                Box(
+                    modifier = Modifier
+                        .width(menuWidth)
+                        .fillMaxHeight()
+                        .graphicsLayer { translationX = currentMenuOffset.coerceIn(-menuWidthPx, 0f) }
+                ) {
+                    MenuSheet(
+                        state = state,
+                        onOpenContacts = {
+                            showMenu = false
+                            showContactsModal = true
+                        },
+                        onOpenCreate = {
+                            showMenu = false
+                            showCreateModal = true
+                        },
+                        onOpenStars = {
+                            showMenu = false
+                            settingsSection = SettingsSection.SUBSCRIPTION
+                            showSettingsModal = true
+                        },
+                        onOpenSettings = {
+                            showMenu = false
+                            settingsSection = SettingsSection.MENU
+                            showSettingsModal = true
                         }
                     )
-            )
-
-            Box(
-                modifier = Modifier
-                    .width(menuWidth)
-                    .fillMaxHeight()
-                    .graphicsLayer { translationX = totalMenuOffset }
-            ) {
-                MenuSheet(
-                    state = state,
-                    onOpenContacts = {
-                        showMenu = false
-                        showContactsModal = true
-                    },
-                    onOpenCreate = {
-                        showMenu = false
-                        showCreateModal = true
-                    },
-                    onOpenStars = {
-                        showMenu = false
-                        settingsSection = SettingsSection.SUBSCRIPTION
-                        showSettingsModal = true
-                    },
-                    onOpenSettings = {
-                        showMenu = false
-                        settingsSection = SettingsSection.MENU
-                        showSettingsModal = true
-                    }
-                )
+                }
             }
         }
 
@@ -539,7 +548,7 @@ private fun SidebarPane(
     onOpenProfile: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(modifier = Modifier.fillMaxSize()) {
             SidebarHeader(
                 showSearch = showSearch,
