@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -203,6 +204,7 @@ internal fun HomeScreen(
             .fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
+            .imePadding()
     ) {
         val compact = maxWidth < 760.dp
 
@@ -786,16 +788,16 @@ private fun ChatPane(
             }
         }
 
-        ComposerBar(
+        ChatInput(
             draft = draft,
             onDraftChange = { 
                 draft = it
                 onTyping()
             },
             sendScale = sendScale,
-            onSendClick = {
+            onActionClick = {
                 val text = draft.trim()
-                if (text.isBlank()) return@ComposerBar
+                if (text.isBlank()) return@ChatInput
                 onSend(text)
                 draft = ""
                 sendPulse = true
@@ -804,161 +806,6 @@ private fun ChatPane(
                     sendPulse = false
                 }
             }
-        )
-    }
-}
-
-@Composable
-private fun ComposerBar(
-    draft: String,
-    onDraftChange: (String) -> Unit,
-    sendScale: Float,
-    onSendClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(TelegramComposerPanel)
-    ) {
-        Image(
-            painter = painterResource(R.drawable.tg_compose_panel_shadow),
-            contentDescription = null,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(3.dp),
-            contentScale = ContentScale.FillBounds
-        )
-        HorizontalDivider(
-            thickness = 1.dp,
-            color = TelegramComposerDivider,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 8.dp, end = 9.dp, top = 4.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.Bottom
-        ) {
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 44.dp),
-                shape = RoundedCornerShape(22.dp),
-                color = TelegramComposerField
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 44.dp)
-                ) {
-                    TelegramAssetIconButton(
-                        resId = R.drawable.tg_input_smile,
-                        contentDescription = "Emoji",
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .offset(x = 2.dp)
-                    )
-                    TelegramAssetIconButton(
-                        resId = R.drawable.tg_msg_input_attach2,
-                        contentDescription = "Attach",
-                        modifier = Modifier.align(Alignment.BottomEnd)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 52.dp, end = 50.dp),
-                        contentAlignment = Alignment.BottomStart
-                    ) {
-                        BasicTextField(
-                            value = draft,
-                            onValueChange = onDraftChange,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 9.dp, bottom = 10.dp),
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                fontSize = 18.sp,
-                                lineHeight = 22.sp,
-                                color = TelegramComposerText
-                            ),
-                            cursorBrush = SolidColor(TelegramComposerCursor),
-                            minLines = 1,
-                            maxLines = 6,
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Sentences,
-                                imeAction = ImeAction.Default
-                            ),
-                            decorationBox = { innerTextField ->
-                                if (draft.isBlank()) {
-                                    Text(
-                                        text = "Message",
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            fontSize = 18.sp,
-                                            lineHeight = 22.sp
-                                        ),
-                                        color = TelegramComposerHint
-                                    )
-                                }
-                                innerTextField()
-                            }
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.width(7.dp))
-
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .scale(sendScale),
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Surface(
-                    modifier = Modifier.size(38.dp),
-                    shape = CircleShape,
-                    color = TelegramComposerBlue
-                ) {}
-                val actionIcon = if (draft.isBlank()) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24
-                val actionSize = if (draft.isBlank()) 28.dp else 20.dp
-                Image(
-                    painter = painterResource(actionIcon),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(actionSize)
-                        .offset(y = if (draft.isBlank()) 0.dp else (-1).dp),
-                    colorFilter = ColorFilter.tint(Color.White)
-                )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clip(CircleShape)
-                        .clickable(onClick = onSendClick)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TelegramAssetIconButton(
-    resId: Int,
-    contentDescription: String,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .clickable(onClick = {}),
-        contentAlignment = Alignment.Center
-    ) {
-        Image(
-            painter = painterResource(resId),
-            contentDescription = contentDescription,
-            modifier = Modifier.size(28.dp),
-            colorFilter = ColorFilter.tint(TelegramComposerIcon)
         )
     }
 }
