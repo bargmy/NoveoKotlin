@@ -839,8 +839,17 @@ private fun ChatPane(
     val firstVisibleItemIndex by remember { derivedStateOf { listState.firstVisibleItemIndex } }
     
     LaunchedEffect(firstVisibleItemIndex) {
-        if (firstVisibleItemIndex == 0 && canLoadOlder && state.messages.isNotEmpty()) {
+        if (firstVisibleItemIndex <= 2 && canLoadOlder && state.messages.isNotEmpty()) {
             onLoadOlder()
+        }
+    }
+
+    val onScrollToMessage = { messageId: String ->
+        val index = state.messages.indexOfFirst { it.id == messageId }
+        if (index >= 0) {
+            scope.launch {
+                listState.animateScrollToItem(index)
+            }
         }
     }
 
@@ -913,40 +922,35 @@ private fun ChatPane(
                         showSenderInfo = showSenderInfo,
                         onMediaClick = onMediaClick,
                         repliedMessage = repliedMessage,
-                        onReply = { onReply(message) }
+                        onReply = { onReply(message) },
+                        onScrollToMessage = onScrollToMessage
                     )
                 }
             }
         }
 
         if (selectedChat?.canChat != false) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                state.replyingToMessage?.let { reply ->
-                    ReplyPreview(
-                        message = reply,
-                        onCancel = { onReply(null) }
-                    )
-                }
-                ChatInput(
-                    draft = draft,
-                    onDraftChange = { 
-                        draft = it
-                        onTyping()
-                    },
-                    sendScale = sendScale,
-                    onActionClick = {
-                        val text = draft.trim()
-                        if (text.isBlank()) return@ChatInput
-                        onSend(text)
-                        draft = ""
-                        sendPulse = true
-                        scope.launch {
-                            delay(220)
-                            sendPulse = false
-                        }
+            ChatInput(
+                draft = draft,
+                onDraftChange = { 
+                    draft = it
+                    onTyping()
+                },
+                sendScale = sendScale,
+                replyingTo = state.replyingToMessage,
+                onCancelReply = { onReply(null) },
+                onActionClick = {
+                    val text = draft.trim()
+                    if (text.isBlank()) return@ChatInput
+                    onSend(text)
+                    draft = ""
+                    sendPulse = true
+                    scope.launch {
+                        delay(220)
+                        sendPulse = false
                     }
-                )
-            }
+                }
+            )
         } else {
             Box(
                 modifier = Modifier
@@ -973,7 +977,8 @@ private fun MessageRow(
     showSenderInfo: Boolean,
     onMediaClick: (String) -> Unit,
     repliedMessage: ChatMessage? = null,
-    onReply: () -> Unit
+    onReply: () -> Unit,
+    onScrollToMessage: (String) -> Unit
 ) {
     val isSystem = message.senderId == "system"
     if (isSystem) {
@@ -1110,12 +1115,12 @@ private fun MessageRow(
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 6.dp)
-                                    .clickable { /* Scroll to original message */ },
-                                color = if (ownMessage) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                                    .padding(bottom = 4.dp)
+                                    .clickable { onScrollToMessage(repliedMessage.id) },
+                                color = if (ownMessage) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier
                                             .width(2.dp)
@@ -1128,7 +1133,9 @@ private fun MessageRow(
                                             text = repliedMessage.senderName,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (ownMessage) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                                            color = if (ownMessage) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = repliedMessage.content.previewText(),

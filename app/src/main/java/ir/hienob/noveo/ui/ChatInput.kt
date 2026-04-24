@@ -29,6 +29,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,9 +50,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ir.hienob.noveo.R
+import ir.hienob.noveo.data.ChatMessage
 
 internal data class ChatInputColors(
     val fieldTop: Color,
@@ -72,6 +78,8 @@ internal fun ChatInput(
     onActionClick: () -> Unit,
     modifier: Modifier = Modifier,
     sendScale: Float = 1f,
+    replyingTo: ChatMessage? = null,
+    onCancelReply: () -> Unit = {},
     placeholder: String = "Message",
     colors: ChatInputColors = ChatInputColors(
         fieldTop = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
@@ -97,10 +105,9 @@ internal fun ChatInput(
                 .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 9.dp),
             verticalAlignment = Alignment.Bottom
         ) {
-            Box(
+            Column(
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = 40.dp)
                     .clip(fieldShape)
                     .background(
                         brush = Brush.verticalGradient(
@@ -109,66 +116,123 @@ internal fun ChatInput(
                     )
                     .border(1.dp, colors.fieldBorder, fieldShape)
             ) {
-                GlassIconButton(
-                    resId = R.drawable.tg_input_smile,
-                    contentDescription = "Emoji",
-                    tint = colors.iconTint,
-                    selectorTint = colors.selectorTint,
-                    onClick = {},
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 1.dp, bottom = 1.dp)
-                )
-
-                GlassIconButton(
-                    resId = R.drawable.tg_msg_input_attach2,
-                    contentDescription = "Attach",
-                    tint = colors.iconTint,
-                    selectorTint = colors.selectorTint,
-                    onClick = {},
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 1.dp, bottom = 1.dp)
-                )
+                // Reply Preview inside the input box
+                AnimatedContent(
+                    targetState = replyingTo,
+                    label = "input_reply_preview"
+                ) { reply ->
+                    if (reply != null) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(2.dp)
+                                    .height(28.dp)
+                                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(1.dp))
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = reply.senderName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = reply.content.previewText(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.text.copy(alpha = 0.8f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            IconButton(
+                                onClick = onCancelReply,
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Close,
+                                    contentDescription = "Cancel",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = colors.iconTint
+                                )
+                            }
+                        }
+                    }
+                }
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 42.dp, end = 42.dp),
-                    contentAlignment = Alignment.CenterStart
+                        .heightIn(min = 40.dp)
                 ) {
-                    BasicTextField(
-                        value = draft,
-                        onValueChange = onDraftChange,
+                    GlassIconButton(
+                        resId = R.drawable.tg_input_smile,
+                        contentDescription = "Emoji",
+                        tint = colors.iconTint,
+                        selectorTint = colors.selectorTint,
+                        onClick = {},
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 1.dp, bottom = 1.dp)
+                    )
+
+                    GlassIconButton(
+                        resId = R.drawable.tg_msg_input_attach2,
+                        contentDescription = "Attach",
+                        tint = colors.iconTint,
+                        selectorTint = colors.selectorTint,
+                        onClick = {},
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 1.dp, bottom = 1.dp)
+                    )
+
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 9.dp),
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            fontSize = 17.sp,
-                            lineHeight = 20.sp,
-                            color = colors.text
-                        ),
-                        cursorBrush = SolidColor(colors.cursor),
-                        minLines = 1,
-                        maxLines = 6,
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Sentences,
-                            imeAction = ImeAction.Default
-                        ),
-                        decorationBox = { innerTextField ->
-                            if (draft.isBlank()) {
-                                Text(
-                                    text = placeholder,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 17.sp,
-                                        lineHeight = 20.sp
-                                    ),
-                                    color = colors.hint
-                                )
+                            .padding(start = 42.dp, end = 42.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        BasicTextField(
+                            value = draft,
+                            onValueChange = onDraftChange,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp, bottom = 9.dp),
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = 17.sp,
+                                lineHeight = 20.sp,
+                                color = colors.text
+                            ),
+                            cursorBrush = SolidColor(colors.cursor),
+                            minLines = 1,
+                            maxLines = 6,
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Sentences,
+                                imeAction = ImeAction.Default
+                            ),
+                            decorationBox = { innerTextField ->
+                                if (draft.isBlank()) {
+                                    Text(
+                                        text = placeholder,
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            fontSize = 17.sp,
+                                            lineHeight = 20.sp
+                                        ),
+                                        color = colors.hint
+                                    )
+                                }
+                                innerTextField()
                             }
-                            innerTextField()
-                        }
-                    )
+                        )
+                    }
                 }
             }
 
