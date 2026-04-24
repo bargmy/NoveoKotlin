@@ -19,6 +19,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
@@ -103,6 +104,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -212,6 +214,17 @@ internal fun HomeScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding()
+            .pointerInput(state.selectedChatId) {
+                detectHorizontalDragGestures { change, dragAmount ->
+                    if (dragAmount > 50) { // Swipe right
+                        if (state.selectedChatId == null) {
+                            showMenu = true
+                        } else {
+                            onBackToChats()
+                        }
+                    }
+                }
+            }
     ) {
         val compact = maxWidth < 760.dp
 
@@ -736,7 +749,7 @@ private fun ChatPane(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Column(modifier = modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
