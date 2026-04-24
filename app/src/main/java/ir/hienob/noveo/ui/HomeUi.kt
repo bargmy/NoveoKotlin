@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -38,17 +39,20 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Call
@@ -87,24 +91,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
+import ir.hienob.noveo.R
 import ir.hienob.noveo.app.AppUiState
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSummary
@@ -119,6 +131,14 @@ import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
 private const val CLIENT_VERSION = "v0.1.1 mobile"
+private val TelegramComposerBlue = Color(0xFF229AF0)
+private val TelegramComposerPanel = Color(0xFFF6F7F8)
+private val TelegramComposerField = Color.White
+private val TelegramComposerIcon = Color(0xFF7A8591)
+private val TelegramComposerHint = Color(0xFF7A8591)
+private val TelegramComposerDivider = Color(0x14000000)
+private val TelegramComposerText = Color(0xFF000000)
+private val TelegramComposerCursor = Color(0xFF459DE1)
 
 private enum class SettingsSection {
     MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG, THEME
@@ -129,6 +149,11 @@ private data class ThemeSection(
     val subtitle: String,
     val presets: List<ThemePreset>
 )
+
+private enum class DebugConsoleTab(val label: String) {
+    EVENTS("Events"),
+    WEBSOCKET("WebSocket")
+}
 
 @Composable
 internal fun HomeScreen(
@@ -141,6 +166,7 @@ internal fun HomeScreen(
     onTyping: () -> Unit,
     onLogout: () -> Unit,
     onUpdateProfile: (String, String) -> Unit,
+    onClearDebugLogs: () -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit
 ) {
@@ -150,6 +176,7 @@ internal fun HomeScreen(
     var showContactsModal by rememberSaveable { mutableStateOf(false) }
     var showCreateModal by rememberSaveable { mutableStateOf(false) }
     var showSettingsModal by rememberSaveable { mutableStateOf(false) }
+    var showDebugConsole by rememberSaveable { mutableStateOf(false) }
     var settingsSection by rememberSaveable { mutableStateOf(SettingsSection.MENU) }
     var profileUserId by rememberSaveable { mutableStateOf<String?>(null) }
     var showGroupInfo by rememberSaveable { mutableStateOf(false) }
@@ -216,6 +243,7 @@ internal fun HomeScreen(
                             searchQuery = it
                             onSearchPublic(it)
                         },
+                        onOpenDebugConsole = { showDebugConsole = true },
                         onOpenChat = onOpenChat,
                         onOpenContacts = { showContactsModal = true },
                         onOpenCreate = { showCreateModal = true },
@@ -238,6 +266,7 @@ internal fun HomeScreen(
                         onBackToChats = onBackToChats,
                         onSend = onSend,
                         onTyping = onTyping,
+                        onOpenDebugConsole = { showDebugConsole = true },
                         onMediaClick = { selectedMediaUrl = it },
                         onOpenProfile = { userId -> profileUserId = userId },
                         onOpenGroupInfo = { showGroupInfo = true }
@@ -261,6 +290,7 @@ internal fun HomeScreen(
                         searchQuery = it
                         onSearchPublic(it)
                     },
+                    onOpenDebugConsole = { showDebugConsole = true },
                     onOpenChat = onOpenChat,
                     onOpenContacts = { showContactsModal = true },
                     onOpenCreate = { showCreateModal = true },
@@ -293,6 +323,7 @@ internal fun HomeScreen(
                             onBackToChats = onBackToChats,
                             onSend = onSend,
                             onTyping = onTyping,
+                            onOpenDebugConsole = { showDebugConsole = true },
                             onMediaClick = { selectedMediaUrl = it },
                             onOpenProfile = { userId -> profileUserId = userId },
                             onOpenGroupInfo = { showGroupInfo = true },
@@ -385,6 +416,15 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
             )
         }
 
+        ModalHost(visible = showDebugConsole, onDismiss = { showDebugConsole = false }) {
+            DebugConsoleModal(
+                logs = state.debugLogs,
+                websocketFrames = state.websocketFrames,
+                onClose = { showDebugConsole = false },
+                onClear = onClearDebugLogs
+            )
+        }
+
         ModalHost(visible = showGroupInfo && selectedChat != null, onDismiss = { showGroupInfo = false }) {
             selectedChat?.let { chat ->
                 GroupInfoModal(
@@ -422,6 +462,7 @@ private fun SidebarPane(
     onMenuClick: () -> Unit,
     onSearchToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
+    onOpenDebugConsole: () -> Unit,
     onOpenChat: (String) -> Unit,
     onOpenContacts: () -> Unit,
     onOpenCreate: () -> Unit,
@@ -438,7 +479,8 @@ private fun SidebarPane(
                 connectionTitle = state.connectionTitle,
                 onMenuClick = onMenuClick,
                 onSearchToggle = onSearchToggle,
-                onSearchQueryChange = onSearchQueryChange
+                onSearchQueryChange = onSearchQueryChange,
+                onDebugClick = onOpenDebugConsole
             )
             state.error?.takeIf { it.isNotBlank() }?.let {
                 Box(
@@ -551,7 +593,8 @@ private fun SidebarHeader(
     connectionTitle: String,
     onMenuClick: () -> Unit,
     onSearchToggle: () -> Unit,
-    onSearchQueryChange: (String) -> Unit
+    onSearchQueryChange: (String) -> Unit,
+    onDebugClick: () -> Unit
 ) {
     val statusTransition = rememberInfiniteTransition(label = "connection_status_fade")
     val statusAlpha by statusTransition.animateFloat(
@@ -608,6 +651,8 @@ private fun SidebarHeader(
             }
         }
         Spacer(Modifier.width(8.dp))
+        HeaderIconButton(icon = Icons.Outlined.Info, onClick = onDebugClick)
+        Spacer(Modifier.width(8.dp))
         HeaderIconButton(
             icon = if (showSearch) Icons.Outlined.Close else Icons.Outlined.Search,
             onClick = onSearchToggle
@@ -634,6 +679,7 @@ private fun ChatPane(
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
+    onOpenDebugConsole: () -> Unit,
     onMediaClick: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
     onOpenGroupInfo: () -> Unit,
@@ -723,6 +769,7 @@ private fun ChatPane(
                     Text(subtitle, style = MaterialTheme.typography.bodySmall)
                 }
             }
+            HeaderIconButton(icon = Icons.Outlined.Info, onClick = onOpenDebugConsole)
             Spacer(Modifier.width(6.dp))
             HeaderIconButton(icon = Icons.Outlined.Call, onClick = {})
         }
@@ -795,28 +842,232 @@ private fun ComposerBar(
     sendScale: Float,
     onSendClick: () -> Unit
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(12.dp)
+            .background(TelegramComposerPanel)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            HeaderIconButton(icon = Icons.Outlined.Menu, onClick = {})
-            Spacer(Modifier.width(6.dp))
-            HeaderIconButton(icon = Icons.Outlined.Star, onClick = {})
-            Spacer(Modifier.width(8.dp))
-            OutlinedTextField(
-                value = draft,
-                onValueChange = onDraftChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Message...") },
+        Image(
+            painter = painterResource(R.drawable.tg_compose_panel_shadow),
+            contentDescription = null,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(3.dp),
+            contentScale = ContentScale.FillBounds
+        )
+        HorizontalDivider(
+            thickness = 1.dp,
+            color = TelegramComposerDivider,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 8.dp, end = 9.dp, top = 4.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 44.dp),
                 shape = RoundedCornerShape(22.dp),
-                maxLines = 4
-            )
-            Spacer(Modifier.width(8.dp))
-            Box(modifier = Modifier.scale(sendScale)) {
-                SendIconButton(enabled = draft.isNotBlank(), onClick = onSendClick)
+                color = TelegramComposerField
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 44.dp)
+                ) {
+                    TelegramAssetIconButton(
+                        resId = R.drawable.tg_input_smile,
+                        contentDescription = "Emoji",
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .offset(x = 2.dp)
+                    )
+                    TelegramAssetIconButton(
+                        resId = R.drawable.tg_msg_input_attach2,
+                        contentDescription = "Attach",
+                        modifier = Modifier.align(Alignment.BottomEnd)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 52.dp, end = 50.dp),
+                        contentAlignment = Alignment.BottomStart
+                    ) {
+                        BasicTextField(
+                            value = draft,
+                            onValueChange = onDraftChange,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 9.dp, bottom = 10.dp),
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = 18.sp,
+                                lineHeight = 22.sp,
+                                color = TelegramComposerText
+                            ),
+                            cursorBrush = SolidColor(TelegramComposerCursor),
+                            minLines = 1,
+                            maxLines = 6,
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Sentences,
+                                imeAction = ImeAction.Default
+                            ),
+                            decorationBox = { innerTextField ->
+                                if (draft.isBlank()) {
+                                    Text(
+                                        text = "Message",
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            fontSize = 18.sp,
+                                            lineHeight = 22.sp
+                                        ),
+                                        color = TelegramComposerHint
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(7.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .scale(sendScale),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Surface(
+                    modifier = Modifier.size(38.dp),
+                    shape = CircleShape,
+                    color = TelegramComposerBlue
+                ) {}
+                val actionIcon = if (draft.isBlank()) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24
+                val actionSize = if (draft.isBlank()) 28.dp else 20.dp
+                Image(
+                    painter = painterResource(actionIcon),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(actionSize)
+                        .offset(y = if (draft.isBlank()) 0.dp else (-1).dp),
+                    colorFilter = ColorFilter.tint(Color.White)
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(CircleShape)
+                        .clickable(onClick = onSendClick)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TelegramAssetIconButton(
+    resId: Int,
+    contentDescription: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .clickable(onClick = {}),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(resId),
+            contentDescription = contentDescription,
+            modifier = Modifier.size(28.dp),
+            colorFilter = ColorFilter.tint(TelegramComposerIcon)
+        )
+    }
+}
+
+@Composable
+private fun DebugConsoleModal(
+    logs: List<String>,
+    websocketFrames: List<String>,
+    onClose: () -> Unit,
+    onClear: () -> Unit
+) {
+    val clipboardManager = LocalClipboardManager.current
+    val scrollState = rememberScrollState()
+    var selectedTab by rememberSaveable { mutableStateOf(DebugConsoleTab.EVENTS) }
+    val renderedLogs = remember(logs, websocketFrames, selectedTab) {
+        val activeLogs = when (selectedTab) {
+            DebugConsoleTab.EVENTS -> logs
+            DebugConsoleTab.WEBSOCKET -> websocketFrames
+        }
+        if (activeLogs.isEmpty()) {
+            when (selectedTab) {
+                DebugConsoleTab.EVENTS -> "No debug logs yet."
+                DebugConsoleTab.WEBSOCKET -> "No websocket frames yet."
+            }
+        } else {
+            activeLogs.joinToString(separator = "\n")
+        }
+    }
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 8.dp,
+        modifier = Modifier
+            .fillMaxWidth(0.96f)
+            .fillMaxHeight(0.82f)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            ModalHeader(title = "Debug Console", onClose = onClose)
+            TabRow(selectedTabIndex = selectedTab.ordinal) {
+                DebugConsoleTab.entries.forEach { tab ->
+                    Tab(
+                        selected = selectedTab == tab,
+                        onClick = { selectedTab = tab },
+                        text = { Text(tab.label) }
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { clipboardManager.setText(AnnotatedString(renderedLogs)) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Copy")
+                }
+                OutlinedButton(
+                    onClick = onClear,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Clear")
+                }
+            }
+            HorizontalDivider()
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(12.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .verticalScroll(scrollState)
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = renderedLogs,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -1652,24 +1903,6 @@ private fun HeaderIconButton(icon: androidx.compose.ui.graphics.vector.ImageVect
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = null)
-        }
-    }
-}
-
-@Composable
-private fun SendIconButton(enabled: Boolean, onClick: () -> Unit) {
-    val background = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val tint = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-    Surface(
-        shape = CircleShape,
-        color = background,
-        modifier = Modifier.size(52.dp).clickable(enabled = enabled, onClick = onClick)
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.size(42.dp)) {
-                val path = androidx.compose.ui.graphics.vector.PathParser().parsePathString("M11.5003 12H5.41872M5.24634 12.7972L4.24158 15.7986C3.69128 17.4424 3.41613 18.2643 3.61359 18.7704C3.78506 19.21 4.15335 19.5432 4.6078 19.6701C5.13111 19.8161 5.92151 19.4604 7.50231 18.7491L17.6367 14.1886C19.1797 13.4942 19.9512 13.1471 20.1896 12.6648C20.3968 12.2458 20.3968 11.7541 20.1896 11.3351C19.9512 10.8529 19.1797 10.5057 17.6367 9.81135L7.48483 5.24303C5.90879 4.53382 5.12078 4.17921 4.59799 4.32468C4.14397 4.45101 3.77572 4.78336 3.60365 5.22209C3.40551 5.72728 3.67772 6.54741 4.22215 8.18767L5.24829 11.2793C5.34179 11.561 5.38855 11.7019 5.407 11.8459C5.42338 11.9738 5.42321 12.1032 5.40651 12.231C5.38768 12.375 5.34057 12.5157 5.24634 12.7972Z").toPath()
-                drawPath(path = path, color = tint, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
-            }
         }
     }
 }
