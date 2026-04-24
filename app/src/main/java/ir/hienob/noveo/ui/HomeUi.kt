@@ -70,6 +70,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -127,6 +129,11 @@ private data class ThemeSection(
     val subtitle: String,
     val presets: List<ThemePreset>
 )
+
+private enum class DebugConsoleTab(val label: String) {
+    EVENTS("Events"),
+    WEBSOCKET("WebSocket")
+}
 
 @Composable
 internal fun HomeScreen(
@@ -392,6 +399,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
         ModalHost(visible = showDebugConsole, onDismiss = { showDebugConsole = false }) {
             DebugConsoleModal(
                 logs = state.debugLogs,
+                websocketFrames = state.websocketFrames,
                 onClose = { showDebugConsole = false },
                 onClear = onClearDebugLogs
             )
@@ -843,14 +851,26 @@ private fun ComposerBar(
 @Composable
 private fun DebugConsoleModal(
     logs: List<String>,
+    websocketFrames: List<String>,
     onClose: () -> Unit,
     onClear: () -> Unit
 ) {
     val clipboardManager = LocalClipboardManager.current
     val scrollState = rememberScrollState()
-    val renderedLogs = remember(logs) {
-        if (logs.isEmpty()) "No debug logs yet."
-        else logs.joinToString(separator = "\n")
+    var selectedTab by rememberSaveable { mutableStateOf(DebugConsoleTab.EVENTS) }
+    val renderedLogs = remember(logs, websocketFrames, selectedTab) {
+        val activeLogs = when (selectedTab) {
+            DebugConsoleTab.EVENTS -> logs
+            DebugConsoleTab.WEBSOCKET -> websocketFrames
+        }
+        if (activeLogs.isEmpty()) {
+            when (selectedTab) {
+                DebugConsoleTab.EVENTS -> "No debug logs yet."
+                DebugConsoleTab.WEBSOCKET -> "No websocket frames yet."
+            }
+        } else {
+            activeLogs.joinToString(separator = "\n")
+        }
     }
 
     Surface(
@@ -862,6 +882,15 @@ private fun DebugConsoleModal(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             ModalHeader(title = "Debug Console", onClose = onClose)
+            TabRow(selectedTabIndex = selectedTab.ordinal) {
+                DebugConsoleTab.entries.forEach { tab ->
+                    Tab(
+                        selected = selectedTab == tab,
+                        onClick = { selectedTab = tab },
+                        text = { Text(tab.label) }
+                    )
+                }
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
