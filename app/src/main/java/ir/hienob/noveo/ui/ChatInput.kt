@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -93,7 +94,7 @@ internal fun ChatInput(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 9.dp),
             verticalAlignment = Alignment.Bottom
         ) {
             Box(
@@ -200,7 +201,7 @@ internal fun ChatInput(
                     Image(
                         painter = painterResource(if (isBlank) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
                         contentDescription = null,
-                        modifier = Modifier.size(if (isBlank) 24.dp else 19.dp),
+                        modifier = Modifier.size(if (isBlank) 24.dp else 24.dp),
                         colorFilter = ColorFilter.tint(colors.actionIcon)
                     )
                 }
