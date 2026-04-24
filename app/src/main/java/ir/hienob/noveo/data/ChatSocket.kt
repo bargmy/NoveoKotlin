@@ -25,7 +25,9 @@ sealed class SocketEvent {
 }
 
 class ChatSocket(
-    private val client: OkHttpClient = OkHttpClient(),
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .pingInterval(30, java.util.concurrent.TimeUnit.SECONDS)
+        .build(),
     private val origin: String = "https://noveo.ir"
 ) {
     private var activeSocket: WebSocket? = null

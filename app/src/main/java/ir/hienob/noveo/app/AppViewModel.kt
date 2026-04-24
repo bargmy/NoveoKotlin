@@ -211,27 +211,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("content", org.json.JSONObject().put("text", text).toString())
             .put("clientTempId", tempId)
         
-        if (socket.isConnected) {
-            val sent = socket.send(payload)
-            if (sent) {
-                appendDebugLog("sendMessage: sent via persistent socket")
-                return
-            }
-        }
-        
-        appendDebugLog("sendMessage: socket unavailable, using API fallback")
-        viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { api.sendMessage(session, chatId, text, clientTempId = tempId) }
-                appendDebugLog("sendMessage API: acknowledged tempId=$tempId")
-                // Success will eventually come back via WebSocket too, but we refresh just in case
-            }.onFailure {
-                appendDebugLog("sendMessage API: failure tempId=$tempId error=${it.message}")
-                messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().filter { it.id != tempId }
-                _uiState.value = _uiState.value.copy(
-                    messages = _uiState.value.messages.filter { it.id != tempId }
-                )
-            }
+        val sent = socket.send(payload)
+        if (!sent) {
+            appendDebugLog("sendMessage: FAILED - persistent socket disconnected")
+        } else {
+            appendDebugLog("sendMessage: sent via persistent socket")
         }
     }
 
@@ -242,11 +226,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val payload = org.json.JSONObject()
             .put("type", "typing")
             .put("chatId", chatId)
-        if (!socket.send(payload)) {
-            viewModelScope.launch(Dispatchers.IO) {
-                runCatching { api.sendTyping(session, chatId) }
-            }
-        }
+        socket.send(payload)
     }
 
     fun markAsSeen(messageId: String) {
@@ -257,11 +237,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("type", "message_seen")
             .put("chatId", chatId)
             .put("messageId", messageId)
-        if (!socket.send(payload)) {
-            viewModelScope.launch(Dispatchers.IO) {
-                runCatching { api.markAsSeen(session, chatId, messageId) }
-            }
-        }
+        socket.send(payload)
     }
 
     fun refreshHomeSilently() {
@@ -269,43 +245,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         appendDebugLog("refreshHomeSilently()")
         val payload = org.json.JSONObject().put("type", "resync_state")
         if (!socket.send(payload)) {
-            viewModelScope.launch {
-                runCatching {
-                    val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
-                    appendDebugLog("refreshHomeSilently API fallback: chats=${home.chats.size}")
-                    _uiState.value = _uiState.value.copy(
-                        usersById = _uiState.value.usersById + home.usersById,
-                        chats = home.chats,
-                        onlineUserIds = home.onlineUserIds
-                    )
-                }
-            }
+            appendDebugLog("refreshHomeSilently: FAILED - socket disconnected")
         }
     }
 
     private suspend fun loadHome(session: Session) {
         appendDebugLog("loadHome(user=${session.userId})")
+        // STRICTLY observe socket, no API load for chats
         observeSocket(session)
         
+        // Only load non-socket features via HTTP
         runCatching {
-            val home = withContext(Dispatchers.IO) { api.getHomeData(session) }
             val wallet = withContext(Dispatchers.IO) { runCatching { api.getStarsOverview(session) }.getOrNull() }
             val contacts = withContext(Dispatchers.IO) { runCatching { api.getContacts(session) }.getOrDefault(emptyList()) }
-            appendDebugLog("loadHome initial sync: chats=${home.chats.size}")
             
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
                 loading = false,
                 session = session,
-                usersById = _uiState.value.usersById + home.usersById,
-                chats = home.chats,
                 wallet = wallet,
                 contacts = contacts,
-                connectionTitle = "Noveo",
+                connectionTitle = "Connecting...",
             )
         }.onFailure {
-            appendDebugLog("loadHome initial sync failure: ${it.message}")
-            _uiState.value = _uiState.value.copy(loading = false, connectionTitle = "Noveo")
+            appendDebugLog("loadHome secondary HTTP failure: ${it.message}")
         }
     }
 
@@ -361,7 +324,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         connectionTitle = "Connecting...",
                         connectionDetail = "Connection lost, retrying..."
                     )
-                    delay(3000)
+                    delay(500) // Aggressive retry
                 }
             }
         }
