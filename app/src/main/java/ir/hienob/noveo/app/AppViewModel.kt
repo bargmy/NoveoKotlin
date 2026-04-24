@@ -46,7 +46,8 @@ data class AppUiState(
     val wallet: Wallet? = null,
     val contacts: List<UserSummary> = emptyList(),
     val typingUsers: Map<String, Set<String>> = emptyMap(), // chatId -> set of userIds
-    val debugLogs: List<String> = emptyList()
+    val debugLogs: List<String> = emptyList(),
+    val websocketFrames: List<String> = emptyList()
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -66,7 +67,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearDebugLogs() {
-        _uiState.value = _uiState.value.copy(debugLogs = emptyList())
+        _uiState.value = _uiState.value.copy(debugLogs = emptyList(), websocketFrames = emptyList())
     }
 
     fun restoreSession() {
@@ -292,6 +293,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             viewModelScope.launch {
                                 appendDebugLog(message)
                             }
+                        },
+                        onSocketFrame = { frame ->
+                            viewModelScope.launch {
+                                appendSocketFrame(frame)
+                            }
                         }
                     ).collect { event ->
                         appendDebugLog("socket event=${event.javaClass.simpleName}")
@@ -471,6 +477,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val entry = "${System.currentTimeMillis()} | $message"
         val nextLogs = (_uiState.value.debugLogs + entry).takeLast(DEBUG_LOG_LIMIT)
         _uiState.value = _uiState.value.copy(debugLogs = nextLogs)
+    }
+
+    private fun appendSocketFrame(frame: String) {
+        val entry = "${System.currentTimeMillis()} | $frame"
+        val nextFrames = (_uiState.value.websocketFrames + entry).takeLast(DEBUG_LOG_LIMIT)
+        _uiState.value = _uiState.value.copy(websocketFrames = nextFrames)
     }
 
     fun updateProfile(username: String, bio: String) {
