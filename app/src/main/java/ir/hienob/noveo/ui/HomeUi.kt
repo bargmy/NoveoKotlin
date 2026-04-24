@@ -1120,11 +1120,11 @@ private fun MessageRow(
                                 color = if (ownMessage) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier
                                             .width(2.dp)
-                                            .height(24.dp)
+                                            .height(20.dp)
                                             .background(if (ownMessage) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary, RoundedCornerShape(1.dp))
                                     )
                                     Spacer(Modifier.width(8.dp))

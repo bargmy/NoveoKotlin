@@ -118,7 +118,7 @@ class ChatSocket(
                             val chatId = json.optString("chatId")
                             val users = parseUsers(json).first
                             val combinedUsers = knownUsers + users
-                            val messages = parseMessagesForChat(json, combinedUsers, chatId)
+                            val messages = parseChatMessageList(json.optJSONArray("messages"), chatId, combinedUsers)
                             val hasMore = json.optBoolean("hasMoreHistory", false)
                             trySend(SocketEvent.OlderMessages(chatId, messages, hasMore))
                         }

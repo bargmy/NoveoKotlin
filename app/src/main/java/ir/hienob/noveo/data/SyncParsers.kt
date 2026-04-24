@@ -150,6 +150,16 @@ internal fun parseRealtimeMessage(payload: JSONObject, usersById: Map<String, Us
     return parseChatMessage(message, chatId, usersById)
 }
 
+internal fun parseChatMessageList(array: JSONArray?, chatId: String, usersById: Map<String, UserSummary>): List<ChatMessage> {
+    if (array == null) return emptyList()
+    return buildList {
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            add(parseChatMessage(item, chatId, usersById))
+        }
+    }
+}
+
 private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map<String, UserSummary>): ChatMessage {
     val messageId = message.optString("messageId").sanitizeServerString().ifBlank { message.optString("id").sanitizeServerString() }
     val senderId = message.optString("senderId").sanitizeServerString().ifBlank { message.optString("sender").sanitizeServerString() }
