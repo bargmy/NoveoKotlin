@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import ir.hienob.noveo.app.AppUiState
 import ir.hienob.noveo.app.StartupState
+import ir.hienob.noveo.data.ChatMessage
 
 internal enum class ThemePreset(val label: String) {
     SKY_LIGHT("Sky Light"),
