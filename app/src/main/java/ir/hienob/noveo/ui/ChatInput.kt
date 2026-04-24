@@ -101,6 +101,12 @@ internal fun ChatInput(
                     .weight(1f)
                     .heightIn(min = 40.dp)
                     .clip(fieldShape)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            listOf(colors.fieldTop, colors.fieldBottom)
+                        )
+                    )
+                    .border(1.dp, colors.fieldBorder, fieldShape)
             ) {
                 GlassIconButton(
                     resId = R.drawable.tg_input_smile,

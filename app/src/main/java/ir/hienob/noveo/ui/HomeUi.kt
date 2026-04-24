@@ -185,6 +185,9 @@ internal fun HomeScreen(
     var showGroupInfo by rememberSaveable { mutableStateOf(false) }
     var selectedMediaUrl by rememberSaveable { mutableStateOf<String?>(null) }
 
+    val swipeOffset = remember { androidx.compose.animation.core.Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
     val filteredChats = remember(state.chats, searchQuery) {
         state.chats.filter {
             searchQuery.isBlank() ||
@@ -214,76 +217,114 @@ internal fun HomeScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding()
-            .pointerInput(state.selectedChatId) {
-                detectHorizontalDragGestures { change, dragAmount ->
-                    if (dragAmount > 50) { // Swipe right
-                        if (state.selectedChatId == null) {
-                            showMenu = true
-                        } else {
-                            onBackToChats()
+            .pointerInput(state.selectedChatId, showMenu) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        scope.launch {
+                            if (showMenu) {
+                                if (swipeOffset.value < -100) {
+                                    swipeOffset.animateTo(-300f)
+                                    showMenu = false
+                                } else {
+                                    swipeOffset.animateTo(0f)
+                                }
+                            } else if (state.selectedChatId == null) {
+                                if (swipeOffset.value > 100) {
+                                    swipeOffset.animateTo(300f)
+                                    showMenu = true
+                                } else {
+                                    swipeOffset.animateTo(0f)
+                                }
+                            } else {
+                                if (swipeOffset.value > 150) {
+                                    onBackToChats()
+                                }
+                                swipeOffset.animateTo(0f)
+                            }
+                        }
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        scope.launch {
+                            val newOffset = (swipeOffset.value + dragAmount)
+                            if (showMenu) {
+                                swipeOffset.snapTo(newOffset.coerceIn(-300f, 0f))
+                            } else if (state.selectedChatId == null) {
+                                swipeOffset.snapTo(newOffset.coerceIn(0f, 300f))
+                            } else {
+                                swipeOffset.snapTo(newOffset.coerceIn(0f, 1000f))
+                            }
                         }
                     }
-                }
+                )
             }
     ) {
         val compact = maxWidth < 760.dp
 
+        // Reset offset when menu state changes externally or chat changes
+        LaunchedEffect(showMenu, state.selectedChatId) {
+            swipeOffset.snapTo(0f)
+        }
+
         if (compact) {
-            AnimatedContent(
-                targetState = state.selectedChatId == null,
-                label = "compact_shell_transition",
-                transitionSpec = {
-                    if (targetState) {
-                        slideInHorizontally(initialOffsetX = { -it / 3 }) + fadeIn() togetherWith
-                            slideOutHorizontally(targetOffsetX = { it / 3 }) + fadeOut()
+            val contentOffset = if (state.selectedChatId != null) swipeOffset.value.dp else 0.dp
+            Box(modifier = Modifier.fillMaxSize().offset(x = contentOffset)) {
+                AnimatedContent(
+                    targetState = state.selectedChatId == null,
+                    label = "compact_shell_transition",
+                    transitionSpec = {
+                        if (targetState) {
+                            slideInHorizontally(initialOffsetX = { -it / 3 }) + fadeIn() togetherWith
+                                slideOutHorizontally(targetOffsetX = { it / 3 }) + fadeOut()
+                        } else {
+                            slideInHorizontally(initialOffsetX = { it / 3 }) + fadeIn() togetherWith
+                                slideOutHorizontally(targetOffsetX = { -it / 3 }) + fadeOut()
+                        }.using(SizeTransform(clip = false))
+                    }
+                ) { showList ->
+                    if (showList) {
+                        SidebarPane(
+                            state = state,
+                            chats = filteredChats,
+                            users = filteredUsers,
+                            showSearch = showSearch,
+                            searchQuery = searchQuery,
+                            onMenuClick = { showMenu = true },
+                            onSearchToggle = {
+                                showSearch = !showSearch
+                                if (!showSearch) searchQuery = ""
+                            },
+                            onSearchQueryChange = {
+                                searchQuery = it
+                                onSearchPublic(it)
+                            },
+                            onOpenChat = onOpenChat,
+                            onOpenContacts = { showContactsModal = true },
+                            onOpenCreate = { showCreateModal = true },
+                            onOpenSettings = {
+                                settingsSection = SettingsSection.MENU
+                                showSettingsModal = true
+                            },
+                            onOpenStars = {
+                                settingsSection = SettingsSection.SUBSCRIPTION
+                                showSettingsModal = true
+                            },
+                            onOpenProfile = { profileUserId = it },
+                            modifier = Modifier.fillMaxSize()
+                        )
                     } else {
-                        slideInHorizontally(initialOffsetX = { it / 3 }) + fadeIn() togetherWith
-                            slideOutHorizontally(targetOffsetX = { -it / 3 }) + fadeOut()
-                    }.using(SizeTransform(clip = false))
-                }
-            ) { showList ->
-                if (showList) {
-                    SidebarPane(
-                        state = state,
-                        chats = filteredChats,
-                        users = filteredUsers,
-                        showSearch = showSearch,
-                        searchQuery = searchQuery,
-                        onMenuClick = { showMenu = true },
-                        onSearchToggle = {
-                            showSearch = !showSearch
-                            if (!showSearch) searchQuery = ""
-                        },
-                        onSearchQueryChange = {
-                            searchQuery = it
-                            onSearchPublic(it)
-                        },
-                        onOpenChat = onOpenChat,
-                        onOpenContacts = { showContactsModal = true },
-                        onOpenCreate = { showCreateModal = true },
-                        onOpenSettings = {
-                            settingsSection = SettingsSection.MENU
-                            showSettingsModal = true
-                        },
-                        onOpenStars = {
-                            settingsSection = SettingsSection.SUBSCRIPTION
-                            showSettingsModal = true
-                        },
-                        onOpenProfile = { profileUserId = it },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    ChatPane(
-                        state = state,
-                        compact = true,
-                        selectedChat = selectedChat,
-                        onBackToChats = onBackToChats,
-                        onSend = onSend,
-                        onTyping = onTyping,
-                        onMediaClick = { selectedMediaUrl = it },
-                        onOpenProfile = { userId -> profileUserId = userId },
-                        onOpenGroupInfo = { showGroupInfo = true }
-                    )
+                        ChatPane(
+                            state = state,
+                            compact = true,
+                            selectedChat = selectedChat,
+                            onBackToChats = onBackToChats,
+                            onSend = onSend,
+                            onTyping = onTyping,
+                            onMediaClick = { selectedMediaUrl = it },
+                            onOpenProfile = { userId -> profileUserId = userId },
+                            onOpenGroupInfo = { showGroupInfo = true }
+                        )
+                    }
                 }
             }
         } else {
@@ -345,49 +386,55 @@ internal fun HomeScreen(
             }
         }
 
-        AnimatedVisibility(
-            visible = showMenu,
-            enter = fadeIn(animationSpec = tween(180)),
-            exit = fadeOut(animationSpec = tween(180))
-        ) {
+        val menuWidth = 296.dp
+        val menuWidthPx = with(LocalDensity.current) { menuWidth.toPx() }
+        val animatedMenuOffset = if (showMenu) swipeOffset.value else (swipeOffset.value - menuWidthPx)
+
+        if (showMenu || swipeOffset.value > 0) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
+                    .background(Color.Black.copy(alpha = (if (showMenu) 0.5f + (swipeOffset.value / menuWidthPx * 0.5f) else (swipeOffset.value / menuWidthPx * 0.5f)).coerceIn(0f, 0.5f)))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        onClick = { showMenu = false }
+                        onClick = { 
+                            scope.launch {
+                                swipeOffset.animateTo(-menuWidthPx)
+                                showMenu = false 
+                            }
+                        }
                     )
             )
-        }
 
-        AnimatedVisibility(
-            visible = showMenu,
-            enter = slideInHorizontally(initialOffsetX = { -it / 2 }) + fadeIn(animationSpec = tween(180)),
-            exit = slideOutHorizontally(targetOffsetX = { -it / 2 }) + fadeOut(animationSpec = tween(180))
-        ) {
-            MenuSheet(
-                state = state,
-                onOpenContacts = {
-                    showMenu = false
-                    showContactsModal = true
-                },
-                onOpenCreate = {
-                    showMenu = false
-                    showCreateModal = true
-                },
-                onOpenStars = {
-                    showMenu = false
-                    settingsSection = SettingsSection.SUBSCRIPTION
-                    showSettingsModal = true
-                },
-                onOpenSettings = {
-                    showMenu = false
-                    settingsSection = SettingsSection.MENU
-                    showSettingsModal = true
-                }
-            )
+            Box(
+                modifier = Modifier
+                    .width(menuWidth)
+                    .fillMaxHeight()
+                    .offset(x = animatedMenuOffset.dp)
+            ) {
+                MenuSheet(
+                    state = state,
+                    onOpenContacts = {
+                        showMenu = false
+                        showContactsModal = true
+                    },
+                    onOpenCreate = {
+                        showMenu = false
+                        showCreateModal = true
+                    },
+                    onOpenStars = {
+                        showMenu = false
+                        settingsSection = SettingsSection.SUBSCRIPTION
+                        showSettingsModal = true
+                    },
+                    onOpenSettings = {
+                        showMenu = false
+                        settingsSection = SettingsSection.MENU
+                        showSettingsModal = true
+                    }
+                )
+            }
         }
 
         ModalHost(visible = showContactsModal, onDismiss = { showContactsModal = false }) {
@@ -749,7 +796,7 @@ private fun ChatPane(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
