@@ -28,7 +28,8 @@ class MainActivity : ComponentActivity() {
                 onSend = viewModel::sendMessage,
                 onTyping = viewModel::sendTyping,
                 onLogout = viewModel::logout,
-                onUpdateProfile = { u, b -> viewModel.updateProfile(u, b) }
+                onUpdateProfile = { u, b -> viewModel.updateProfile(u, b) },
+                onClearDebugLogs = viewModel::clearDebugLogs
             )
         }
     }

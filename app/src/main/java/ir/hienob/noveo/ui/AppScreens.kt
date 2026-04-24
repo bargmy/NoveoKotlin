@@ -250,7 +250,8 @@ fun NoveoRoot(
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
     onLogout: () -> Unit,
-    onUpdateProfile: (String, String) -> Unit
+    onUpdateProfile: (String, String) -> Unit,
+    onClearDebugLogs: () -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember(context) { context.getSharedPreferences("noveo_ui", Context.MODE_PRIVATE) }
@@ -300,6 +301,7 @@ fun NoveoRoot(
                         onTyping = onTyping,
                         onLogout = onLogout,
                         onUpdateProfile = onUpdateProfile,
+                        onClearDebugLogs = onClearDebugLogs,
                         currentTheme = currentTheme,
                         onThemeChange = { currentTheme = it }
                     )
