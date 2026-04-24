@@ -36,22 +36,13 @@ class ChatSocket(
     fun send(payload: JSONObject): Boolean {
         val socket = activeSocket
         if (socket == null) return false
-        val sent = socket.send(payload.toString())
-        if (!sent) {
-            onSocketFrame?.invoke("!! SEND_FAILED: Socket is closed/closing")
-        }
-        return sent
+        return socket.send(payload.toString())
     }
-
-    private var onSocketFrame: ((String) -> Unit)? = null
 
     fun connect(
         session: Session,
-        getKnownUsers: () -> Map<String, UserSummary>,
-        onDebug: (String) -> Unit = {},
-        onSocketFrame: (String) -> Unit = {}
+        getKnownUsers: () -> Map<String, UserSummary>
     ): Flow<SocketEvent> = callbackFlow {
-        this@ChatSocket.onSocketFrame = onSocketFrame
         val request = Request.Builder()
             .url("wss://noveo.ir:8443/ws")
             .header("Origin", origin)
@@ -60,33 +51,25 @@ class ChatSocket(
         val socket: WebSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 activeSocket = webSocket
-                onSocketFrame("!! CONNECTED")
-                onDebug("ws open")
                 val reconnectPayload = JSONObject()
                     .put("type", "reconnect")
                     .put("userId", session.userId)
                     .put("token", session.token)
                     .put("sessionId", session.sessionId)
                 
-                onSocketFrame("TX $reconnectPayload")
                 webSocket.send(reconnectPayload.toString())
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                onSocketFrame("RX $text")
-                onDebug("ws raw=${text.truncateForDebug()}")
                 runCatching {
                     val json = JSONObject(text)
                     val type = json.optString("type")
                     val knownUsers = getKnownUsers()
                     val payload = json.unwrapRealtimePayload()
-                    onDebug("ws parsedType=$type")
 
                     when (type) {
                         "login_success" -> {
-                            onDebug("ws action=logged_in")
                             val syncPayload = JSONObject().put("type", "resync_state")
-                            onSocketFrame("TX $syncPayload")
                             webSocket.send(syncPayload.toString())
                         }
                         "message", "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
@@ -127,8 +110,6 @@ class ChatSocket(
                             trySend(SocketEvent.HistoryUpdate(chats, users, messagesByChat))
                         }
                     }
-                }.onFailure {
-                    onDebug("ws parseFailure=${it.message}")
                 }
             }
 
@@ -140,13 +121,11 @@ class ChatSocket(
                     401, 403 -> "Noveo rejected the realtime connection (HTTP $code)."
                     else -> t.message ?: t.javaClass.simpleName
                 }
-                onDebug("ws failure=$message")
                 channel.close(IllegalStateException(message, t))
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 activeSocket = null
-                onDebug("ws closed code=$code reason=${reason.ifBlank { "<empty>" }}")
                 channel.close()
             }
         })
@@ -163,9 +142,4 @@ private fun String?.sanitizeRealtimeField(): String? {
     val value = this?.trim().orEmpty()
     if (value.isBlank()) return null
     return value.takeUnless { it.equals("null", ignoreCase = true) }
-}
-
-private fun String.truncateForDebug(maxLength: Int = 2000): String {
-    if (length <= maxLength) return this
-    return take(maxLength) + "...<truncated>"
 }
