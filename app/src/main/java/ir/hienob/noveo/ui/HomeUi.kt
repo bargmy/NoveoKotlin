@@ -63,7 +63,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Call
-import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.DoneAll
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -142,7 +144,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.1.1 mobile"
+private const val CLIENT_VERSION = "v0.1.2 mobile"
 private val TelegramComposerBlue = Color(0xFF229AF0)
 private val TelegramComposerPanel = Color(0xFFF6F7F8)
 private val TelegramComposerField = Color.White
@@ -196,10 +198,12 @@ internal fun HomeScreen(
     val sidebarOffset = remember { androidx.compose.animation.core.Animatable(-menuWidthPx) }
     val chatBackOffset = remember { androidx.compose.animation.core.Animatable(0f) }
     
-    // Temporary drag state to avoid coroutine overhead during finger movement
-    var rawDragOffset by remember { mutableStateOf(0f) }
-    
     val scope = rememberCoroutineScope()
+
+    // Modal check to ignore swiping
+    val isAnyModalVisible = showContactsModal || showCreateModal || showSettingsModal || 
+                          (showGroupInfo && state.selectedChatId != null) || 
+                          profileUserId != null || selectedMediaUrl != null || showSearch
 
     // Sync menu state with animation
     LaunchedEffect(showMenu) {
@@ -244,45 +248,40 @@ internal fun HomeScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding()
-            .pointerInput(state.selectedChatId, showMenu) {
+            .pointerInput(state.selectedChatId, showMenu, isAnyModalVisible) {
+                if (isAnyModalVisible) return@pointerInput
                 detectHorizontalDragGestures(
                     onDragStart = {
                         scope.launch {
                             sidebarOffset.stop()
                             chatBackOffset.stop()
                         }
-                        rawDragOffset = 0f
                     },
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
                         if (state.selectedChatId != null) {
                             // Chat back: only positive drag
-                            val target = chatBackOffset.value + rawDragOffset + dragAmount
-                            if (target >= 0) rawDragOffset += dragAmount
+                            val target = chatBackOffset.value + dragAmount
+                            if (target >= 0) {
+                                scope.launch { chatBackOffset.snapTo(target) }
+                            }
                         } else {
                             // Sidebar: constrain to valid range
-                            val current = if (showMenu) 0f else -menuWidthPx
-                            val target = current + sidebarOffset.value - (if (showMenu) 0f else -menuWidthPx) + rawDragOffset + dragAmount
+                            val target = sidebarOffset.value + dragAmount
                             if (target <= 0f && target >= -menuWidthPx) {
-                                rawDragOffset += dragAmount
+                                scope.launch { sidebarOffset.snapTo(target) }
                             }
                         }
                     },
                     onDragEnd = {
                         scope.launch {
                             if (state.selectedChatId != null) {
-                                val total = chatBackOffset.value + rawDragOffset
+                                val total = chatBackOffset.value
                                 if (total > 150) {
                                     onBackToChats()
                                 }
-                                chatBackOffset.snapTo(total)
-                                rawDragOffset = 0f
                                 chatBackOffset.animateTo(0f)
                             } else {
-                                val currentBase = if (showMenu) 0f else -menuWidthPx
-                                val total = (currentBase + sidebarOffset.value - currentBase + rawDragOffset).coerceIn(-menuWidthPx, 0f)
-                                sidebarOffset.snapTo(total)
-                                rawDragOffset = 0f
                                 if (sidebarOffset.value > -menuWidthPx * 0.6f) {
                                     showMenu = true
                                     sidebarOffset.animateTo(0f)
@@ -977,9 +976,31 @@ private fun MessageRow(
         sdf.format(Date(message.timestamp * 1000))
     }
 
+    // Sending animation state
+    val animOffset = remember { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 40f else 0f) }
+    val animAlpha = remember { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 0f else 1f) }
+    val animScale = remember { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 0.8f else 1f) }
+
+    LaunchedEffect(message.id) {
+        if (ownMessage && message.pending) {
+            launch { animOffset.animateTo(0f, tween(350, easing = FastOutSlowInEasing)) }
+            launch { animAlpha.animateTo(1f, tween(200)) }
+            launch { animScale.animateTo(1f, tween(400, easing = FastOutSlowInEasing)) }
+        }
+    }
+
     Column(
         horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
-        modifier = Modifier.fillMaxWidth().padding(vertical = if (showSenderInfo) 4.dp else 1.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = if (showSenderInfo) 4.dp else 1.dp)
+            .graphicsLayer {
+                translationY = animOffset.value
+                translationX = if (ownMessage && message.pending) -animOffset.value * 2f else 0f
+                alpha = animAlpha.value
+                scaleX = animScale.value
+                scaleY = animScale.value
+            }
     ) {
         Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
             if (!ownMessage) {
@@ -1040,12 +1061,17 @@ private fun MessageRow(
                             if (ownMessage) {
                                 Spacer(Modifier.width(4.dp))
                                 if (message.pending) {
-                                    Text("...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f))
+                                    Icon(
+                                        imageVector = Icons.Outlined.Schedule,
+                                        contentDescription = "Pending",
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f)
+                                    )
                                 } else {
                                     val seen = message.seenBy.isNotEmpty()
                                     Icon(
-                                        imageVector = if (seen) Icons.AutoMirrored.Outlined.ArrowBack else Icons.Outlined.Info, // Placeholder ticks
-                                        contentDescription = null,
+                                        imageVector = if (seen) Icons.Outlined.DoneAll else Icons.Outlined.Check,
+                                        contentDescription = if (seen) "Seen" else "Sent",
                                         modifier = Modifier.size(14.dp),
                                         tint = if (seen) Color(0xFF90EE90) else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
                                     )
