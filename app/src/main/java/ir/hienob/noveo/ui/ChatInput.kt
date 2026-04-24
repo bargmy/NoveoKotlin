@@ -1,5 +1,12 @@
 package ir.hienob.noveo.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -56,6 +63,7 @@ internal data class ChatInputColors(
     val actionIcon: Color
 )
 
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 internal fun ChatInput(
     draft: String,
@@ -78,22 +86,10 @@ internal fun ChatInput(
         actionIcon = MaterialTheme.colorScheme.onPrimary
     )
 ) {
-    val fieldShape = RoundedCornerShape(26.dp)
+    val fieldShape = RoundedCornerShape(22.dp)
     val buttonInteraction = remember { MutableInteractionSource() }
 
     Box(modifier = modifier.fillMaxWidth()) {
-        Image(
-            painter = painterResource(R.drawable.tg_compose_panel_shadow),
-            contentDescription = null,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(12.dp)
-                .offset(y = (-2).dp),
-            contentScale = ContentScale.FillBounds,
-            alpha = 0.5f
-        )
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -103,7 +99,7 @@ internal fun ChatInput(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = 48.dp)
+                    .heightIn(min = 40.dp)
                     .clip(fieldShape)
                     .background(
                         brush = Brush.verticalGradient(
@@ -120,7 +116,7 @@ internal fun ChatInput(
                     onClick = {},
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(start = 2.dp)
+                        .padding(start = 1.dp, bottom = 1.dp)
                 )
 
                 GlassIconButton(
@@ -131,13 +127,13 @@ internal fun ChatInput(
                     onClick = {},
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(end = 2.dp)
+                        .padding(end = 1.dp, bottom = 1.dp)
                 )
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 48.dp, end = 48.dp, bottom = 2.dp),
+                        .padding(start = 42.dp, end = 42.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     BasicTextField(
@@ -145,10 +141,10 @@ internal fun ChatInput(
                         onValueChange = onDraftChange,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 11.dp, bottom = 12.dp),
+                            .padding(top = 8.dp, bottom = 9.dp),
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            fontSize = 18.sp,
-                            lineHeight = 22.sp,
+                            fontSize = 17.sp,
+                            lineHeight = 20.sp,
                             color = colors.text
                         ),
                         cursorBrush = SolidColor(colors.cursor),
@@ -163,8 +159,8 @@ internal fun ChatInput(
                                 Text(
                                     text = placeholder,
                                     style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 18.sp,
-                                        lineHeight = 22.sp
+                                        fontSize = 17.sp,
+                                        lineHeight = 20.sp
                                     ),
                                     color = colors.hint
                                 )
@@ -179,13 +175,13 @@ internal fun ChatInput(
 
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(40.dp)
                     .scale(sendScale),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(
                             brush = Brush.verticalGradient(
@@ -194,12 +190,20 @@ internal fun ChatInput(
                         )
                 )
 
-                Image(
-                    painter = painterResource(if (draft.isBlank()) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
-                    contentDescription = null,
-                    modifier = Modifier.size(if (draft.isBlank()) 28.dp else 22.dp),
-                    colorFilter = ColorFilter.tint(colors.actionIcon)
-                )
+                AnimatedContent(
+                    targetState = draft.isBlank(),
+                    transitionSpec = {
+                        (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut())
+                    },
+                    label = "send_icon_animation"
+                ) { isBlank ->
+                    Image(
+                        painter = painterResource(if (isBlank) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
+                        contentDescription = null,
+                        modifier = Modifier.size(if (isBlank) 24.dp else 19.dp),
+                        colorFilter = ColorFilter.tint(colors.actionIcon)
+                    )
+                }
 
                 Box(
                     modifier = Modifier
@@ -229,7 +233,7 @@ private fun GlassIconButton(
 
     Box(
         modifier = modifier
-            .size(44.dp)
+            .size(38.dp)
             .clip(CircleShape)
             .background(selectorTint, CircleShape)
             .clickable(
@@ -242,7 +246,7 @@ private fun GlassIconButton(
         Image(
             painter = painterResource(resId),
             contentDescription = contentDescription,
-            modifier = Modifier.size(28.dp),
+            modifier = Modifier.size(24.dp),
             colorFilter = ColorFilter.tint(tint)
         )
     }
