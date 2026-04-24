@@ -74,10 +74,19 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
             } else {
                 ""
             }
+            val chatType = item.optString("chatType").sanitizeServerString().ifBlank { "private" }
+            val ownerId = item.optString("ownerId").sanitizeServerString().takeIf { it.isNotBlank() }
+            val permissions = item.optJSONObject("permissions")
+            val canChat = when (chatType) {
+                "channel" -> ownerId == selfUserId
+                "group" -> permissions?.optBoolean("canSendMessages", true) ?: true
+                else -> true
+            }
+
             add(
                 ChatSummary(
                     id = chatId,
-                    chatType = item.optString("chatType").sanitizeServerString().ifBlank { "private" },
+                    chatType = chatType,
                     title = resolveChatTitle(item, usersById, memberIds, selfUserId),
                     avatarUrl = resolveChatAvatar(item, usersById, memberIds, selfUserId),
                     lastMessagePreview = preview,
@@ -85,7 +94,9 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
                     memberIds = memberIds,
                     handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
                     isVerified = item.optBoolean("isVerified", false),
-                    ownerId = item.optString("ownerId").takeIf { it.isNotBlank() }
+                    ownerId = ownerId,
+                    canChat = canChat,
+                    hasMoreHistory = item.optBoolean("hasMoreHistory", false)
                 )
             )
         }

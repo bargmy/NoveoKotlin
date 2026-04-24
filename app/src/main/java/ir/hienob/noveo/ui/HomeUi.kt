@@ -86,6 +86,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -172,6 +173,7 @@ internal fun HomeScreen(
     onTyping: () -> Unit,
     onLogout: () -> Unit,
     onUpdateProfile: (String, String) -> Unit,
+    onLoadOlder: () -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit
 ) {
@@ -353,6 +355,7 @@ internal fun HomeScreen(
                             onBackToChats = onBackToChats,
                             onSend = onSend,
                             onTyping = onTyping,
+                            onLoadOlder = onLoadOlder,
                             onMediaClick = { selectedMediaUrl = it },
                             onOpenProfile = { userId -> profileUserId = userId },
                             onOpenGroupInfo = { showGroupInfo = true }
@@ -409,6 +412,7 @@ internal fun HomeScreen(
                             onBackToChats = onBackToChats,
                             onSend = onSend,
                             onTyping = onTyping,
+                            onLoadOlder = onLoadOlder,
                             onMediaClick = { selectedMediaUrl = it },
                             onOpenProfile = { userId -> profileUserId = userId },
                             onOpenGroupInfo = { showGroupInfo = true },
@@ -753,6 +757,7 @@ private fun ChatPane(
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
+    onLoadOlder: () -> Unit,
     onMediaClick: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
     onOpenGroupInfo: () -> Unit,
@@ -825,6 +830,15 @@ private fun ChatPane(
         }
     }
 
+    val canLoadOlder = selectedChat?.hasMoreHistory == true && !state.loading
+    val firstVisibleItemIndex by remember { derivedStateOf { listState.firstVisibleItemIndex } }
+    
+    LaunchedEffect(firstVisibleItemIndex) {
+        if (firstVisibleItemIndex == 0 && canLoadOlder && state.messages.isNotEmpty()) {
+            onLoadOlder()
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
@@ -894,25 +908,41 @@ private fun ChatPane(
             }
         }
 
-        ChatInput(
-            draft = draft,
-            onDraftChange = { 
-                draft = it
-                onTyping()
-            },
-            sendScale = sendScale,
-            onActionClick = {
-                val text = draft.trim()
-                if (text.isBlank()) return@ChatInput
-                onSend(text)
-                draft = ""
-                sendPulse = true
-                scope.launch {
-                    delay(220)
-                    sendPulse = false
+        if (selectedChat?.canChat != false) {
+            ChatInput(
+                draft = draft,
+                onDraftChange = { 
+                    draft = it
+                    onTyping()
+                },
+                sendScale = sendScale,
+                onActionClick = {
+                    val text = draft.trim()
+                    if (text.isBlank()) return@ChatInput
+                    onSend(text)
+                    draft = ""
+                    sendPulse = true
+                    scope.launch {
+                        delay(220)
+                        sendPulse = false
+                    }
                 }
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "You cannot send messages in this chat.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-        )
+        }
     }
 }
 

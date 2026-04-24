@@ -204,6 +204,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         socket.send(payload)
     }
 
+    fun loadOlderMessages() {
+        val state = _uiState.value
+        val chatId = state.selectedChatId ?: return
+        val oldestMsg = state.messages.minByOrNull { it.timestamp } ?: return
+        
+        val payload = org.json.JSONObject()
+            .put("type", "load_older_messages")
+            .put("chatId", chatId)
+            .put("beforeTimestamp", oldestMsg.timestamp)
+            .put("beforeMessageId", oldestMsg.id)
+        
+        socket.send(payload)
+    }
+
     fun refreshHomeSilently() {
         val session = _uiState.value.session ?: return
         val payload = org.json.JSONObject().put("type", "resync_state")
@@ -271,6 +285,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                     connectionDetail = null,
                                     connectionTitle = "Noveo"
                                 )
+                            }
+                            is SocketEvent.OlderMessages -> {
+                                val currentMessages = messageCacheByChat[event.chatId].orEmpty()
+                                val updatedMessages = mergeMessages(currentMessages, event.messages)
+                                messageCacheByChat[event.chatId] = updatedMessages
+                                
+                                val updatedChats = _uiState.value.chats.map {
+                                    if (it.id == event.chatId) it.copy(hasMoreHistory = event.hasMoreHistory) else it
+                                }
+
+                                if (event.chatId == _uiState.value.selectedChatId) {
+                                    _uiState.value = _uiState.value.copy(
+                                        messages = updatedMessages,
+                                        chats = updatedChats
+                                    )
+                                } else {
+                                    _uiState.value = _uiState.value.copy(chats = updatedChats)
+                                }
                             }
                         }
                     }

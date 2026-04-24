@@ -84,7 +84,9 @@ data class ChatSummary(
     val memberIds: List<String> = emptyList(),
     val handle: String? = null,
     val isVerified: Boolean = false,
-    val ownerId: String? = null
+    val ownerId: String? = null,
+    val canChat: Boolean = true,
+    val hasMoreHistory: Boolean = false
 )
 
 data class ChatMessage(

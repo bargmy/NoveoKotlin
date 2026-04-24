@@ -22,6 +22,11 @@ sealed class SocketEvent {
         val users: Map<String, UserSummary>,
         val messagesByChat: Map<String, List<ChatMessage>>
     ) : SocketEvent()
+    data class OlderMessages(
+        val chatId: String,
+        val messages: List<ChatMessage>,
+        val hasMoreHistory: Boolean
+    ) : SocketEvent()
 }
 
 class ChatSocket(
@@ -108,6 +113,14 @@ class ChatSocket(
                             val chats = parseChats(json, combinedUsers, session.userId)
                             val messagesByChat = parseMessagesByChat(json, combinedUsers)
                             trySend(SocketEvent.HistoryUpdate(chats, users, messagesByChat))
+                        }
+                        "older_messages" -> {
+                            val chatId = json.optString("chatId")
+                            val users = parseUsers(json).first
+                            val combinedUsers = knownUsers + users
+                            val messages = parseMessagesForChat(json, combinedUsers, chatId)
+                            val hasMore = json.optBoolean("hasMoreHistory", false)
+                            trySend(SocketEvent.OlderMessages(chatId, messages, hasMore))
                         }
                     }
                 }
