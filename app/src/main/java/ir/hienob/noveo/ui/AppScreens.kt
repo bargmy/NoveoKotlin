@@ -360,7 +360,7 @@ private fun OnboardingScreen(strings: NoveoStrings, onDismissOnboarding: () -> U
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Noveo", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(strings.brandName, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
         Text(pages[page], style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
         Spacer(Modifier.height(24.dp))

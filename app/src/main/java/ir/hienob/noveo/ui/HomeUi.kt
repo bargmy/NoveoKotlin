@@ -830,7 +830,7 @@ private fun ChatPane(
                 names.isEmpty() -> strings.typingSomeone
                 names.size == 1 -> "${names[0]} ${strings.typingSingle}"
                 names.size == 2 -> "${names[0]} ${strings.typingDouble} ${names[1]}"
-                else -> "${names.size} ${strings.typingMulti}"
+                else -> "${localizeDigits(names.size.toString(), strings.languageCode)} ${strings.typingMulti}"
             }
         }
     }
@@ -842,7 +842,9 @@ private fun ChatPane(
             if (isOnline) strings.membersOnline else strings.lastSeenRecently
         } else {
             val total = selectedChat.memberIds.size
-            if (onlineCount > 0) "$total ${strings.membersCount}, $onlineCount ${strings.membersOnline}" else "$total ${strings.membersCount}"
+            val totalStr = localizeDigits(total.toString(), strings.languageCode)
+            val onlineStr = localizeDigits(onlineCount.toString(), strings.languageCode)
+            if (onlineCount > 0) "$totalStr ${strings.membersCount}, $onlineStr ${strings.membersOnline}" else "$totalStr ${strings.membersCount}"
         }
     }
 
@@ -1808,7 +1810,7 @@ private fun ThemeSectionBlock(
 @Composable
 private fun SettingsChangelogSection(strings: NoveoStrings) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        DetailCard(title = strings.version, body = CLIENT_VERSION)
+        DetailCard(title = strings.version, body = localizeDigits(CLIENT_VERSION, strings.languageCode))
         DetailCard(title = strings.whatNew, body = strings.changelogBody)
     }
 }
@@ -1926,7 +1928,7 @@ private fun MenuSheet(
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(strings.brandName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
-            Text(CLIENT_VERSION, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(localizeDigits(CLIENT_VERSION, strings.languageCode), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -2007,7 +2009,7 @@ private fun ChatRow(
 private fun WelcomePane(strings: NoveoStrings, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-            Text("Noveo", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(strings.brandName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             Text(strings.selectChatHint, textAlign = TextAlign.Center)
         }
