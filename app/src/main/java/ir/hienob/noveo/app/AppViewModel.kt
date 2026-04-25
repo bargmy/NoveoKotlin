@@ -19,6 +19,7 @@ import java.io.File
 import java.io.FileOutputStream
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -112,7 +113,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val currentVersion = ir.hienob.noveo.BuildConfig.VERSION_NAME
 
             if (version > currentVersion) {
-                val apkFile = File(getApplication<Application>().getExternalFilesDir(null), "update-$version.apk")
+                val apkFile = File(getApplication<Application>().filesDir, "update-$version.apk")
                 withContext(Dispatchers.Main) {
                     _uiState.value = _uiState.value.copy(
                         isCheckingUpdate = false,
@@ -152,7 +153,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (!response.isSuccessful) throw Exception("Download failed")
                     val body = response.body ?: throw Exception("Empty body")
                     val total = body.contentLength()
-                    val apkFile = File(getApplication<Application>().getExternalFilesDir(null), "update-${info.version}.apk")
+                    val apkFile = File(getApplication<Application>().filesDir, "update-${info.version}.apk")
 
                     body.byteStream().use { input ->
                         FileOutputStream(apkFile).use { output ->
@@ -225,6 +226,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                clipData = ClipData.newRawUri("", uri)
             }
             context.startActivity(intent)
         }.onFailure {
