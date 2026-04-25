@@ -112,12 +112,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
@@ -211,6 +212,9 @@ internal fun HomeScreen(
                           (showGroupInfo && state.selectedChatId != null) || 
                           profileUserId != null || selectedMediaUrl != null || showSearch
 
+    // Allow sidebar swiping even when a chat is open in landscape, but keep it constrained
+    val allowSidebarSwipe = !compact || state.selectedChatId == null
+
     // Sync menu state with animation
     LaunchedEffect(showMenu) {
         if (showMenu) {
@@ -253,7 +257,7 @@ internal fun HomeScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding()
-            .pointerInput(state.selectedChatId, showMenu, isAnyModalVisible) {
+            .pointerInput(state.selectedChatId, showMenu, isAnyModalVisible, compact) {
                 if (isAnyModalVisible) return@pointerInput
                 detectHorizontalDragGestures(
                     onDragStart = {
@@ -264,13 +268,13 @@ internal fun HomeScreen(
                     },
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
-                        if (state.selectedChatId != null) {
+                        if (compact && state.selectedChatId != null) {
                             // Chat back: only positive drag
                             val target = chatBackOffset.value + dragAmount
                             if (target >= 0) {
                                 scope.launch { chatBackOffset.snapTo(target) }
                             }
-                        } else {
+                        } else if (allowSidebarSwipe) {
                             // Sidebar: constrain to valid range
                             val target = sidebarOffset.value + dragAmount
                             if (target <= 0f && target >= -menuWidthPx) {
@@ -280,13 +284,13 @@ internal fun HomeScreen(
                     },
                     onDragEnd = {
                         scope.launch {
-                            if (state.selectedChatId != null) {
+                            if (compact && state.selectedChatId != null) {
                                 val total = chatBackOffset.value
                                 if (total > 150) {
                                     onBackToChats()
                                 }
                                 chatBackOffset.animateTo(0f)
-                            } else {
+                            } else if (allowSidebarSwipe) {
                                 if (sidebarOffset.value > -menuWidthPx * 0.6f) {
                                     showMenu = true
                                     sidebarOffset.animateTo(0f)
@@ -430,7 +434,7 @@ internal fun HomeScreen(
         }
 
         // Sidebar Menu Overlay & Sheet
-        if (state.selectedChatId == null) {
+        if (!compact || state.selectedChatId == null) {
             val currentMenuOffset = sidebarOffset.value
             val progress = (currentMenuOffset + menuWidthPx) / menuWidthPx
             if (progress > 0.01f) {
@@ -836,6 +840,13 @@ private fun ChatPane(
         }
     }
 
+    // Force scroll to bottom when a chat is first opened
+    LaunchedEffect(state.selectedChatId) {
+        if (state.selectedChatId != null && state.messages.isNotEmpty()) {
+            listState.scrollToItem(state.messages.lastIndex)
+        }
+    }
+
     // Handle history loading vs new messages
     val lastMessageId = remember { mutableStateOf<String?>(null) }
     LaunchedEffect(state.messages) {
@@ -873,10 +884,10 @@ private fun ChatPane(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (compact) {
-                HeaderIconButton(icon = Icons.AutoMirrored.Outlined.ArrowBack, onClick = onBackToChats)
-                Spacer(Modifier.width(8.dp))
-            }
+            // Back button always visible if in a chat, even in landscape
+            HeaderIconButton(icon = Icons.AutoMirrored.Outlined.ArrowBack, onClick = onBackToChats)
+            Spacer(Modifier.width(8.dp))
+            
             Row(
                 modifier = Modifier
                     .weight(1f)
@@ -996,6 +1007,7 @@ private fun MessageRow(
     onScrollToMessage: (String) -> Unit,
     isHighlighted: Boolean = false
 ) {
+    val haptic = LocalHapticFeedback.current
     val isSystem = message.senderId == "system"
     if (isSystem) {
         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
@@ -1047,8 +1059,13 @@ private fun MessageRow(
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
                         if (dragAmount < 0) { // Only swipe left
+                            val current = swipeOffset.value
+                            val target = (current + dragAmount).coerceIn(-100f, 0f)
+                            if (current > -60f && target <= -60f) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
                             scope.launch {
-                                swipeOffset.snapTo((swipeOffset.value + dragAmount).coerceIn(-100f, 0f))
+                                swipeOffset.snapTo(target)
                             }
                         }
                     },
@@ -1110,11 +1127,10 @@ private fun MessageRow(
                         bottomStart = if (!ownMessage) CornerSize(4.dp) else CornerSize(22.dp)
                     ),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (ownMessage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+                        containerColor = if (isHighlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else if (ownMessage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    border = if (isHighlighted) BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
-                    modifier = Modifier.background(highlightColor, RoundedCornerShape(22.dp))
+                    border = if (isHighlighted) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
                 ) {
                     val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
                     Column(modifier = Modifier.padding(if (hasVisualMedia) 6.dp else 12.dp)) {
