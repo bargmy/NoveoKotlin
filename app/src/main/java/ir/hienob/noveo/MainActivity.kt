@@ -7,6 +7,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import ir.hienob.noveo.app.AppViewModel
+import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.ui.NoveoRoot
 
 class MainActivity : ComponentActivity() {
