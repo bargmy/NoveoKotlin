@@ -258,6 +258,7 @@ fun NoveoRoot(
     onDeleteAccount: (String) -> Unit,
     onSetLanguage: (String) -> Unit
 ) {
+    val strings = getStrings(state.languageCode)
     val context = LocalContext.current
     val prefs = remember(context) { context.getSharedPreferences("noveo_ui", Context.MODE_PRIVATE) }
     val initialTheme = remember(prefs) {
@@ -289,13 +290,17 @@ fun NoveoRoot(
         ThemePreset.SANOKI_MEOA -> sanokiMeoaScheme
     }
 
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+    val layoutDirection = remember(state.languageCode) {
+        if (state.languageCode == "fa" || state.languageCode == "ar") LayoutDirection.Rtl else LayoutDirection.Ltr
+    }
+
+    CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
         MaterialTheme(colorScheme = colorScheme) {
             Surface(modifier = Modifier.fillMaxSize()) {
                 when (state.startupState) {
                     StartupState.Splash -> ConnectingShell(state.connectionTitle)
-                    StartupState.Onboarding -> OnboardingScreen(onDismissOnboarding)
-                    StartupState.Auth -> AuthScreen(state, onAuthMode, onAuthSubmit)
+                    StartupState.Onboarding -> OnboardingScreen(strings, onDismissOnboarding)
+                    StartupState.Auth -> AuthScreen(strings, state, onAuthMode, onAuthSubmit)
                     StartupState.Home -> HomeScreen(
                         state = state,
                         onOpenChat = onOpenChat,
@@ -349,13 +354,9 @@ private fun ConnectingShell(title: String) {
 }
 
 @Composable
-private fun OnboardingScreen(onDismissOnboarding: () -> Unit) {
+private fun OnboardingScreen(strings: NoveoStrings, onDismissOnboarding: () -> Unit) {
     var page by remember { mutableStateOf(0) }
-    val pages = listOf(
-        "Chat with your contacts in one place.",
-        "Jump into conversations quickly with the Noveo mobile shell.",
-        "Stay synced and start messaging as soon as you sign in."
-    )
+    val pages = strings.onboardingPages
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -393,6 +394,7 @@ private fun OnboardingScreen(onDismissOnboarding: () -> Unit) {
 
 @Composable
 private fun AuthScreen(
+    strings: NoveoStrings,
     state: AppUiState,
     onAuthMode: (Boolean) -> Unit,
     onAuthSubmit: (String, String) -> Unit
@@ -404,21 +406,21 @@ private fun AuthScreen(
         modifier = Modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Welcome to Noveo", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(if (state.authModeSignup) strings.signupTitle else strings.loginTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text(if (state.authModeSignup) "Create your account to continue." else "Sign in to keep chatting.")
+        Text(if (state.authModeSignup) strings.switchSignup else strings.switchLogin)
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Login", modifier = Modifier.clickable { onAuthMode(false) }.padding(8.dp), fontWeight = if (!state.authModeSignup) FontWeight.Bold else FontWeight.Normal)
-            Text("Sign Up", modifier = Modifier.clickable { onAuthMode(true) }.padding(8.dp), fontWeight = if (state.authModeSignup) FontWeight.Bold else FontWeight.Normal)
+            Text(strings.loginButton, modifier = Modifier.clickable { onAuthMode(false) }.padding(8.dp), fontWeight = if (!state.authModeSignup) FontWeight.Bold else FontWeight.Normal)
+            Text(strings.signupButton, modifier = Modifier.clickable { onAuthMode(true) }.padding(8.dp), fontWeight = if (state.authModeSignup) FontWeight.Bold else FontWeight.Normal)
         }
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(value = handle, onValueChange = { handle = it }, label = { Text("Handle") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(value = handle, onValueChange = { handle = it }, label = { Text(strings.handlePlaceholder) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(strings.passwordPlaceholder) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         Spacer(Modifier.height(16.dp))
         Button(onClick = { onAuthSubmit(handle, password) }, enabled = !state.loading, modifier = Modifier.fillMaxWidth()) {
-            Text(if (state.authModeSignup) "Create account" else "Continue")
+            Text(if (state.authModeSignup) strings.signupButton else strings.loginButton)
         }
         state.error?.let {
             Spacer(Modifier.height(10.dp))

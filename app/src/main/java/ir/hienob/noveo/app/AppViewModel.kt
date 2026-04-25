@@ -46,7 +46,8 @@ data class AppUiState(
     val wallet: Wallet? = null,
     val contacts: List<UserSummary> = emptyList(),
     val typingUsers: Map<String, Set<String>> = emptyMap(), // chatId -> set of userIds
-    val replyingToMessage: ChatMessage? = null
+    val replyingToMessage: ChatMessage? = null,
+    val languageCode: String = "en"
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -291,6 +292,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 val selectedChatMessages = _uiState.value.selectedChatId
                                     ?.let { messageCacheByChat[it].orEmpty() }
                                     ?: _uiState.value.messages
+
+                                val self = event.users[session.userId]
                                 
                                 _uiState.value = _uiState.value.copy(
                                     chats = event.chats,
@@ -298,7 +301,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                     messages = selectedChatMessages,
                                     loading = false,
                                     connectionDetail = null,
-                                    connectionTitle = "Noveo"
+                                    connectionTitle = "Noveo",
+                                    languageCode = self?.languageCode ?: _uiState.value.languageCode
                                 )
                             }
                             is SocketEvent.OlderMessages -> {
@@ -484,6 +488,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("type", "update_profile")
             .put("languageCode", code)
         socket.send(payload)
+        _uiState.value = _uiState.value.copy(languageCode = code)
         viewModelScope.launch {
             delay(500)
             refreshHomeSilently()

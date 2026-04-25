@@ -199,6 +199,7 @@ internal fun HomeScreen(
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit
 ) {
+    val strings = getStrings(state.languageCode)
     var showMenu by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -346,8 +347,8 @@ internal fun HomeScreen(
                         if (showList) {
                             SidebarPane(
                                 state = state,
-                                chats = filteredChats,
-                                users = filteredUsers,
+                                strings = strings,
+                                chats = filteredChats,                                users = filteredUsers,
                                 showSearch = showSearch,
                                 searchQuery = searchQuery,
                                 onMenuClick = { showMenu = true },
@@ -377,6 +378,7 @@ internal fun HomeScreen(
                             ChatPane(
                                 state = state,
                                 compact = true,
+                                strings = strings,
                                 selectedChat = selectedChat,
                                 onBackToChats = onBackToChats,
                                 onSend = onSend,
@@ -394,6 +396,7 @@ internal fun HomeScreen(
                 Row(modifier = Modifier.fillMaxSize()) {
                     SidebarPane(
                         state = state,
+                        strings = strings,
                         chats = filteredChats,
                         users = filteredUsers,
                         showSearch = showSearch,
@@ -430,13 +433,13 @@ internal fun HomeScreen(
                         }
                     ) { selectedId ->
                         if (selectedId == null) {
-                            WelcomePane(modifier = Modifier.weight(1f))
+                            WelcomePane(strings = strings, modifier = Modifier.weight(1f))
                         } else {
                             ChatPane(
                                 state = state,
                                 compact = false,
-                                selectedChat = selectedChat,
-                                onBackToChats = onBackToChats,
+                                strings = strings,
+                                selectedChat = selectedChat,                                onBackToChats = onBackToChats,
                                 onSend = onSend,
                                 onTyping = onTyping,
                                 onLoadOlder = onLoadOlder,
@@ -476,6 +479,7 @@ internal fun HomeScreen(
                 ) {
                     MenuSheet(
                         state = state,
+                        strings = strings,
                         onOpenContacts = {
                             showMenu = false
                             showContactsModal = true
@@ -501,6 +505,7 @@ internal fun HomeScreen(
 
         ModalHost(visible = showContactsModal, onDismiss = { showContactsModal = false }) {
             ContactsModal(
+                strings = strings,
                 users = state.contacts,
                 chats = state.chats,
                 selfUserId = state.session?.userId,
@@ -513,7 +518,7 @@ internal fun HomeScreen(
             )
         }
 ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
-    CreateChannelModal(onClose = { showCreateModal = false })
+    CreateChannelModal(strings = strings, onClose = { showCreateModal = false })
 }
 
         if (selectedMediaUrl != null) {
@@ -526,6 +531,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
         ModalHost(visible = showSettingsModal, onDismiss = { showSettingsModal = false }) {
             SettingsModal(
                 state = state,
+                strings = strings,
                 section = settingsSection,
                 onSectionChange = { settingsSection = it },
                 onClose = { showSettingsModal = false },
@@ -543,6 +549,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
             selectedChat?.let { chat ->
                 GroupInfoModal(
                     chat = chat,
+                    strings = strings,
                     usersById = state.usersById,
                     onClose = { showGroupInfo = false }
                 )
@@ -552,6 +559,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
         ModalHost(visible = selectedProfile != null, onDismiss = { profileUserId = null }) {
             selectedProfile?.let { user ->
                 ProfileModal(
+                    strings = strings,
                     user = user,
                     chats = state.chats,
                     selfUserId = state.session?.userId,
@@ -569,6 +577,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
 @Composable
 private fun SidebarPane(
     state: AppUiState,
+    strings: NoveoStrings,
     chats: List<ChatSummary>,
     users: List<UserSummary>,
     showSearch: Boolean,
@@ -587,6 +596,7 @@ private fun SidebarPane(
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(modifier = Modifier.fillMaxSize()) {
             SidebarHeader(
+                strings = strings,
                 showSearch = showSearch,
                 searchQuery = searchQuery,
                 connectionTitle = state.connectionTitle,
@@ -608,6 +618,7 @@ private fun SidebarPane(
             }
             if (showSearch) {
                 SearchResultsList(
+                    strings = strings,
                     chats = chats,
                     users = users,
                     onOpenChat = onOpenChat,
@@ -615,7 +626,7 @@ private fun SidebarPane(
                     onOpenProfile = onOpenProfile
                 )
             } else {
-                ChatListContent(state = state, chats = chats, onOpenChat = onOpenChat)
+                ChatListContent(state = state, strings = strings, chats = chats, onOpenChat = onOpenChat)
             }
         }
     }
@@ -623,6 +634,7 @@ private fun SidebarPane(
 
 @Composable
 private fun SearchResultsList(
+    strings: NoveoStrings,
     chats: List<ChatSummary>,
     users: List<UserSummary>,
     onOpenChat: (String) -> Unit,
@@ -635,13 +647,13 @@ private fun SearchResultsList(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (chats.isNotEmpty()) {
-            item { Text("Chats", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp), color = MaterialTheme.colorScheme.primary) }
+            item { Text(strings.newChat, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp), color = MaterialTheme.colorScheme.primary) }
             items(chats) { chat ->
-                ChatRow(chat = chat, selected = false, onClick = { onOpenChat(chat.id) })
+                ChatRow(chat = chat, strings = strings, selected = false, onClick = { onOpenChat(chat.id) })
             }
         }
         if (users.isNotEmpty()) {
-            item { Text("Contacts", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp), color = MaterialTheme.colorScheme.primary) }
+            item { Text(strings.allContacts, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp), color = MaterialTheme.colorScheme.primary) }
             items(users) { user ->
                 ContactRow(
                     user = user,
@@ -657,6 +669,7 @@ private fun SearchResultsList(
 @Composable
 private fun ChatListContent(
     state: AppUiState,
+    strings: NoveoStrings,
     chats: List<ChatSummary>,
     onOpenChat: (String) -> Unit
 ) {
@@ -668,13 +681,13 @@ private fun ChatListContent(
         Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = if (state.error != null) "Failed to load chats" else "No chats found",
+                    text = strings.noMessagesYet,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = state.error ?: "Your conversations will appear here.",
+                    text = state.error ?: strings.selectChatHint,
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -690,6 +703,7 @@ private fun ChatListContent(
             items(chats, key = { it.id }) { chat ->
                 ChatRow(
                     chat = chat,
+                    strings = strings,
                     selected = chat.id == state.selectedChatId,
                     onClick = { onOpenChat(chat.id) }
                 )
@@ -700,6 +714,7 @@ private fun ChatListContent(
 
 @Composable
 private fun SidebarHeader(
+    strings: NoveoStrings,
     showSearch: Boolean,
     searchQuery: String,
     connectionTitle: String,
@@ -742,7 +757,7 @@ private fun SidebarHeader(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
                         modifier = Modifier.fillMaxWidth(0.88f).height(46.dp),
-                        placeholder = { Text("Search", style = MaterialTheme.typography.bodyMedium) },
+                        placeholder = { Text(strings.searchPlaceholder, style = MaterialTheme.typography.bodyMedium) },
                         textStyle = MaterialTheme.typography.bodyMedium,
                         singleLine = true,
                         shape = RoundedCornerShape(23.dp)
@@ -785,6 +800,7 @@ fun VerifiedIcon(modifier: Modifier = Modifier, tint: Color = MaterialTheme.colo
 private fun ChatPane(
     state: AppUiState,
     compact: Boolean,
+    strings: NoveoStrings,
     selectedChat: ChatSummary?,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
@@ -988,8 +1004,8 @@ private fun ChatPane(
                 sendScale = sendScale,
                 replyingTo = state.replyingToMessage,
                 onCancelReply = { onReply(null) },
-                onActionClick = {
-                    val text = draft.trim()
+                placeholder = strings.messagePlaceholder,
+                onActionClick = {                    val text = draft.trim()
                     if (text.isBlank()) return@ChatInput
                     onSend(text)
                     draft = ""
@@ -1039,7 +1055,7 @@ private fun MessageRow(
                 shape = CircleShape
             ) {
                 Text(
-                    message.content.text ?: "",
+                    message.content.text ?: strings.noMessagesYet,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1167,7 +1183,7 @@ private fun MessageRow(
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
-                                    "Forwarded",
+                                    strings.forwarded,
                                     style = MaterialTheme.typography.labelSmall.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
                                     color = if (ownMessage) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1237,7 +1253,7 @@ private fun MessageRow(
                                 if (message.pending) {
                                     Icon(
                                         imageVector = Icons.Outlined.Schedule,
-                                        contentDescription = "Pending",
+                                        contentDescription = strings.sending,
                                         modifier = Modifier.size(14.dp),
                                         tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f)
                                     )
@@ -1424,7 +1440,7 @@ private fun AttachmentPreview(file: MessageFileAttachment?, onMediaClick: (Strin
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(file.name.ifBlank { "File" }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                Text("Click to download", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(strings.clickToDownload, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1432,6 +1448,7 @@ private fun AttachmentPreview(file: MessageFileAttachment?, onMediaClick: (Strin
 
 @Composable
 private fun ContactsModal(
+    strings: NoveoStrings,
     users: List<UserSummary>,
     chats: List<ChatSummary>,
     selfUserId: String?,
@@ -1441,7 +1458,7 @@ private fun ContactsModal(
 ) {
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(560.dp)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            ModalHeader(title = "New Chat", onClose = onClose)
+            ModalHeader(title = strings.allContacts, onClose = onClose)
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(10.dp),
@@ -1450,6 +1467,7 @@ private fun ContactsModal(
                 items(users, key = { it.id }) { user ->
                     ContactRow(
                         user = user,
+                        strings = strings,
                         existingChat = findDirectChatForUser(chats, selfUserId, user.id),
                         onMessage = { onMessage(user.id) },
                         onOpenProfile = { onOpenProfile(user.id) }
@@ -1463,6 +1481,7 @@ private fun ContactsModal(
 @Composable
 private fun ContactRow(
     user: UserSummary,
+    strings: NoveoStrings,
     existingChat: ChatSummary?,
     onMessage: () -> Unit,
     onOpenProfile: () -> Unit
@@ -1481,7 +1500,7 @@ private fun ContactRow(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(user.username, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        user.handle ?: user.bio.ifBlank { if (user.isOnline) "online" else "offline" },
+                        user.handle ?: user.bio.ifBlank { if (user.isOnline) strings.online else strings.offline },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall
@@ -1497,10 +1516,10 @@ private fun ContactRow(
 }
 
 @Composable
-private fun CreateChannelModal(onClose: () -> Unit) {
+private fun CreateChannelModal(strings: NoveoStrings, onClose: () -> Unit) {
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            ModalHeader(title = "Create", onClose = onClose)
+            ModalHeader(title = strings.newChat, onClose = onClose)
             Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Create Channel") }
                 Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Create Group") }
@@ -1512,13 +1531,17 @@ private fun CreateChannelModal(onClose: () -> Unit) {
 @Composable
 private fun SettingsModal(
     state: AppUiState,
+    strings: NoveoStrings,
     section: SettingsSection,
     onSectionChange: (SettingsSection) -> Unit,
     onClose: () -> Unit,
     onLogout: () -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
-    onUpdateProfile: (String, String) -> Unit
+    onUpdateProfile: (String, String) -> Unit,
+    onChangePassword: (String, String) -> Unit,
+    onDeleteAccount: (String) -> Unit,
+    onSetLanguage: (String) -> Unit
 ) {
     val me = state.session?.userId?.let { state.usersById[it] }
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
@@ -1542,13 +1565,13 @@ private fun SettingsModal(
             )
             Crossfade(targetState = section, label = "settings_section") { current ->
                 when (current) {
-                    SettingsSection.MENU -> SettingsMenu(onSectionChange)
-                    SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection()
-                    SettingsSection.PROFILE -> SettingsProfileSection(me, onUpdateProfile)
-                    SettingsSection.ACCOUNT -> SettingsAccountSection(state, onLogout)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(onSectionChange, currentTheme, onThemeChange)
-                    SettingsSection.CHANGELOG -> SettingsChangelogSection()
-                    SettingsSection.THEME -> SettingsThemeSection(currentTheme, onThemeChange)
+                    SettingsSection.MENU -> SettingsMenu(strings, onSectionChange)
+                    SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings)
+                    SettingsSection.PROFILE -> SettingsProfileSection(strings, me, onUpdateProfile)
+                    SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
+                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(strings, onSectionChange, onSetLanguage, currentTheme, onThemeChange)
+                    SettingsSection.CHANGELOG -> SettingsChangelogSection(strings)
+                    SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
                 }
             }
         }
@@ -1556,26 +1579,26 @@ private fun SettingsModal(
 }
 
 @Composable
-private fun SettingsMenu(onSectionChange: (SettingsSection) -> Unit) {
+private fun SettingsMenu(strings: NoveoStrings, onSectionChange: (SettingsSection) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SettingsRow("Subscription", Icons.Outlined.Star) { onSectionChange(SettingsSection.SUBSCRIPTION) }
-        SettingsRow("Profile", Icons.Outlined.Person) { onSectionChange(SettingsSection.PROFILE) }
-        SettingsRow("Account", Icons.Outlined.AccountCircle) { onSectionChange(SettingsSection.ACCOUNT) }
-        SettingsRow("Preferences", Icons.Outlined.Settings) { onSectionChange(SettingsSection.PREFERENCES) }
-        SettingsRow("Changelog", Icons.Outlined.History) { onSectionChange(SettingsSection.CHANGELOG) }
+        SettingsRow(strings.subscription, Icons.Outlined.Star) { onSectionChange(SettingsSection.SUBSCRIPTION) }
+        SettingsRow(strings.profile, Icons.Outlined.Person) { onSectionChange(SettingsSection.PROFILE) }
+        SettingsRow(strings.account, Icons.Outlined.AccountCircle) { onSectionChange(SettingsSection.ACCOUNT) }
+        SettingsRow(strings.preferences, Icons.Outlined.Settings) { onSectionChange(SettingsSection.PREFERENCES) }
+        SettingsRow(strings.changelog, Icons.Outlined.History) { onSectionChange(SettingsSection.CHANGELOG) }
     }
 }
 
 @Composable
-private fun SettingsSubscriptionSection() {
+private fun SettingsSubscriptionSection(strings: NoveoStrings) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        DetailCard(title = "Noveo Premium", body = "Unlock exclusive themes, larger file uploads, and unique profile badges. Parity with web features is currently in progress.")
-        DetailCard(title = "Stars & Wallet", body = "Manage your digital balance for tips, gifts, and premium content. Parity with web wallet is still being implemented.")
+        DetailCard(title = strings.premiumTitle, body = strings.premiumBody)
+        DetailCard(title = strings.walletTitle, body = strings.walletBody)
     }
 }
 
 @Composable
-private fun SettingsProfileSection(me: UserSummary?, onUpdateProfile: (String, String) -> Unit) {
+private fun SettingsProfileSection(strings: NoveoStrings, me: UserSummary?, onUpdateProfile: (String, String) -> Unit) {
     var username by remember(me) { mutableStateOf(me?.username ?: "") }
     var bio by remember(me) { mutableStateOf(me?.bio ?: "") }
 
@@ -1589,7 +1612,7 @@ private fun SettingsProfileSection(me: UserSummary?, onUpdateProfile: (String, S
         OutlinedTextField(
             value = username,
             onValueChange = { username = it },
-            label = { Text("Display Name") },
+            label = { Text(strings.displayName) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             shape = RoundedCornerShape(12.dp)
@@ -1598,7 +1621,7 @@ private fun SettingsProfileSection(me: UserSummary?, onUpdateProfile: (String, S
         OutlinedTextField(
             value = bio,
             onValueChange = { bio = it },
-            label = { Text("Bio") },
+            label = { Text(strings.bio) },
             modifier = Modifier.fillMaxWidth(),
             minLines = 2,
             maxLines = 4,
@@ -1610,13 +1633,14 @@ private fun SettingsProfileSection(me: UserSummary?, onUpdateProfile: (String, S
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Text("Save Changes")
+            Text(strings.saveChanges)
         }
     }
 }
 
 @Composable
 private fun SettingsAccountSection(
+    strings: NoveoStrings,
     state: AppUiState,
     onLogout: () -> Unit,
     onChangePassword: (String, String) -> Unit,
@@ -1626,14 +1650,14 @@ private fun SettingsAccountSection(
     var showDeleteAccount by rememberSaveable { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        DetailRow("User ID", state.session?.userId ?: "Unknown")
-        DetailRow("Session ID", state.session?.sessionId?.ifBlank { "Connected" } ?: "Unavailable")
-        DetailRow("Expiry", formatExpiry(state.session))
+        DetailRow(strings.userId, state.session?.userId ?: "Unknown")
+        DetailRow(strings.sessionId, state.session?.sessionId?.ifBlank { "Connected" } ?: "Unavailable")
+        DetailRow(strings.expiry, formatExpiry(state.session))
         
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
-        SettingsRow("Change Password", Icons.Outlined.Lock) { showChangePassword = true }
-        SettingsRow("Delete Account", Icons.Outlined.Delete) { showDeleteAccount = true }
+        SettingsRow(strings.changePassword, Icons.Outlined.Lock) { showChangePassword = true }
+        SettingsRow(strings.deleteAccount, Icons.Outlined.Delete) { showDeleteAccount = true }
         
         Spacer(Modifier.weight(1f))
         
@@ -1643,7 +1667,7 @@ private fun SettingsAccountSection(
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Text("Logout")
+            Text(strings.logout)
         }
     }
 
@@ -1652,11 +1676,11 @@ private fun SettingsAccountSection(
         var newPw by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showChangePassword = false },
-            title = { Text("Change Password") },
+            title = { Text(strings.changePassword) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = oldPw, onValueChange = { oldPw = it }, label = { Text("Old Password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
-                    OutlinedTextField(value = newPw, onValueChange = { newPw = it }, label = { Text("New Password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                    OutlinedTextField(value = oldPw, onValueChange = { oldPw = it }, label = { Text(strings.oldPassword) }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                    OutlinedTextField(value = newPw, onValueChange = { newPw = it }, label = { Text(strings.newPassword) }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
                 }
             },
             confirmButton = {
@@ -1665,9 +1689,9 @@ private fun SettingsAccountSection(
                         onChangePassword(oldPw, newPw)
                         showChangePassword = false
                     }
-                }) { Text("Update") }
+                }) { Text(strings.update) }
             },
-            dismissButton = { OutlinedButton(onClick = { showChangePassword = false }) { Text("Cancel") } }
+            dismissButton = { OutlinedButton(onClick = { showChangePassword = false }) { Text(strings.cancel) } }
         )
     }
 
@@ -1675,11 +1699,11 @@ private fun SettingsAccountSection(
         var pw by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showDeleteAccount = false },
-            title = { Text("Delete Account") },
+            title = { Text(strings.deleteAccount) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Are you sure? This action is permanent and will remove all your data.")
-                    OutlinedTextField(value = pw, onValueChange = { pw = it }, label = { Text("Enter Password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                    Text(strings.deleteConfirmText)
+                    OutlinedTextField(value = pw, onValueChange = { pw = it }, label = { Text(strings.passwordPlaceholder) }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
                 }
             },
             confirmButton = {
@@ -1691,9 +1715,9 @@ private fun SettingsAccountSection(
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete Permanently") }
+                ) { Text(strings.delete) }
             },
-            dismissButton = { OutlinedButton(onClick = { showDeleteAccount = false }) { Text("Cancel") } }
+            dismissButton = { OutlinedButton(onClick = { showDeleteAccount = false }) { Text(strings.cancel) } }
         )
     }
 }
@@ -1757,7 +1781,7 @@ private fun SettingsPreferencesSection(
 }
 
 @Composable
-private fun SettingsThemeSection(currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
+private fun SettingsThemeSection(strings: NoveoStrings, currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
     val scrollState = rememberScrollState()
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(scrollState),
@@ -1821,15 +1845,16 @@ private fun ThemeSectionBlock(
 }
 
 @Composable
-private fun SettingsChangelogSection() {
+private fun SettingsChangelogSection(strings: NoveoStrings) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        DetailCard(title = "Client Version", body = CLIENT_VERSION)
-        DetailCard(title = "What's New", body = "Improved Settings structure with proper icons, functional profile updates via WebSocket, secure account management (Change Password/Delete Account), and real language selection.")
+        DetailCard(title = strings.version, body = CLIENT_VERSION)
+        DetailCard(title = strings.whatNew, body = "Improved Settings structure with proper icons, functional profile updates via WebSocket, secure account management (Change Password/Delete Account), and real language selection.")
     }
 }
 
 @Composable
 private fun ProfileModal(
+    strings: NoveoStrings,
     user: UserSummary,
     chats: List<ChatSummary>,
     selfUserId: String?,
@@ -1871,7 +1896,7 @@ private fun GroupInfoModal(chat: ChatSummary, usersById: Map<String, UserSummary
                 Spacer(Modifier.height(6.dp))
                 Text(chat.chatType.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(18.dp))
-                DetailRow("Members", chat.memberIds.size.toString())
+                DetailRow(strings.allContacts, chat.memberIds.size.toString())
                 Spacer(Modifier.height(10.dp))
                 if (chat.memberIds.isNotEmpty()) {
                     LazyColumn(
@@ -1902,6 +1927,7 @@ private fun GroupInfoModal(chat: ChatSummary, usersById: Map<String, UserSummary
 @Composable
 private fun MenuSheet(
     state: AppUiState,
+    strings: NoveoStrings,
     onOpenContacts: () -> Unit,
     onOpenCreate: () -> Unit,
     onOpenStars: () -> Unit,
@@ -1915,10 +1941,10 @@ private fun MenuSheet(
             .background(MaterialTheme.colorScheme.surface)
             .padding(16.dp)
     ) {
-        Text("Menu", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(strings.menu, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
-        MenuRow("All Contacts", Icons.Outlined.Info, onOpenContacts)
-        MenuRow("New Chat", Icons.Outlined.Menu, onOpenCreate)
+        MenuRow(strings.allContacts, Icons.Outlined.Info, onOpenContacts)
+        MenuRow(strings.newChat, Icons.Outlined.Menu, onOpenCreate)
         Card(
             modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenStars),
             shape = RoundedCornerShape(18.dp),
@@ -1928,13 +1954,13 @@ private fun MenuSheet(
                 Icon(Icons.Outlined.Star, contentDescription = null, tint = Color(0xFFFFD700))
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("Stars", fontWeight = FontWeight.SemiBold)
-                    Text("${state.wallet?.balanceLabel ?: "0.00"} Stars", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text(strings.stars, fontWeight = FontWeight.SemiBold)
+                    Text("${state.wallet?.balanceLabel ?: "0.00"} ${strings.stars}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
         Spacer(Modifier.height(8.dp))
-        MenuRow("Settings", Icons.Outlined.Settings, onOpenSettings)
+        MenuRow(strings.settings, Icons.Outlined.Settings, onOpenSettings)
         Spacer(Modifier.weight(1f))
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Noveo Messenger", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1976,7 +2002,12 @@ private fun SettingsRow(text: String, icon: androidx.compose.ui.graphics.vector.
 }
 
 @Composable
-private fun ChatRow(chat: ChatSummary, selected: Boolean, onClick: () -> Unit) {
+private fun ChatRow(
+    chat: ChatSummary,
+    strings: NoveoStrings,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
@@ -1996,7 +2027,7 @@ private fun ChatRow(chat: ChatSummary, selected: Boolean, onClick: () -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(2.dp))
-                Text(chat.lastMessagePreview.ifBlank { "No messages yet" }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                Text(chat.lastMessagePreview.ifBlank { strings.noMessagesYet }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
             }
             if (chat.unreadCount > 0) {
                 Spacer(Modifier.width(8.dp))
@@ -2012,12 +2043,12 @@ private fun ChatRow(chat: ChatSummary, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun WelcomePane(modifier: Modifier = Modifier) {
+private fun WelcomePane(strings: NoveoStrings, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-            Text("Noveo Messenger", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Noveo", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            Text("Select a chat to keep messaging from the same live account.", textAlign = TextAlign.Center)
+            Text(strings.selectChatHint, textAlign = TextAlign.Center)
         }
     }
 }
