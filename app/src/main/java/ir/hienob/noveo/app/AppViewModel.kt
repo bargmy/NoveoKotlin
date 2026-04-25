@@ -14,6 +14,7 @@ import ir.hienob.noveo.data.SessionStore
 import ir.hienob.noveo.data.SocketEvent
 import ir.hienob.noveo.data.UserSummary
 import ir.hienob.noveo.data.Wallet
+import ir.hienob.noveo.ui.getStrings
 import java.io.File
 import java.io.FileOutputStream
 import okhttp3.OkHttpClient
