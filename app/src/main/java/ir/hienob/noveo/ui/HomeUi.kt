@@ -1010,8 +1010,6 @@ private fun ChatPane(
                 }
             }
         }
-            }
-        }
 
         if (selectedChat?.canChat != false) {
             ChatInput(
@@ -1024,7 +1022,8 @@ private fun ChatPane(
                 replyingTo = state.replyingToMessage,
                 onCancelReply = { onReply(null) },
                 placeholder = strings.messagePlaceholder,
-                onActionClick = {                    val text = draft.trim()
+                onActionClick = {
+                    val text = draft.trim()
                     if (text.isBlank()) return@ChatInput
                     onSend(text)
                     draft = ""
