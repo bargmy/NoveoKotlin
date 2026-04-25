@@ -56,7 +56,7 @@ data class AppUiState(
     val selectedChatId: String? = null,
     val messages: List<ChatMessage> = emptyList(),
     val authModeSignup: Boolean = false,
-    val connectionTitle: String = "Noveo",
+    val connectionTitle: String = "",
     val connectionDetail: String? = null,
     val wallet: Wallet? = null,
     val contacts: List<UserSummary> = emptyList(),
@@ -66,7 +66,14 @@ data class AppUiState(
     val updateInfo: UpdateInfo? = null,
     val isCheckingUpdate: Boolean = false,
     val notificationSettings: NotificationSettings = NotificationSettings(),
-    val isBatteryOptimized: Boolean = true
+    val isBatteryOptimized: Boolean = true,
+    val captchaInfo: CaptchaInfo? = null
+)
+
+data class CaptchaInfo(
+    val sessionId: String,
+    val action: String,
+    val extra: Map<String, Any> = emptyMap()
 )
 
 data class UpdateInfo(
@@ -289,11 +296,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             restoreCachedHomeState(cachedHomeState)
+            val strings = getStrings(_uiState.value.languageCode)
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
                 session = session,
                 loading = cachedHomeState?.chats.isNullOrEmpty(),
-                connectionTitle = if (cachedHomeState == null) "Noveo" else "Connecting..",
+                connectionTitle = if (cachedHomeState == null) strings.brandName else strings.connecting,
                 notificationSettings = notifySettings
             )
             NoveoNotificationService.start(getApplication())
@@ -312,7 +320,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun authenticate(handle: String, password: String, captchaToken: String? = null) {
         viewModelScope.launch {
             runCatching {
-                _uiState.value = _uiState.value.copy(startupState = StartupState.Home, loading = true, connectionTitle = "Noveo")
+                val strings = getStrings(_uiState.value.languageCode)
+                _uiState.value = _uiState.value.copy(startupState = StartupState.Home, loading = true, connectionTitle = strings.brandName)
                 val session = withContext(Dispatchers.IO) {
                     if (_uiState.value.authModeSignup) api.signup(handle, password, captchaToken) else api.login(handle, password)
                 }
@@ -321,6 +330,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 loadHome(session)
             }.onFailure {
                 _uiState.value = _uiState.value.copy(startupState = StartupState.Auth, loading = false, error = it.message ?: "Authentication failed")
+            }
+        }
+    }
+
+    fun startRegisterCaptcha(handle: String, password: String) {
+        viewModelScope.launch {
+            runCatching {
+                val started = withContext(Dispatchers.IO) {
+                    api.startCaptcha(null, "register")
+                }
+                _uiState.value = _uiState.value.copy(
+                    captchaInfo = CaptchaInfo(
+                        sessionId = started.getString("sessionId"),
+                        action = "register",
+                        extra = mapOf("handle" to handle, "password" to password)
+                    )
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(error = it.message ?: "Failed to start captcha")
             }
         }
     }
@@ -341,6 +369,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun startCreateChatCaptcha(name: String, type: String, handle: String? = null, bio: String? = null) {
+        viewModelScope.launch {
+            runCatching {
+                val session = _uiState.value.session ?: return@launch
+                val started = withContext(Dispatchers.IO) {
+                    api.startCaptcha(session, "create_chat")
+                }
+                _uiState.value = _uiState.value.copy(
+                    captchaInfo = CaptchaInfo(
+                        sessionId = started.getString("sessionId"),
+                        action = "create_chat",
+                        extra = mapOf("name" to name, "type" to type, "handle" to handle as Any? ?: "", "bio" to bio as Any? ?: "")
+                    )
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(error = it.message ?: "Failed to start captcha")
+            }
+        }
+    }
+
     fun logout() {
         getApplication<Application>().stopService(Intent(getApplication(), NoveoNotificationService::class.java))
         socketResyncJob?.cancel()
@@ -355,6 +403,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(selectedChatId = null, messages = emptyList(), replyingToMessage = null)
     }
 
+    fun dismissCaptcha() {
+        _uiState.value = _uiState.value.copy(captchaInfo = null)
+    }
+
     fun openDirectChat(userId: String) {
         val state = _uiState.value
         val existingChat = state.chats.firstOrNull { chat ->
@@ -364,7 +416,56 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             openChat(existingChat.id)
             return
         }
-        // If not exists, we can't open messages, but we can search for a temporary chatId pattern if server supports it
+        
+        // If chat doesn't exist, we start captcha for create_chat
+        viewModelScope.launch {
+            runCatching {
+                val session = _uiState.value.session ?: return@launch
+                val started = withContext(Dispatchers.IO) {
+                    api.startCaptcha(session, "create_chat", mapOf("targetUserId" to userId))
+                }
+                _uiState.value = _uiState.value.copy(
+                    captchaInfo = CaptchaInfo(
+                        sessionId = started.getString("sessionId"),
+                        action = "create_chat",
+                        extra = mapOf("targetUserId" to userId)
+                    )
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(error = it.message ?: "Failed to start captcha")
+            }
+        }
+    }
+
+    fun onCaptchaTokenReceived(token: String) {
+        val info = _uiState.value.captchaInfo ?: return
+        dismissCaptcha()
+        
+        when (info.action) {
+            "register" -> {
+                val handle = info.extra["handle"] as? String ?: return
+                val password = info.extra["password"] as? String ?: return
+                authenticate(handle, password, token)
+            }
+            "create_chat" -> {
+                val targetUserId = info.extra["targetUserId"] as? String
+                if (targetUserId != null) {
+                    createChat(
+                        name = "Direct Chat", 
+                        type = "private", 
+                        handle = null, 
+                        bio = null, 
+                        captchaToken = token
+                    )
+                } else {
+                    val name = info.extra["name"] as? String ?: "New Chat"
+                    val type = info.extra["type"] as? String ?: "group"
+                    val handle = info.extra["handle"] as? String
+                    val bio = info.extra["bio"] as? String
+                    createChat(name, type, handle.takeIf { it?.isNotBlank() == true }, bio.takeIf { it?.isNotBlank() == true }, token)
+                }
+            }
+        }
     }
 
     fun openChat(chatId: String) {
@@ -483,9 +584,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         when (event) {
             is SocketEvent.ConnectionState -> {
                 val currentState = _uiState.value
+                val strings = getStrings(currentState.languageCode)
                 _uiState.value = _uiState.value.copy(
                     loading = currentState.chats.isEmpty() && event.connected,
-                    connectionTitle = "Connecting..",
+                    connectionTitle = if (event.connected) strings.brandName else strings.connecting,
                     connectionDetail = event.detail
                 )
             }
@@ -513,6 +615,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     ?: _uiState.value.messages
 
                 val self = event.users[session.userId]
+                val lang = self?.languageCode ?: _uiState.value.languageCode
+                val strings = getStrings(lang)
                 
                 _uiState.value = _uiState.value.copy(
                     chats = event.chats,
@@ -520,8 +624,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     messages = selectedChatMessages,
                     loading = false,
                     connectionDetail = null,
-                    connectionTitle = "Noveo",
-                    languageCode = self?.languageCode ?: _uiState.value.languageCode
+                    connectionTitle = strings.brandName,
+                    languageCode = lang
                 )
                 persistCachedHomeState()
             }
@@ -554,14 +658,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         runCatching {
             val wallet = withContext(Dispatchers.IO) { runCatching { api.getStarsOverview(session) }.getOrNull() }
             val contacts = withContext(Dispatchers.IO) { runCatching { api.getContacts(session) }.getOrDefault(emptyList()) }
-            
+            val strings = getStrings(_uiState.value.languageCode)
+
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
                 loading = false,
                 session = session,
                 wallet = wallet,
                 contacts = contacts,
-                connectionTitle = if (_uiState.value.chats.isEmpty()) "Connecting.." else _uiState.value.connectionTitle,
+                connectionTitle = if (_uiState.value.chats.isEmpty()) strings.connecting else _uiState.value.connectionTitle,
             )
             NoveoNotificationService.updateKnownUsers(_uiState.value.usersById)
             

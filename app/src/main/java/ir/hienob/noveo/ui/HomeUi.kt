@@ -194,7 +194,7 @@ internal fun HomeScreen(
     state: AppUiState,
     onOpenChat: (String) -> Unit,
     onStartDirectChat: (String) -> Unit,
-    onCreateChat: (String, String, String?, String?, String?) -> Unit,
+    onStartCreateChat: (String, String, String?, String?) -> Unit,
     onSearchPublic: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
@@ -571,7 +571,7 @@ internal fun HomeScreen(
 ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
     CreateChannelModal(
         strings = strings,
-        onCreate = onCreateChat,
+        onCreate = onStartCreateChat,
         onClose = { showCreateModal = false }
     )
 }
@@ -998,7 +998,14 @@ private fun ChatPane(
                     .padding(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ProfileCircle(name = selectedTitle, imageUrl = selectedChat?.avatarUrl, size = 40.dp)
+                ProfileCircle(
+                    name = selectedTitle,
+                    imageUrl = selectedChat?.avatarUrl,
+                    size = 40.dp,
+                    modifier = Modifier.clickable {
+                        profileUserId?.let { onOpenProfile(it) } ?: onOpenGroupInfo()
+                    }
+                )
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(selectedTitle, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
@@ -1051,6 +1058,7 @@ private fun ChatPane(
                         senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl,
                         showSenderInfo = showSenderInfo,
                         onMediaClick = onMediaClick,
+                        onOpenProfile = onOpenProfile,
                         repliedMessage = repliedMessage,
                         onReply = { onReply(message) },
                         onScrollToMessage = onScrollToMessage,
@@ -1102,7 +1110,19 @@ private fun ChatPane(
 }
 
 @Composable
-private fun MessageRow(strings: NoveoStrings, message: ChatMessage, ownMessage: Boolean, senderAvatarUrl: String?, showSenderInfo: Boolean, onMediaClick: (String) -> Unit, repliedMessage: ChatMessage? = null, onReply: () -> Unit, onScrollToMessage: (String) -> Unit, isHighlighted: Boolean = false) {
+private fun MessageRow(
+    strings: NoveoStrings,
+    message: ChatMessage,
+    ownMessage: Boolean,
+    senderAvatarUrl: String?,
+    showSenderInfo: Boolean,
+    onMediaClick: (String) -> Unit,
+    onOpenProfile: (String) -> Unit,
+    repliedMessage: ChatMessage? = null,
+    onReply: () -> Unit,
+    onScrollToMessage: (String) -> Unit,
+    isHighlighted: Boolean = false
+) {
     val haptic = LocalHapticFeedback.current
     val isSystem = message.senderId == "system"
     if (isSystem) {
@@ -1198,7 +1218,12 @@ private fun MessageRow(strings: NoveoStrings, message: ChatMessage, ownMessage: 
         Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
             if (!ownMessage) {
                 if (showSenderInfo) {
-                    ProfileCircle(name = message.senderName, imageUrl = senderAvatarUrl, size = 34.dp)
+                    ProfileCircle(
+                        name = message.senderName,
+                        imageUrl = senderAvatarUrl,
+                        size = 34.dp,
+                        modifier = Modifier.clickable { onOpenProfile(message.senderId) }
+                    )
                 } else {
                     Spacer(Modifier.width(34.dp))
                 }
@@ -1575,25 +1600,13 @@ private fun ContactRow(
 @Composable
 private fun CreateChannelModal(
     strings: NoveoStrings,
-    onCreate: (String, String, String?, String?, String?) -> Unit,
+    onCreate: (String, String, String?, String?) -> Unit,
     onClose: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var handle by remember { mutableStateOf("") }
     var bio by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("group") }
-    var showCaptcha by remember { mutableStateOf(false) }
-
-    if (showCaptcha) {
-        CaptchaModal(
-            onToken = { token ->
-                showCaptcha = false
-                onCreate(name, type, handle.takeIf { it.isNotBlank() }, bio.takeIf { it.isNotBlank() }, token)
-                onClose()
-            },
-            onDismiss = { showCaptcha = false }
-        )
-    }
 
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -1617,53 +1630,18 @@ private fun CreateChannelModal(
                 }
                 
                 Button(
-                    onClick = { if (name.isNotBlank()) showCaptcha = true },
+                    onClick = { 
+                        if (name.isNotBlank()) {
+                            onCreate(name, type, handle.takeIf { it.isNotBlank() }, bio.takeIf { it.isNotBlank() })
+                            onClose()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = name.isNotBlank()
                 ) { Text(strings.create) }
             }
         }
     }
-}
-
-@Composable
-private fun CaptchaModal(onToken: (String) -> Unit, onDismiss: () -> Unit) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {},
-        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
-        title = { Text("Solve Puzzle") },
-        text = {
-            Box(modifier = Modifier.fillMaxWidth().height(400.dp)) {
-                androidx.compose.ui.viewinterop.AndroidView(
-                    factory = { context ->
-                        android.webkit.WebView(context).apply {
-                            settings.javaScriptEnabled = true
-                            webViewClient = object : android.webkit.WebViewClient() {
-                                override fun shouldOverrideUrlLoading(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): Boolean {
-                                    val url = request?.url?.toString() ?: ""
-                                    if (url.contains("token=")) {
-                                        val token = url.substringAfter("token=")
-                                        onToken(token)
-                                        return true
-                                    }
-                                    return false
-                                }
-                            }
-                            addJavascriptInterface(object {
-                                @android.webkit.JavascriptInterface
-                                fun onCaptchaSolved(token: String) {
-                                    onToken(token)
-                                }
-                            }, "Android")
-                            loadUrl("https://web.noveo.ir/puzzle.php")
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-        }
-    )
 }
 
 @Composable
@@ -2344,11 +2322,12 @@ private fun DetailRow(label: String, value: String) {
 }
 
 @Composable
-private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 42.dp) {
-    if (imageUrl == "saved_messages") {
+private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 40.dp, modifier: Modifier = Modifier) {
+    if (name == "Saved Messages") {
         Box(
-            modifier = Modifier
+            modifier = modifier
                 .size(size)
+
                 .clip(CircleShape)
                 .background(
                     Brush.linearGradient(
@@ -2367,7 +2346,7 @@ private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 42.dp) {
     
     val fallback = @Composable {
         Box(
-            modifier = Modifier
+            modifier = modifier
                 .size(size)
                 .clip(CircleShape)
                 .background(
@@ -2385,7 +2364,7 @@ private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 42.dp) {
         SubcomposeAsyncImage(
             model = resolvedImageUrl,
             contentDescription = name,
-            modifier = Modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
+            modifier = modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
             contentScale = ContentScale.Crop,
             loading = { fallback() },
             error = { fallback() }

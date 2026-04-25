@@ -244,15 +244,18 @@ fun NoveoRoot(
     state: AppUiState,
     onDismissOnboarding: () -> Unit,
     onAuthMode: (Boolean) -> Unit,
-    onAuthSubmit: (String, String, String?) -> Unit,
+    onStartRegisterCaptcha: (String, String) -> Unit,
+    onAuthSubmit: (String, String) -> Unit,
     onOpenChat: (String) -> Unit,
     onStartDirectChat: (String) -> Unit,
-    onCreateChat: (String, String, String?, String?, String?) -> Unit,
+    onStartCreateChat: (String, String, String?, String?) -> Unit,
     onSearchPublic: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
     onLogout: () -> Unit,
+    onCaptchaTokenReceived: (String) -> Unit,
+    onCaptchaDismiss: () -> Unit,
     onUpdateProfile: (String, String) -> Unit,
     onLoadOlder: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
@@ -302,15 +305,23 @@ fun NoveoRoot(
     CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
         MaterialTheme(colorScheme = colorScheme) {
             Surface(modifier = Modifier.fillMaxSize()) {
+                if (state.captchaInfo != null) {
+                    CaptchaModal(
+                        sessionId = state.captchaInfo.sessionId,
+                        session = state.session,
+                        onToken = onCaptchaTokenReceived,
+                        onDismiss = onCaptchaDismiss
+                    )
+                }
                 when (state.startupState) {
                     StartupState.Splash -> ConnectingShell(strings.brandName)
                     StartupState.Onboarding -> OnboardingScreen(strings, onDismissOnboarding)
-                    StartupState.Auth -> AuthScreen(strings, state, onAuthMode, onAuthSubmit)
+                    StartupState.Auth -> AuthScreen(strings, state, onAuthMode, onStartRegisterCaptcha, onAuthSubmit)
                     StartupState.Home -> HomeScreen(
                         state = state,
                         onOpenChat = onOpenChat,
                         onStartDirectChat = onStartDirectChat,
-                        onCreateChat = onCreateChat,
+                        onStartCreateChat = onStartCreateChat,
                         onSearchPublic = onSearchPublic,
                         onBackToChats = onBackToChats,
                         onSend = onSend,
@@ -410,21 +421,11 @@ private fun AuthScreen(
     strings: NoveoStrings,
     state: AppUiState,
     onAuthMode: (Boolean) -> Unit,
-    onAuthSubmit: (String, String, String?) -> Unit
+    onStartRegisterCaptcha: (String, String) -> Unit,
+    onAuthSubmit: (String, String) -> Unit
 ) {
     var handle by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var showCaptcha by remember { mutableStateOf(false) }
-
-    if (showCaptcha) {
-        CaptchaModal(
-            onToken = { token ->
-                showCaptcha = false
-                onAuthSubmit(handle, password, token)
-            },
-            onDismiss = { showCaptcha = false }
-        )
-    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(20.dp),
@@ -446,9 +447,9 @@ private fun AuthScreen(
         Button(
             onClick = {
                 if (state.authModeSignup) {
-                    showCaptcha = true
+                    onStartRegisterCaptcha(handle, password)
                 } else {
-                    onAuthSubmit(handle, password, null)
+                    onAuthSubmit(handle, password)
                 }
             },
             enabled = !state.loading,
@@ -464,36 +465,84 @@ private fun AuthScreen(
 }
 
 @Composable
-private fun CaptchaModal(onToken: (String) -> Unit, onDismiss: () -> Unit) {
+private fun CaptchaModal(
+    sessionId: String?,
+    session: ir.hienob.noveo.data.Session?,
+    onToken: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
         dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
         title = { Text("Solve Puzzle") },
         text = {
-            Box(modifier = Modifier.fillMaxWidth().height(400.dp)) {
+            Box(modifier = Modifier.fillMaxWidth().height(420.dp)) {
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { context ->
                         android.webkit.WebView(context).apply {
                             settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.userAgentString = "NoveoKotlin/0.3.4"
+                            
                             webViewClient = object : android.webkit.WebViewClient() {
                                 override fun shouldOverrideUrlLoading(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): Boolean {
                                     val url = request?.url?.toString() ?: ""
                                     if (url.contains("token=")) {
-                                        val token = url.substringAfter("token=")
-                                        onToken(token)
+                                        onToken(url.substringAfter("token="))
                                         return true
                                     }
                                     return false
                                 }
+
+                                override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                    super.onPageFinished(view, url)
+                                    // Handle captcha-parent-auth if needed via JS injection or postMessage
+                                }
                             }
+                            
                             addJavascriptInterface(object {
                                 @android.webkit.JavascriptInterface
                                 fun onCaptchaSolved(token: String) {
                                     onToken(token)
                                 }
+                                
+                                @android.webkit.JavascriptInterface
+                                fun notifyParent(dataJson: String) {
+                                    val data = org.json.JSONObject(dataJson)
+                                    if (data.optString("type") == "captcha-frame-ready") {
+                                         // Post auth headers if needed
+                                         val authHeaders = org.json.JSONObject()
+                                         if (session != null) {
+                                             authHeaders.put("X-User-ID", session.userId)
+                                             authHeaders.put("X-Auth-Token", session.token)
+                                         }
+                                         val msg = org.json.JSONObject()
+                                             .put("type", "captcha-parent-auth")
+                                             .put("headers", authHeaders)
+                                         
+                                         post {
+                                             evaluateJavascript("window.postMessage($msg, '*')", null)
+                                         }
+                                    }
+                                }
                             }, "Android")
-                            loadUrl("https://web.noveo.ir/puzzle.php")
+
+                            val baseUrl = "https://web.noveo.ir/puzzle.php"
+                            val fullUrl = android.net.Uri.parse(baseUrl).buildUpon()
+                                .appendQueryParameter("client", "kotlin")
+                                .appendQueryParameter("platform", "android")
+                                .apply { if (sessionId != null) appendQueryParameter("captchaSessionId", sessionId) }
+                                .build().toString()
+
+                            val headers = mutableMapOf<String, String>()
+                            if (session != null) {
+                                headers["X-User-ID"] = session.userId
+                                headers["X-Auth-Token"] = session.token
+                            }
+                            headers["X-Noveo-Client"] = "kotlin"
+
+                            loadUrl(fullUrl, headers)
                         }
                     },
                     modifier = Modifier.fillMaxSize()

@@ -250,7 +250,24 @@ class NoveoApi(
         }
     }
 
-    private fun auth(payload: JSONObject): Session {
+    fun startCaptcha(session: Session?, action: String, extra: Map<String, Any> = emptyMap()): JSONObject {
+        val url = "https://web.noveo.ir/puzzle.php?proxy=1&target=/captcha/start".toHttpUrl()
+        val body = JSONObject().put("action", action).apply {
+            extra.forEach { (k, v) -> put(k, v) }
+        }.toString()
+        val builder = Request.Builder().url(url)
+        if (session != null) {
+            builder.header("X-User-ID", session.userId)
+            builder.header("X-Auth-Token", session.token)
+        }
+        val request = builder.post(body.toRequestBody("application/json".toMediaType())).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Captcha start failed (${response.code})")
+            return JSONObject(response.body?.string().orEmpty())
+        }
+    }
+
+    fun auth(payload: JSONObject): Session {
         val latch = CountDownLatch(1)
         val result = AtomicReference<Session?>(null)
         val failure = AtomicReference<String?>(null)
