@@ -33,7 +33,10 @@ class MainActivity : ComponentActivity() {
                 onReply = viewModel::setReplyingTo,
                 onChangePassword = { o, n -> viewModel.changePassword(o, n) },
                 onDeleteAccount = { p -> viewModel.deleteAccount(p) },
-                onSetLanguage = { c -> viewModel.setLanguage(c) }
+                onSetLanguage = { c -> viewModel.setLanguage(c) },
+                onDismissUpdate = viewModel::dismissUpdate,
+                onDownloadUpdate = viewModel::downloadUpdate,
+                onInstallUpdate = viewModel::installUpdate
             )
         }
     }

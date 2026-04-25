@@ -14,6 +14,13 @@ import ir.hienob.noveo.data.SessionStore
 import ir.hienob.noveo.data.SocketEvent
 import ir.hienob.noveo.data.UserSummary
 import ir.hienob.noveo.data.Wallet
+import java.io.File
+import java.io.FileOutputStream
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -47,7 +54,19 @@ data class AppUiState(
     val contacts: List<UserSummary> = emptyList(),
     val typingUsers: Map<String, Set<String>> = emptyMap(), // chatId -> set of userIds
     val replyingToMessage: ChatMessage? = null,
-    val languageCode: String = java.util.Locale.getDefault().language
+    val languageCode: String = java.util.Locale.getDefault().language,
+    val updateInfo: UpdateInfo? = null
+)
+
+data class UpdateInfo(
+    val version: String,
+    val url: String,
+    val isAvailable: Boolean = false,
+    val isDownloading: Boolean = false,
+    val downloadProgress: Float = 0f,
+    val isDownloaded: Boolean = false,
+    val localPath: String? = null,
+    val isDismissed: Boolean = false
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -65,6 +84,110 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         restoreSession()
+        checkForUpdate()
+    }
+
+    fun checkForUpdate() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val updateJson = api.checkForUpdate() ?: return@launch
+            val version = updateJson.optString("version")
+            val url = updateJson.optString("url")
+            val currentVersion = ir.hienob.noveo.BuildConfig.VERSION_NAME
+
+            if (version > currentVersion) {
+                val apkFile = File(getApplication<Application>().getExternalFilesDir(null), "update-$version.apk")
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(
+                        updateInfo = UpdateInfo(
+                            version = version,
+                            url = url,
+                            isAvailable = true,
+                            isDownloaded = apkFile.exists(),
+                            localPath = if (apkFile.exists()) apkFile.absolutePath else null
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun downloadUpdate() {
+        val info = _uiState.value.updateInfo ?: return
+        if (info.isDownloading || info.isDownloaded) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.value = _uiState.value.copy(
+                updateInfo = info.copy(isDownloading = true, downloadProgress = 0f)
+            )
+
+            val client = OkHttpClient()
+            val request = Request.Builder().url(info.url).build()
+            runCatching {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw Exception("Download failed")
+                    val body = response.body ?: throw Exception("Empty body")
+                    val total = body.contentLength()
+                    val apkFile = File(getApplication<Application>().getExternalFilesDir(null), "update-${info.version}.apk")
+
+                    body.byteStream().use { input ->
+                        FileOutputStream(apkFile).use { output ->
+                            val buffer = ByteArray(8192)
+                            var read: Int
+                            var current = 0L
+                            while (input.read(buffer).also { read = it } != -1) {
+                                output.write(buffer, 0, read)
+                                current += read
+                                withContext(Dispatchers.Main) {
+                                    _uiState.value = _uiState.value.copy(
+                                        updateInfo = _uiState.value.updateInfo?.copy(
+                                            downloadProgress = if (total > 0) current.toFloat() / total else 0f
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        _uiState.value = _uiState.value.copy(
+                            updateInfo = _uiState.value.updateInfo?.copy(
+                                isDownloading = false,
+                                isDownloaded = true,
+                                localPath = apkFile.absolutePath
+                            )
+                        )
+                    }
+                }
+            }.onFailure {
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(
+                        updateInfo = _uiState.value.updateInfo?.copy(isDownloading = false),
+                        error = "Download failed: ${it.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissUpdate() {
+        _uiState.value = _uiState.value.copy(
+            updateInfo = _uiState.value.updateInfo?.copy(isDismissed = true)
+        )
+    }
+
+    fun installUpdate() {
+        val info = _uiState.value.updateInfo ?: return
+        val path = info.localPath ?: return
+        val apkFile = File(path)
+        if (!apkFile.exists()) return
+
+        val context = getApplication<Application>()
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apkFile)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
     }
 
     fun restoreSession() {

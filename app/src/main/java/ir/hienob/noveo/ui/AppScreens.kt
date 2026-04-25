@@ -256,7 +256,10 @@ fun NoveoRoot(
     onReply: (ChatMessage?) -> Unit,
     onChangePassword: (String, String) -> Unit,
     onDeleteAccount: (String) -> Unit,
-    onSetLanguage: (String) -> Unit
+    onSetLanguage: (String) -> Unit,
+    onDismissUpdate: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit
 ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current
@@ -313,7 +316,11 @@ fun NoveoRoot(
                         onChangePassword = onChangePassword,
                         onDeleteAccount = onDeleteAccount,
                         onSetLanguage = onSetLanguage,
+                        onDismissUpdate = onDismissUpdate,
+                        onDownloadUpdate = onDownloadUpdate,
+                        onInstallUpdate = onInstallUpdate,
                         currentTheme = currentTheme,
+
                         onThemeChange = { currentTheme = it }
                     )
                 }

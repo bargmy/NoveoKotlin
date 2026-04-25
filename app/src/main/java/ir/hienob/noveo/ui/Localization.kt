@@ -875,11 +875,7 @@ fun getStrings(languageCode: String): NoveoStrings {
 
 fun localizeDigits(input: String, languageCode: String): String {
     if (languageCode != "fa" && languageCode != "ar") return input
-    val targetDigits = if (languageCode == "fa") {
-        charArrayOf('۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹')
-    } else {
-        charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
-    }
+    val targetDigits = charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
     return input.map { char ->
         if (char in '0'..'9') targetDigits[char - '0'] 
         else if (char == ',') {

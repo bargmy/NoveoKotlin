@@ -98,6 +98,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -196,6 +198,9 @@ internal fun HomeScreen(
     onChangePassword: (String, String) -> Unit,
     onDeleteAccount: (String) -> Unit,
     onSetLanguage: (String) -> Unit,
+    onDismissUpdate: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit
 ) {
@@ -372,6 +377,9 @@ internal fun HomeScreen(
                                     showSettingsModal = true
                                 },
                                 onOpenProfile = { profileUserId = it },
+                                onDismissUpdate = onDismissUpdate,
+                                onDownloadUpdate = onDownloadUpdate,
+                                onInstallUpdate = onInstallUpdate,
                                 modifier = Modifier.fillMaxSize()
                             )
                         } else {
@@ -422,6 +430,9 @@ internal fun HomeScreen(
                             showSettingsModal = true
                         },
                         onOpenProfile = { profileUserId = it },
+                        onDismissUpdate = onDismissUpdate,
+                        onDownloadUpdate = onDownloadUpdate,
+                        onInstallUpdate = onInstallUpdate,
                         modifier = Modifier.width(360.dp).fillMaxHeight()
                     )
                     AnimatedContent(
@@ -591,6 +602,9 @@ private fun SidebarPane(
     onOpenSettings: () -> Unit,
     onOpenStars: () -> Unit,
     onOpenProfile: (String) -> Unit,
+    onDismissUpdate: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
@@ -604,6 +618,16 @@ private fun SidebarPane(
                 onSearchToggle = onSearchToggle,
                 onSearchQueryChange = onSearchQueryChange
             )
+            
+            state.updateInfo?.let { info ->
+                UpdateBubble(
+                    updateInfo = info,
+                    onDismiss = onDismissUpdate,
+                    onUpdate = onDownloadUpdate,
+                    onInstall = onInstallUpdate
+                )
+            }
+
             if (showSearch) {
                 SearchResultsList(
                     strings = strings,
@@ -2221,6 +2245,61 @@ private fun FullscreenMediaModal(url: String, onDismiss: () -> Unit) {
                 onClick = onDismiss,
                 modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun UpdateBubble(
+    updateInfo: ir.hienob.noveo.app.UpdateInfo,
+    onDismiss: () -> Unit,
+    onUpdate: () -> Unit,
+    onInstall: () -> Unit
+) {
+    if (updateInfo.isDismissed || !updateInfo.isAvailable) return
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFFE8F5E9),
+        tonalElevation = 2.dp
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = "Update ${updateInfo.version} available!",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2E7D32)
+            )
+            
+            if (updateInfo.isDownloading) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = updateInfo.downloadProgress,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFF2E7D32),
+                    trackColor = Color(0xFFC8E6C9)
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                if (updateInfo.isDownloaded) {
+                    TextButton(onClick = onInstall) {
+                        Text("Install", color = Color(0xFF2E7D32))
+                    }
+                } else if (!updateInfo.isDownloading) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Dismiss", color = Color(0xFF757575))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = onUpdate) {
+                        Text("Update", color = Color(0xFF2E7D32))
+                    }
+                }
+            }
         }
     }
 }

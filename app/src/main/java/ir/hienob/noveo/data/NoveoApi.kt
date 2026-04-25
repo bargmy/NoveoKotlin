@@ -196,6 +196,16 @@ class NoveoApi(
         }
     }
 
+    fun checkForUpdate(): JSONObject? {
+        val url = "https://noveo.ir/update.json".toHttpUrl()
+        val request = Request.Builder().url(url).get().build()
+        return runCatching {
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) JSONObject(response.body?.string().orEmpty()) else null
+            }
+        }.getOrNull()
+    }
+
     fun updateProfile(session: Session, username: String, bio: String) {
         val url = "https://noveo.ir:8443/user/profile".toHttpUrl()
         val body = JSONObject()
