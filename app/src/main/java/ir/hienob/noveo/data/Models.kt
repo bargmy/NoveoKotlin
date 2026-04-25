@@ -40,7 +40,8 @@ data class UserSummary(
     val isOnline: Boolean = false,
     val isVerified: Boolean = false,
     val profileSkin: ProfileSkin? = null,
-    val starsBalance: Double = 0.0
+    val starsBalance: Double = 0.0,
+    val languageCode: String = "en"
 )
 
 data class MessageFileAttachment(

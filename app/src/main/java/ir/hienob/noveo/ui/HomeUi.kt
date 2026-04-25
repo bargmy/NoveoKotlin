@@ -657,6 +657,7 @@ private fun SearchResultsList(
             items(users) { user ->
                 ContactRow(
                     user = user,
+                    strings = strings,
                     existingChat = null,
                     onMessage = { onOpenProfile(user.id) },
                     onOpenProfile = { onOpenProfile(user.id) }
