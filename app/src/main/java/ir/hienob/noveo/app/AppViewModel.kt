@@ -89,6 +89,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private var socketResyncJob: Job? = null
     private var selectedChatRefreshJob: Job? = null
+    private var pendingChatId: String? = null
 
     init {
         restoreSession()
@@ -348,7 +349,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openChat(chatId: String) {
-        val session = _uiState.value.session ?: return
+        val session = _uiState.value.session
+        if (session == null) {
+            pendingChatId = chatId
+            return
+        }
         startSelectedChatRefresh(session, chatId)
         viewModelScope.launch {
             val cachedMessages = messageCacheByChat[chatId].orEmpty().sortedBy { it.timestamp }
@@ -527,6 +532,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 connectionTitle = "Noveo",
             )
             NoveoNotificationService.updateKnownUsers(_uiState.value.usersById)
+            
+            pendingChatId?.let { id ->
+                pendingChatId = null
+                openChat(id)
+            }
         }
     }
 
