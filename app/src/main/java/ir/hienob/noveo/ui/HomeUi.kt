@@ -844,7 +844,8 @@ private fun ChatPane(
             val total = selectedChat.memberIds.size
             val totalStr = localizeDigits(total.toString(), strings.languageCode)
             val onlineStr = localizeDigits(onlineCount.toString(), strings.languageCode)
-            if (onlineCount > 0) "$totalStr ${strings.membersCount}${strings.comma} $onlineStr ${strings.membersOnline}" else "$totalStr ${strings.membersCount}"
+            val rawSubtitle = if (onlineCount > 0) "$totalStr ${strings.membersCount}${strings.comma} $onlineStr ${strings.membersOnline}" else "$totalStr ${strings.membersCount}"
+            if (strings.languageCode == "fa" || strings.languageCode == "ar") "\u200E$rawSubtitle" else rawSubtitle
         }
     }
 
