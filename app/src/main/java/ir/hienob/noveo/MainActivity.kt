@@ -33,6 +33,8 @@ class MainActivity : ComponentActivity() {
                 onSend = viewModel::sendMessage,
                 onTyping = viewModel::sendTyping,
                 onLogout = viewModel::logout,
+                onAttachFile = viewModel::attachFile,
+                onRemoveAttachment = viewModel::removeAttachment,
                 onCaptchaTokenReceived = viewModel::onCaptchaTokenReceived,
                 onCaptchaDismiss = viewModel::dismissCaptcha,
                 onUpdateProfile = { u, b -> viewModel.updateProfile(u, b) },

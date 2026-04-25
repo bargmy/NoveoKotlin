@@ -67,7 +67,17 @@ data class AppUiState(
     val isCheckingUpdate: Boolean = false,
     val notificationSettings: NotificationSettings = NotificationSettings(),
     val isBatteryOptimized: Boolean = true,
-    val captchaInfo: CaptchaInfo? = null
+    val captchaInfo: CaptchaInfo? = null,
+    val pendingAttachment: PendingAttachment? = null
+)
+
+data class PendingAttachment(
+    val uri: android.net.Uri,
+    val fileName: String,
+    val mimeType: String,
+    val fileData: ByteArray,
+    val isUploading: Boolean = false,
+    val progress: Float = 0f
 )
 
 data class CaptchaInfo(
@@ -496,45 +506,110 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(replyingToMessage = message)
     }
 
+    fun attachFile(uri: android.net.Uri) {
+        viewModelScope.launch {
+            runCatching {
+                val context = getApplication<Application>()
+                val contentResolver = context.contentResolver
+                val fileName = context.getFileName(uri) ?: "file"
+                val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
+                val fileData = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Failed to read file")
+                
+                _uiState.value = _uiState.value.copy(
+                    pendingAttachment = PendingAttachment(
+                        uri = uri,
+                        fileName = fileName,
+                        mimeType = mimeType,
+                        fileData = fileData
+                    )
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(error = "Failed to attach file: ${it.message}")
+            }
+        }
+    }
+
+    fun removeAttachment() {
+        _uiState.value = _uiState.value.copy(pendingAttachment = null)
+    }
+
     fun sendMessage(text: String) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
         val replyingTo = _uiState.value.replyingToMessage
-        if (text.isBlank()) return
+        val attachment = _uiState.value.pendingAttachment
+        if (text.isBlank() && attachment == null) return
 
         val tempId = "temp-${System.currentTimeMillis()}"
-        val pendingMsg = ChatMessage(
-            id = tempId,
-            chatId = chatId,
-            senderId = session.userId,
-            senderName = _uiState.value.usersById[session.userId]?.username ?: "Me",
-            content = MessageContent(text = text, replyToId = replyingTo?.id),
-            timestamp = System.currentTimeMillis() / 1000,
-            pending = true,
-            clientTempId = tempId,
-            replyToId = replyingTo?.id
-        )
-
-        _uiState.value = _uiState.value.copy(
-            messages = _uiState.value.messages + pendingMsg,
-            replyingToMessage = null
-        )
-        messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
-        persistCachedHomeState()
-
-        val contentObj = org.json.JSONObject().put("text", text)
-        if (replyingTo != null) {
-            contentObj.put("replyToId", replyingTo.id)
-        }
-
-        val payload = org.json.JSONObject()
-            .put("type", "message")
-            .put("chatId", chatId)
-            .put("content", contentObj.toString())
-            .put("clientTempId", tempId)
-            .put("replyToId", replyingTo?.id)
         
-        val sent = NoveoNotificationService.send(payload)
+        // If we have an attachment, we need to upload it first
+        viewModelScope.launch {
+            try {
+                var uploadedFile: MessageFileAttachment? = null
+                if (attachment != null) {
+                    _uiState.value = _uiState.value.copy(
+                        pendingAttachment = attachment.copy(isUploading = true, progress = 0f)
+                    )
+                    uploadedFile = withContext(Dispatchers.IO) {
+                        api.uploadFile(session, attachment.fileData, attachment.fileName, attachment.mimeType) { progress ->
+                            _uiState.value = _uiState.value.copy(
+                                pendingAttachment = _uiState.value.pendingAttachment?.copy(progress = progress)
+                            )
+                        }
+                    }
+                    _uiState.value = _uiState.value.copy(pendingAttachment = null)
+                }
+
+                val pendingMsg = ChatMessage(
+                    id = tempId,
+                    chatId = chatId,
+                    senderId = session.userId,
+                    senderName = _uiState.value.usersById[session.userId]?.username ?: "Me",
+                    content = MessageContent(text = text.takeIf { it.isNotBlank() }, file = uploadedFile, replyToId = replyingTo?.id),
+                    timestamp = System.currentTimeMillis() / 1000,
+                    pending = true,
+                    clientTempId = tempId,
+                    replyToId = replyingTo?.id
+                )
+
+                _uiState.value = _uiState.value.copy(
+                    messages = _uiState.value.messages + pendingMsg,
+                    replyingToMessage = null
+                )
+                messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
+                persistCachedHomeState()
+
+                withContext(Dispatchers.IO) {
+                    api.sendMessage(session, chatId, text, uploadedFile, tempId, replyingTo?.id)
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to send message: ${e.message}",
+                    pendingAttachment = attachment?.copy(isUploading = false) // Restore if failed
+                )
+            }
+        }
+    }
+
+    private fun android.content.Context.getFileName(uri: android.net.Uri): String? {
+        var name: String? = null
+        if (uri.scheme == "content") {
+            val cursor = contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val index = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (index != -1) name = it.getString(index)
+                }
+            }
+        }
+        if (name == null) {
+            name = uri.path
+            val cut = name?.lastIndexOf('/')
+            if (cut != null && cut != -1) {
+                name = name?.substring(cut + 1)
+            }
+        }
+        return name
     }
 
     fun sendTyping() {

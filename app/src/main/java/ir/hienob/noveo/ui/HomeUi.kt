@@ -200,6 +200,8 @@ internal fun HomeScreen(
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
     onLogout: () -> Unit,
+    onAttachFile: (android.net.Uri) -> Unit,
+    onRemoveAttachment: () -> Unit,
     onUpdateProfile: (String, String) -> Unit,
     onLoadOlder: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
@@ -433,7 +435,10 @@ internal fun HomeScreen(
                                 onTyping = onTyping,
                                 onLoadOlder = onLoadOlder,
                                 onMediaClick = { selectedMediaUrl = it },
+                                onAttachFile = onAttachFile,
+                                onRemoveAttachment = onRemoveAttachment,
                                 onOpenProfile = { userId -> profileUserId = userId },
+
                                 onOpenGroupInfo = { showGroupInfo = true },
                                 onReply = { onReply(it) }
                             )
@@ -495,7 +500,10 @@ internal fun HomeScreen(
                                 onTyping = onTyping,
                                 onLoadOlder = onLoadOlder,
                                 onMediaClick = { selectedMediaUrl = it },
+                                onAttachFile = onAttachFile,
+                                onRemoveAttachment = onRemoveAttachment,
                                 onOpenProfile = { userId -> profileUserId = userId },
+
                                 onOpenGroupInfo = { showGroupInfo = true },
                                 onReply = { onReply(it) },
                                 modifier = Modifier.weight(1f)
@@ -859,6 +867,8 @@ private fun ChatPane(
     onTyping: () -> Unit,
     onLoadOlder: () -> Unit,
     onMediaClick: (String) -> Unit,
+    onAttachFile: (android.net.Uri) -> Unit,
+    onRemoveAttachment: () -> Unit,
     onOpenProfile: (String) -> Unit,
     onOpenGroupInfo: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
@@ -873,7 +883,12 @@ private fun ChatPane(
         label = "send_button_scale"
     )
     val scope = rememberCoroutineScope()
-    val selectedTitle = remember(selectedChat, strings) {
+
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { onAttachFile(it) }
+    }
         if (selectedChat?.title == "Saved Messages") strings.savedMessages
         else selectedChat?.title?.ifBlank { "Chat" } ?: "Chat"
     }
@@ -1069,28 +1084,38 @@ private fun ChatPane(
         }
 
         if (selectedChat?.canChat != false) {
-            ChatInput(
-                draft = draft,
-                onDraftChange = { 
-                    draft = it
-                    onTyping()
-                },
-                sendScale = sendScale,
-                replyingTo = state.replyingToMessage,
-                onCancelReply = { onReply(null) },
-                placeholder = strings.messagePlaceholder,
-                onActionClick = {
-                    val text = draft.trim()
-                    if (text.isBlank()) return@ChatInput
-                    onSend(text)
-                    draft = ""
-                    sendPulse = true
-                    scope.launch {
-                        delay(220)
-                        sendPulse = false
-                    }
+            Column(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+                if (state.pendingAttachment != null) {
+                    AttachmentPreview(
+                        attachment = state.pendingAttachment,
+                        onRemove = onRemoveAttachment
+                    )
                 }
-            )
+                ChatInput(
+                    draft = draft,
+                    onDraftChange = { 
+                        draft = it
+                        onTyping()
+                    },
+                    sendScale = sendScale,
+                    replyingTo = state.replyingToMessage,
+                    onCancelReply = { onReply(null) },
+                    placeholder = strings.messagePlaceholder,
+                    onAttachClick = { filePicker.launch("*/*") },
+                    onPasteUri = { onAttachFile(it) },
+                    onActionClick = {
+                        val text = draft.trim()
+                        if (text.isBlank() && state.pendingAttachment == null) return@ChatInput
+                        onSend(text)
+                        draft = ""
+                        sendPulse = true
+                        scope.launch {
+                            delay(220)
+                            sendPulse = false
+                        }
+                    }
+                )
+            }
         } else {
             Box(
                 modifier = Modifier
@@ -1308,7 +1333,14 @@ private fun MessageRow(
                             }
                         }
 
-                        AttachmentPreview(strings = strings, file = message.content.file, onMediaClick = onMediaClick)
+                        val file = message.content.file
+                        if (file != null) {
+                            MessageAttachment(
+                                file = file,
+                                ownMessage = ownMessage,
+                                onClick = { onMediaClick(file.url) }
+                            )
+                        }
                         val caption = message.content.text
 
                         if (!caption.isNullOrBlank()) {
@@ -1455,7 +1487,86 @@ private fun PendingMessageBubble(text: String) {
 }
 
 @Composable
-private fun AttachmentPreview(strings: NoveoStrings, file: MessageFileAttachment?, onMediaClick: (String) -> Unit) {
+private fun MessageAttachment(
+    file: MessageFileAttachment,
+    ownMessage: Boolean,
+    onClick: () -> Unit
+) {
+    val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
+    
+    if (file.isImage()) {
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .padding(bottom = 4.dp)
+                .fillMaxWidth()
+                .heightIn(max = 320.dp)
+                .clickable { normalizedUrl?.let { onClick() } },
+            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))
+        ) {
+            SubcomposeAsyncImage(
+                model = normalizedUrl,
+                contentDescription = file.name,
+                modifier = Modifier.fillMaxWidth(),
+                contentScale = ContentScale.FillWidth,
+                loading = {
+                    Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                    }
+                }
+            )
+        }
+    } else {
+        Surface(
+            modifier = Modifier
+                .padding(bottom = 4.dp)
+                .fillMaxWidth()
+                .clickable { normalizedUrl?.let { onClick() } },
+            color = (if (ownMessage) Color.White else MaterialTheme.colorScheme.primary).copy(alpha = 0.1f),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background((if (ownMessage) Color.White else MaterialTheme.colorScheme.primary).copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (file.isVideo()) Icons.Outlined.PlayCircle else Icons.Outlined.FilePresent,
+                        contentDescription = null,
+                        tint = if (ownMessage) Color.White else MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = file.name,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (ownMessage) Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = file.type.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = (if (ownMessage) Color.White else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.6f)
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Outlined.Download,
+                    contentDescription = "Download",
+                    modifier = Modifier.size(20.dp),
+                    tint = (if (ownMessage) Color.White else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.5f)
+                )
+            }
+        }
+    }
+}
     val uriHandler = LocalUriHandler.current
     val normalizedUrl = remember(file?.url) { file?.url.normalizeNoveoUrl() }
     if (file == null) return

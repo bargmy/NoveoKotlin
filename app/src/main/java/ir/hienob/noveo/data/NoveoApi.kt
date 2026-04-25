@@ -50,6 +50,62 @@ class NoveoApi(
         }
     }
 
+    fun uploadFile(
+        session: Session,
+        fileData: ByteArray,
+        fileName: String,
+        mimeType: String,
+        onProgress: (Float) -> Unit
+    ): MessageFileAttachment {
+        val url = "https://web.noveo.ir/puzzle.php?proxy=1&target=/upload/file".toHttpUrl()
+        
+        // Custom request body to track progress
+        val requestBody = object : okhttp3.RequestBody() {
+            override fun contentType() = mimeType.toMediaType()
+            override fun contentLength() = fileData.size.toLong()
+            override fun writeTo(sink: okio.BufferedSink) {
+                val bufferSize = 4096
+                var uploaded = 0L
+                val total = contentLength()
+                
+                var i = 0
+                while (i < fileData.size) {
+                    val size = minOf(bufferSize, fileData.size - i)
+                    sink.write(fileData, i, size)
+                    i += size
+                    uploaded += size
+                    onProgress(uploaded.toFloat() / total)
+                }
+            }
+        }
+
+        val multipartBody = okhttp3.MultipartBody.Builder()
+            .setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart("file", fileName, requestBody)
+            .build()
+
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .header("X-Noveo-Client", "kotlin")
+            .post(multipartBody)
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Upload failed (${response.code})")
+            val payload = JSONObject(response.body?.string().orEmpty())
+            if (!payload.optBoolean("success", false)) error(payload.optString("error", "Unknown error"))
+            
+            val fileJson = payload.optJSONObject("file") ?: error("Missing file info in response")
+            return MessageFileAttachment(
+                url = fileJson.optString("url"),
+                name = fileJson.optString("name"),
+                type = fileJson.optString("type")
+            )
+        }
+    }
+
     fun getStarsOverview(session: Session): Wallet {
         val url = "https://noveo.ir:8443/stars/overview".toHttpUrl()
         val request = Request.Builder()
@@ -123,11 +179,18 @@ class NoveoApi(
         }
     }
 
-    fun sendMessage(session: Session, chatId: String, text: String, clientTempId: String? = null, replyToId: String? = null) {
+    fun sendMessage(session: Session, chatId: String, text: String, file: MessageFileAttachment? = null, clientTempId: String? = null, replyToId: String? = null) {
         val latch = CountDownLatch(1)
         val failure = AtomicReference<String?>(null)
         val done = AtomicBoolean(false)
-        val content = JSONObject().put("text", text).toString()
+        val contentObj = JSONObject().put("text", text.takeIf { it.isNotBlank() })
+        if (file != null) {
+            contentObj.put("file", JSONObject()
+                .put("url", file.url)
+                .put("name", file.name)
+                .put("type", file.type))
+        }
+        val content = contentObj.toString()
         val socket = client.newWebSocket(request(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.send(reconnect(session).toString()) }
             override fun onMessage(webSocket: WebSocket, textMsg: String) {

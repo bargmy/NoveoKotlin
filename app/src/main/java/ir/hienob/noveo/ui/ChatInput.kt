@@ -86,6 +86,8 @@ internal fun ChatInput(
     replyingTo: ChatMessage? = null,
     onCancelReply: () -> Unit = {},
     placeholder: String = "Message",
+    onAttachClick: () -> Unit = {},
+    onPasteUri: (android.net.Uri) -> Unit = {},
     colors: ChatInputColors = ChatInputColors(
         fieldTop = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
         fieldBottom = MaterialTheme.colorScheme.surfaceVariant,
@@ -202,7 +204,7 @@ internal fun ChatInput(
                         contentDescription = "Attach",
                         tint = colors.iconTint,
                         selectorTint = colors.selectorTint,
-                        onClick = {},
+                        onClick = onAttachClick,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 1.dp, bottom = 1.dp)
@@ -246,6 +248,30 @@ internal fun ChatInput(
                                 }
                                 innerTextField()
                             }
+                        )
+                        
+                        // Content Receiver for pasting files
+                        androidx.compose.ui.viewinterop.AndroidView(
+                            factory = { context ->
+                                val view = android.view.View(context)
+                                androidx.core.view.ViewCompat.setOnReceiveContentListener(
+                                    view,
+                                    arrayOf("image/*", "video/*", "application/*", "text/*"),
+                                    object : androidx.core.view.OnReceiveContentListener {
+                                        override fun onReceiveContent(view: android.view.View, payload: androidx.core.view.ContentInfoCompat): androidx.core.view.ContentInfoCompat? {
+                                            val (uriPart, remaining) = payload.partition { it.uri != null }
+                                            uriPart?.let {
+                                                for (i in 0 until it.itemCount) {
+                                                    it.getItemAt(i).uri?.let { uri -> onPasteUri(uri) }
+                                                }
+                                            }
+                                            return remaining
+                                        }
+                                    }
+                                )
+                                view
+                            },
+                            modifier = Modifier.matchParentSize()
                         )
                     }
                 }
@@ -294,6 +320,85 @@ internal fun ChatInput(
                             indication = null,
                             onClick = onActionClick
                         )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AttachmentPreview(
+    attachment: ir.hienob.noveo.app.PendingAttachment,
+    onRemove: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (attachment.mimeType.startsWith("image/")) {
+                    coil.compose.AsyncImage(
+                        model = attachment.uri,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Outlined.Close, // Placeholder icon
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                
+                if (attachment.isUploading) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        progress = { attachment.progress },
+                        modifier = Modifier.size(32.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        strokeWidth = 3.dp,
+                    )
+                }
+            }
+            
+            Spacer(Modifier.width(12.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = attachment.fileName,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (attachment.isUploading) 
+                        "Uploading ${ (attachment.progress * 100).toInt() }%" 
+                        else "Ready to send",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+            
+            IconButton(onClick = onRemove, enabled = !attachment.isUploading) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = "Remove",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
