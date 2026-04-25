@@ -1035,9 +1035,9 @@ private fun MessageRow(strings: NoveoStrings, message: ChatMessage, ownMessage: 
         return
     }
 
-    val timeStr = remember(message.timestamp) {
+    val timeStr = remember(message.timestamp, strings.languageCode) {
         val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-        sdf.format(Date(message.timestamp * 1000))
+        localizeDigits(sdf.format(Date(message.timestamp * 1000)), strings.languageCode)
     }
 
     // Sending animation state: larger offset and smaller scale for a more dramatic "spawn"
@@ -1616,7 +1616,7 @@ private fun SettingsAccountSection(strings: NoveoStrings, state: AppUiState, onL
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         DetailRow(strings.userId, state.session?.userId ?: "Unknown")
         DetailRow(strings.sessionId, state.session?.sessionId?.ifBlank { "Connected" } ?: "Unavailable")
-        DetailRow(strings.expiry, formatExpiry(state.session))
+        DetailRow(strings.expiry, formatExpiry(state.session, strings.languageCode))
         
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -1857,7 +1857,7 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
                 Spacer(Modifier.height(6.dp))
                 Text(chat.chatType.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(18.dp))
-                DetailRow(strings.members, chat.memberIds.size.toString())
+                DetailRow(strings.members, localizeDigits(chat.memberIds.size.toString(), strings.languageCode))
                 Spacer(Modifier.height(10.dp))
                 if (chat.memberIds.isNotEmpty()) {
                     LazyColumn(
@@ -1916,7 +1916,7 @@ private fun MenuSheet(
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text(strings.stars, fontWeight = FontWeight.SemiBold)
-                    Text("${state.wallet?.balanceLabel ?: "0.00"} ${strings.stars}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text("${localizeDigits(state.wallet?.balanceLabel ?: "0.00", strings.languageCode)} ${strings.stars}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -1996,7 +1996,7 @@ private fun ChatRow(
                     modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary).padding(horizontal = 8.dp, vertical = 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(chat.unreadCount.toString(), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall)
+                    Text(localizeDigits(chat.unreadCount.toString(), strings.languageCode), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
@@ -2147,11 +2147,12 @@ private fun findDirectChatForUser(chats: List<ChatSummary>, selfUserId: String?,
     }
 }
 
-private fun formatExpiry(session: Session?): String {
+private fun formatExpiry(session: Session?, languageCode: String): String {
     val value = session?.expiresAt ?: 0L
     if (value <= 0L) return "Unknown"
     return runCatching {
-        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(value))
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+        localizeDigits(sdf.format(Date(value)), languageCode)
     }.getOrElse { "Unknown" }
 }
 
