@@ -167,7 +167,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.3.0 Kotlin"
+private const val CLIENT_VERSION = "v0.3.1 Kotlin"
 private val TelegramComposerBlue = Color(0xFF229AF0)
 private val TelegramComposerPanel = Color(0xFFF6F7F8)
 private val TelegramComposerField = Color.White
@@ -573,7 +573,8 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 onSetLanguage = onSetLanguage,
                 onCheckUpdate = onCheckUpdate,
                 onUpdateNotificationSettings = onUpdateNotificationSettings,
-                onRequestBatteryOptimization = onRequestBatteryOptimization
+                onRequestBatteryOptimization = onRequestBatteryOptimization,
+                onRequestPermission = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
             )
         }
 
@@ -1571,7 +1572,8 @@ private fun SettingsModal(
     onSetLanguage: (String) -> Unit,
     onCheckUpdate: () -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
-    onRequestBatteryOptimization: () -> Unit
+    onRequestBatteryOptimization: () -> Unit,
+    onRequestPermission: () -> Unit
 ) {
     val me = state.session?.userId?.let { state.usersById[it] }
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
@@ -1604,9 +1606,7 @@ private fun SettingsModal(
                     SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, currentTheme, onThemeChange, onRequestBatteryOptimization)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection(strings)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
-                    SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings) {
-                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
+                    SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings, onRequestPermission)
                 }
             } // Build fix pass 2
         }

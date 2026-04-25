@@ -124,6 +124,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun checkForUpdate(manual: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
+            val currentVersion = ir.hienob.noveo.BuildConfig.VERSION_NAME
             if (manual) _uiState.value = _uiState.value.copy(isCheckingUpdate = true)
             val updateJson = api.checkForUpdate()
             if (manual) delay(500) // Small delay for UX
@@ -144,7 +145,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
             val version = updateJson.optString("version")
             val url = updateJson.optString("url")
-            val currentVersion = ir.hienob.noveo.BuildConfig.VERSION_NAME
 
             if (version > currentVersion) {
                 val apkFile = File(getApplication<Application>().filesDir, "update-$version.apk")
