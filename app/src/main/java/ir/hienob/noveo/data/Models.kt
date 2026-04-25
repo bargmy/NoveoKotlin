@@ -130,3 +130,20 @@ data class NotificationSettings(
     val channels: Boolean = true,
     val dms: Boolean = true
 )
+
+fun <R : Comparable<R>> BooleanArray.sortedBy(crossinline selector: (Boolean) -> R?): List<Boolean> {
+    return this.toTypedArray().sortedWith(compareBy(selector))
+}
+
+fun <R : Comparable<R>> CharArray.sortedBy(crossinline selector: (Char) -> R?): List<Char> {
+    return this.toTypedArray().sortedWith(compareBy(selector))
+}
+
+fun <T, R : Comparable<R>> Iterable<T>.sortedBy(crossinline selector: (T) -> R?): List<T> {
+    return this.sortedWith(compareBy(selector))
+}
+
+fun <T, R : Comparable<R>> Sequence<T>.sortedBy(crossinline selector: (T) -> R?): Sequence<T> {
+    return this.sortedWith(compareBy(selector))
+}
+

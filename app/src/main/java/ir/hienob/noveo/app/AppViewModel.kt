@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import android.content.Context
 import android.os.PowerManager
 import ir.hienob.noveo.background.NoveoNotificationService
+import ir.hienob.noveo.data.CachedHomeState
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSocket
 import ir.hienob.noveo.data.ChatSummary
