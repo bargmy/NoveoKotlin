@@ -76,7 +76,7 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
             } else {
                 ""
             }
-            val chatType = item.optString("chatType").sanitizeServerString().ifBlank { "private" }
+            val chatType = item.optString("chatType", item.optString("type", "private")).sanitizeServerString()
             val ownerId = item.optString("ownerId").sanitizeServerString().takeIf { it.isNotBlank() }
             val permissions = item.optJSONObject("permissions")
             val canChat = when (chatType) {

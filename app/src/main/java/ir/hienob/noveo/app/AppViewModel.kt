@@ -131,9 +131,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (updateJson == null) {
                 if (manual) {
                     withContext(Dispatchers.Main) {
-                        _uiState.value = _uiState.value.copy(isCheckingUpdate = false, error = getStrings(_uiState.value.languageCode).noUpdateAvailable)
+                        _uiState.value = _uiState.value.copy(
+                            isCheckingUpdate = false, 
+                            updateInfo = UpdateInfo(currentVersion, "", isAvailable = false)
+                        )
                         delay(2000)
-                        _uiState.value = _uiState.value.copy(error = null)
+                        _uiState.value = _uiState.value.copy(updateInfo = null)
                     }
                 }
                 return@launch
@@ -160,9 +163,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else if (manual) {
                 withContext(Dispatchers.Main) {
-                    _uiState.value = _uiState.value.copy(isCheckingUpdate = false, error = getStrings(_uiState.value.languageCode).noUpdateAvailable)
+                    _uiState.value = _uiState.value.copy(
+                        isCheckingUpdate = false,
+                        updateInfo = UpdateInfo(currentVersion, "", isAvailable = false)
+                    )
                     delay(2000)
-                    _uiState.value = _uiState.value.copy(error = null)
+                    _uiState.value = _uiState.value.copy(updateInfo = null)
                 }
             }
         }
@@ -445,6 +451,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun handleSocketEvent(event: SocketEvent) {
         val session = _uiState.value.session ?: return
+        if (event is SocketEvent.UserListUpdate || event is SocketEvent.HistoryUpdate) {
+             NoveoNotificationService.updateKnownUsers(_uiState.value.usersById)
+        }
         when (event) {
             is SocketEvent.NewMessage -> handleIncomingMessage(event.message)
             is SocketEvent.MessageSent -> handleIncomingMessage(event.message)
@@ -517,6 +526,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 contacts = contacts,
                 connectionTitle = "Noveo",
             )
+            NoveoNotificationService.updateKnownUsers(_uiState.value.usersById)
         }
     }
 

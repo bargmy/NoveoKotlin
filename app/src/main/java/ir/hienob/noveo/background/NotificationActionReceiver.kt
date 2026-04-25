@@ -27,24 +27,29 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 val remoteInput = RemoteInput.getResultsFromIntent(intent)
                 val replyText = remoteInput?.getCharSequence("key_text_reply")?.toString()
                 if (!replyText.isNullOrBlank()) {
-                    scope.launch {
-                        val session = sessionStore.read() ?: return@launch
-                        api.sendMessage(session, chatId, replyText)
-                        // Clear notification
-                        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                        nm.cancel(chatId.hashCode())
-                    }
+                    val payload = JSONObject()
+                        .put("type", "message")
+                        .put("chatId", chatId)
+                        .put("content", JSONObject().put("text", replyText).toString())
+                        .put("replyToId", messageId)
+                    NoveoNotificationService.send(payload)
+                    
+                    // Clear notification
+                    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    nm.cancel(chatId.hashCode())
                 }
             }
             "ir.hienob.noveo.ACTION_SEEN" -> {
                 if (messageId != null) {
-                    scope.launch {
-                        val session = sessionStore.read() ?: return@launch
-                        api.markAsSeen(session, chatId, messageId)
-                        // Clear notification
-                        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                        nm.cancel(chatId.hashCode())
-                    }
+                    val payload = JSONObject()
+                        .put("type", "message_seen")
+                        .put("chatId", chatId)
+                        .put("messageId", messageId)
+                    NoveoNotificationService.send(payload)
+                    
+                    // Clear notification
+                    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    nm.cancel(chatId.hashCode())
                 }
             }
         }

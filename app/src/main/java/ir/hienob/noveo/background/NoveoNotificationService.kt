@@ -23,6 +23,7 @@ import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.SessionStore
 import ir.hienob.noveo.data.SocketEvent
+import ir.hienob.noveo.data.UserSummary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,6 +48,13 @@ class NoveoNotificationService : LifecycleService() {
             
         private var activeSession: Session? = null
         private var instance: NoveoNotificationService? = null
+        
+        // Track known users in service for notification name resolution
+        private val knownUsers = mutableMapOf<String, ir.hienob.noveo.data.UserSummary>()
+
+        fun updateKnownUsers(users: Map<String, ir.hienob.noveo.data.UserSummary>) {
+            knownUsers.putAll(users)
+        }
 
         fun send(payload: JSONObject): Boolean {
             return instance?.socket?.send(payload) ?: false
@@ -106,7 +114,7 @@ class NoveoNotificationService : LifecycleService() {
         val notification = NotificationCompat.Builder(this, NotificationChannels.SERVICE)
             .setContentTitle("Noveo is running")
             .setContentText("Listening for messages")
-            .setSmallIcon(R.drawable.tg_send_plane_24)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
@@ -116,7 +124,7 @@ class NoveoNotificationService : LifecycleService() {
     private fun connectSocket(session: Session) {
         socketJob?.cancel()
         socketJob = serviceScope.launch {
-            socket.connect(session) { emptyMap() }.collect { event ->
+            socket.connect(session) { knownUsers }.collect { event ->
                 _socketEvents.emit(event)
                 if (event is SocketEvent.NewMessage && !isAppInForeground) {
                     val settings = sessionStore.readNotificationSettings()
@@ -177,7 +185,7 @@ class NoveoNotificationService : LifecycleService() {
         val replyPendingIntent = PendingIntent.getBroadcast(this, message.chatId.hashCode(), replyIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         
         val replyAction = NotificationCompat.Action.Builder(
-            R.drawable.tg_send_plane_24,
+            R.mipmap.ic_launcher,
             "Reply",
             replyPendingIntent
         ).addRemoteInput(remoteInput).build()
@@ -197,7 +205,7 @@ class NoveoNotificationService : LifecycleService() {
         ).build()
 
         val notification = NotificationCompat.Builder(this, NotificationChannels.MESSAGES)
-            .setSmallIcon(R.drawable.tg_send_plane_24)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(message.senderName)
             .setContentText(message.content.previewText())
             .setAutoCancel(true)

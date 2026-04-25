@@ -127,6 +127,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.os.Build
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -163,7 +167,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.2.0 Kotlin"
+private const val CLIENT_VERSION = "v0.3.0 Kotlin"
 private val TelegramComposerBlue = Color(0xFF229AF0)
 private val TelegramComposerPanel = Color(0xFFF6F7F8)
 private val TelegramComposerField = Color.White
@@ -209,6 +213,16 @@ internal fun HomeScreen(
     onThemeChange: (ThemePreset) -> Unit
 ) {
     val strings = getStrings(state.languageCode)
+    val context = LocalContext.current
+    
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            onUpdateNotificationSettings(state.notificationSettings.copy(enabled = true))
+        }
+    }
+
     var showMenu by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -1590,7 +1604,9 @@ private fun SettingsModal(
                     SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, currentTheme, onThemeChange, onRequestBatteryOptimization)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection(strings)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
-                    SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings)
+                    SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings) {
+                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
                 }
             } // Build fix pass 2
         }
@@ -1828,12 +1844,17 @@ private fun SettingsPreferencesSection(
 private fun SettingsNotificationSection(
     state: AppUiState,
     strings: NoveoStrings,
-    onUpdateNotificationSettings: (NotificationSettings) -> Unit
+    onUpdateNotificationSettings: (NotificationSettings) -> Unit,
+    onRequestPermission: () -> Unit
 ) {
     val settings = state.notificationSettings
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        NotificationToggle(strings.enableNotifications, settings.enabled) {
-            onUpdateNotificationSettings(settings.copy(enabled = it))
+        NotificationToggle(strings.enableNotifications, settings.enabled) { enabled ->
+            if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                onRequestPermission()
+            } else {
+                onUpdateNotificationSettings(settings.copy(enabled = enabled))
+            }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         NotificationToggle(strings.notifyDms, settings.dms) {
