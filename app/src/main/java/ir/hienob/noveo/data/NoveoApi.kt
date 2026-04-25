@@ -255,7 +255,10 @@ class NoveoApi(
         val body = JSONObject().put("action", action).apply {
             extra.forEach { (k, v) -> put(k, v) }
         }.toString()
-        val builder = Request.Builder().url(url)
+        val builder = Request.Builder()
+            .url(url)
+            .header("Origin", origin)
+            .header("User-Agent", "NoveoKotlin/0.3.5")
         if (session != null) {
             builder.header("X-User-ID", session.userId)
             builder.header("X-Auth-Token", session.token)

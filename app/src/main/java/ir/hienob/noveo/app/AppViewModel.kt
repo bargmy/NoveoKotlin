@@ -336,6 +336,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startRegisterCaptcha(handle: String, password: String) {
         viewModelScope.launch {
+            delay(300) // Ensure screen has settled
             runCatching {
                 val started = withContext(Dispatchers.IO) {
                     api.startCaptcha(null, "register")
@@ -417,17 +418,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         
-        // If chat doesn't exist, we start captcha for create_chat
+        // If chat doesn't exist, we start captcha for dm_start
         viewModelScope.launch {
             runCatching {
                 val session = _uiState.value.session ?: return@launch
                 val started = withContext(Dispatchers.IO) {
-                    api.startCaptcha(session, "create_chat", mapOf("targetUserId" to userId))
+                    api.startCaptcha(session, "dm_start", mapOf("targetUserId" to userId))
                 }
                 _uiState.value = _uiState.value.copy(
                     captchaInfo = CaptchaInfo(
                         sessionId = started.getString("sessionId"),
-                        action = "create_chat",
+                        action = "dm_start",
                         extra = mapOf("targetUserId" to userId)
                     )
                 )
@@ -447,23 +448,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val password = info.extra["password"] as? String ?: return
                 authenticate(handle, password, token)
             }
+            "dm_start" -> {
+                val targetUserId = info.extra["targetUserId"] as? String ?: return
+                createChat(
+                    name = "Direct Chat", 
+                    type = "private", 
+                    handle = null, 
+                    bio = null, 
+                    captchaToken = token
+                )
+            }
             "create_chat" -> {
-                val targetUserId = info.extra["targetUserId"] as? String
-                if (targetUserId != null) {
-                    createChat(
-                        name = "Direct Chat", 
-                        type = "private", 
-                        handle = null, 
-                        bio = null, 
-                        captchaToken = token
-                    )
-                } else {
-                    val name = info.extra["name"] as? String ?: "New Chat"
-                    val type = info.extra["type"] as? String ?: "group"
-                    val handle = info.extra["handle"] as? String
-                    val bio = info.extra["bio"] as? String
-                    createChat(name, type, handle.takeIf { it?.isNotBlank() == true }, bio.takeIf { it?.isNotBlank() == true }, token)
-                }
+                val name = info.extra["name"] as? String ?: "New Chat"
+                val type = info.extra["type"] as? String ?: "group"
+                val handle = info.extra["handle"] as? String
+                val bio = info.extra["bio"] as? String
+                createChat(name, type, handle.takeIf { it?.isNotBlank() == true }, bio.takeIf { it?.isNotBlank() == true }, token)
             }
         }
     }
