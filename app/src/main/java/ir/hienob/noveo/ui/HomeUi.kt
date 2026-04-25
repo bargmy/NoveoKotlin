@@ -1036,18 +1036,7 @@ private fun ChatPane(
 }
 
 @Composable
-private fun MessageRow(
-    strings: NoveoStrings,
-    message: ChatMessage,
-    ownMessage: Boolean,
-    senderAvatarUrl: String?,
-    showSenderInfo: Boolean,
-    onMediaClick: (String) -> Unit,
-    repliedMessage: ChatMessage? = null,
-    onReply: () -> Unit,
-    onScrollToMessage: (String) -> Unit,
-    isHighlighted: Boolean = false
-) {
+private fun MessageRow(strings: NoveoStrings, message: ChatMessage, ownMessage: Boolean, senderAvatarUrl: String?, showSenderInfo: Boolean, onMediaClick: (String) -> Unit, repliedMessage: ChatMessage? = null, onReply: () -> Unit, onScrollToMessage: (String) -> Unit, isHighlighted: Boolean = false) {
     val haptic = LocalHapticFeedback.current
     val isSystem = message.senderId == "system"
     if (isSystem) {
@@ -1575,7 +1564,7 @@ private fun SettingsModal(
                     SettingsSection.CHANGELOG -> SettingsChangelogSection(strings)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
                 }
-            }
+            } // Build fix pass 2
         }
     }
 }
@@ -1641,13 +1630,7 @@ private fun SettingsProfileSection(strings: NoveoStrings, me: UserSummary?, onUp
 }
 
 @Composable
-private fun SettingsAccountSection(
-    strings: NoveoStrings,
-    state: AppUiState,
-    onLogout: () -> Unit,
-    onChangePassword: (String, String) -> Unit,
-    onDeleteAccount: (String) -> Unit
-) {
+private fun SettingsAccountSection(strings: NoveoStrings, state: AppUiState, onLogout: () -> Unit, onChangePassword: (String, String) -> Unit, onDeleteAccount: (String) -> Unit) {
     var showChangePassword by rememberSaveable { mutableStateOf(false) }
     var showDeleteAccount by rememberSaveable { mutableStateOf(false) }
 
@@ -1725,13 +1708,7 @@ private fun SettingsAccountSection(
 }
 
 @Composable
-private fun SettingsPreferencesSection(
-    strings: NoveoStrings,
-    onSectionChange: (SettingsSection) -> Unit,
-    onSetLanguage: (String) -> Unit,
-    currentTheme: ThemePreset,
-    onThemeChange: (ThemePreset) -> Unit
-) {
+private fun SettingsPreferencesSection(strings: NoveoStrings, onSectionChange: (SettingsSection) -> Unit, onSetLanguage: (String) -> Unit, currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
     val scrollState = rememberScrollState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     val languages = listOf(
