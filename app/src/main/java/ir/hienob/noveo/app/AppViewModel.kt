@@ -380,7 +380,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     captchaInfo = CaptchaInfo(
                         sessionId = started.getString("sessionId"),
                         action = "create_chat",
-                        extra = mapOf("name" to name, "type" to type, "handle" to handle as Any? ?: "", "bio" to bio as Any? ?: "")
+                        extra = mapOf("name" to name, "type" to type, "handle" to (handle ?: ""), "bio" to (bio ?: ""))
                     )
                 )
             }.onFailure {
