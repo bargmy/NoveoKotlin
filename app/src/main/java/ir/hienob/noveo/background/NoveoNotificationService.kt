@@ -19,6 +19,7 @@ import ir.hienob.noveo.R
 import ir.hienob.noveo.core.notifications.NotificationChannels
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSocket
+import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.SessionStore
 import ir.hienob.noveo.data.SocketEvent
