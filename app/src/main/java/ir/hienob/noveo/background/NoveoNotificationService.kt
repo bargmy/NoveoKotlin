@@ -127,6 +127,7 @@ class NoveoNotificationService : LifecycleService() {
             socket.connect(session) { knownUsers }.collect { event ->
                 _socketEvents.emit(event)
                 if (event is SocketEvent.NewMessage && !isAppInForeground) {
+                    if (event.message.senderId == activeSession?.userId) return@collect
                     val settings = sessionStore.readNotificationSettings()
                     if (settings.enabled) {
                         val shouldNotify = when (event.message.chatType) {

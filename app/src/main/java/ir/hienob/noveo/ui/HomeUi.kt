@@ -65,7 +65,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.Call
+
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DoneAll
@@ -847,7 +849,10 @@ private fun ChatPane(
         label = "send_button_scale"
     )
     val scope = rememberCoroutineScope()
-    val selectedTitle = selectedChat?.title?.ifBlank { "Chat" } ?: "Chat"
+    val selectedTitle = remember(selectedChat, strings) {
+        if (selectedChat?.title == "Saved Messages") strings.savedMessages
+        else selectedChat?.title?.ifBlank { "Chat" } ?: "Chat"
+    }
     
     val profileUserId = remember(selectedChat, state.session?.userId) {
         resolveProfileUserId(selectedChat, state.session?.userId)
@@ -1987,13 +1992,17 @@ private fun ProfileModal(
 
 @Composable
 private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: Map<String, UserSummary>, onClose: () -> Unit) {
+    val chatTitle = remember(chat.title, strings) {
+        if (chat.title == "Saved Messages") strings.savedMessages
+        else chat.title.ifBlank { strings.chatInfo }
+    }
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            ModalHeader(title = chat.title.ifBlank { strings.chatInfo }, onClose = onClose)
+            ModalHeader(title = chatTitle, onClose = onClose)
             Column(modifier = Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                ProfileCircle(name = chat.title, imageUrl = chat.avatarUrl, size = 96.dp)
+                ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = 96.dp)
                 Spacer(Modifier.height(12.dp))
-                Text(chat.title.ifBlank { strings.messagePlaceholder }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(chatTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 Text(chat.chatType.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(18.dp))
@@ -2109,6 +2118,10 @@ private fun ChatRow(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val chatTitle = remember(chat.title, strings) {
+        if (chat.title == "Saved Messages") strings.savedMessages
+        else chat.title.ifBlank { "Chat" }
+    }
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
@@ -2117,11 +2130,11 @@ private fun ChatRow(
         )
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ProfileCircle(name = chat.title, imageUrl = chat.avatarUrl)
+            ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl)
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(chat.title.ifBlank { "Chat" }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(chatTitle, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (chat.isVerified) {
                         Spacer(Modifier.width(4.dp))
                         Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
@@ -2227,6 +2240,23 @@ private fun DetailRow(label: String, value: String) {
 
 @Composable
 private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 42.dp) {
+    if (imageUrl == "saved_messages") {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(Color(0xFF42A5F5), Color(0xFF1E88E5))
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Outlined.Bookmark, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.6f))
+        }
+        return
+    }
+
     val resolvedImageUrl = remember(imageUrl) { imageUrl.normalizeNoveoUrl() }
     val isDefaultAvatar = remember(resolvedImageUrl) { resolvedImageUrl?.endsWith("default.png") == true }
     

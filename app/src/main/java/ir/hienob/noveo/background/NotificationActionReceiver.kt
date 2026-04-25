@@ -27,10 +27,14 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 val remoteInput = RemoteInput.getResultsFromIntent(intent)
                 val replyText = remoteInput?.getCharSequence("key_text_reply")?.toString()
                 if (!replyText.isNullOrBlank()) {
+                    val contentObj = JSONObject().put("text", replyText)
+                    if (messageId != null) {
+                        contentObj.put("replyToId", messageId)
+                    }
                     val payload = JSONObject()
                         .put("type", "message")
                         .put("chatId", chatId)
-                        .put("content", JSONObject().put("text", replyText).toString())
+                        .put("content", contentObj.toString())
                         .put("replyToId", messageId)
                     NoveoNotificationService.send(payload)
                     

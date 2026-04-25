@@ -6,6 +6,7 @@ data class NoveoStrings(
     val menu: String = "Menu",
     val settings: String = "Settings",
     val allContacts: String = "All Contacts",
+    val savedMessages: String = "Saved Messages",
     val newChat: String = "New Chat",
     val stars: String = "Stars",
     val subscription: String = "Subscription",
@@ -121,6 +122,7 @@ private val translations = mapOf(
         menu = "Menü",
         settings = "Einstellungen",
         allContacts = "Alle Kontakte",
+        savedMessages = "Gespeicherte Nachrichten",
         newChat = "Neuer Chat",
         stars = "Sterne",
         subscription = "Abonnement",
@@ -233,6 +235,7 @@ private val translations = mapOf(
         menu = "Меню",
         settings = "Настройки",
         allContacts = "Контакты",
+        savedMessages = "Избранное",
         newChat = "Новый чат",
         stars = "Звезды",
         subscription = "Подписка",
@@ -345,6 +348,7 @@ private val translations = mapOf(
         menu = "菜单",
         settings = "设置",
         allContacts = "联系人",
+        savedMessages = "保存的消息",
         newChat = "新建聊天",
         stars = "星星",
         subscription = "订阅",
@@ -457,6 +461,7 @@ private val translations = mapOf(
         menu = "منو",
         settings = "تنظیمات",
         allContacts = "مخاطبین",
+        savedMessages = "پیام‌های ذخیره شده",
         newChat = "گفتگوی جدید",
         stars = "ستاره‌ها",
         subscription = "اشتراک",
@@ -569,6 +574,7 @@ private val translations = mapOf(
         menu = "Menú",
         settings = "Ajustes",
         allContacts = "Todos los contactos",
+        savedMessages = "Mensajes guardados",
         newChat = "Nuevo chat",
         stars = "Estrellas",
         subscription = "Suscripción",
@@ -681,6 +687,7 @@ private val translations = mapOf(
         menu = "Menu",
         settings = "Paramètres",
         allContacts = "Tous les contacts",
+        savedMessages = "Messages enregistrés",
         newChat = "Nouveau chat",
         stars = "Étoiles",
         subscription = "Abonnement",
@@ -793,6 +800,7 @@ private val translations = mapOf(
         menu = "القائمة",
         settings = "الإعدادات",
         allContacts = "كل الجهات",
+        savedMessages = "الرسائل المحفوظة",
         newChat = "دردشة جديدة",
         stars = "نجوم",
         subscription = "اشتراك",
@@ -905,6 +913,7 @@ private val translations = mapOf(
         menu = "Menü",
         settings = "Ayarlar",
         allContacts = "Tüm Kişiler",
+        savedMessages = "Kaydedilen Mesajlar",
         newChat = "Yeni Sohbet",
         stars = "Yıldızlar",
         subscription = "Abonelik",
@@ -1019,7 +1028,11 @@ fun getStrings(languageCode: String): NoveoStrings {
 
 fun localizeDigits(input: String, languageCode: String): String {
     if (languageCode != "fa" && languageCode != "ar") return input
-    val targetDigits = charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
+    val targetDigits = if (languageCode == "fa") {
+        charArrayOf('۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹')
+    } else {
+        charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
+    }
     return input.map { char ->
         if (char in '0'..'9') targetDigits[char - '0'] 
         else if (char == ',') {

@@ -233,7 +233,11 @@ internal fun parseMessageContent(raw: Any?): MessageContent {
 private fun resolveChatTitle(chat: JSONObject, usersById: Map<String, UserSummary>, memberIds: List<String>, selfUserId: String): String {
     val explicit = chat.optString("chatName").sanitizeServerString()
     if (explicit.isNotBlank()) return explicit
-    if (chat.optString("chatType").sanitizeServerString() == "private") {
+    val chatType = chat.optString("chatType", chat.optString("type", "private")).sanitizeServerString()
+    if (chatType == "private") {
+        if (memberIds.size == 1 && memberIds[0] == selfUserId) {
+            return "Saved Messages"
+        }
         return memberIds.firstOrNull { it != selfUserId }
             ?.let(usersById::get)
             ?.username
@@ -247,12 +251,14 @@ private fun resolveChatTitle(chat: JSONObject, usersById: Map<String, UserSummar
 private fun resolveChatAvatar(chat: JSONObject, usersById: Map<String, UserSummary>, memberIds: List<String>, selfUserId: String): String? {
     val explicit = resolveAssetUrl(chat, "avatarUrl", "avatar", "photo", "image")
     if (!explicit.isNullOrBlank()) return explicit
-    if (chat.optString("chatType").sanitizeServerString() == "private") {
+    val chatType = chat.optString("chatType", chat.optString("type", "private")).sanitizeServerString()
+    if (chatType == "private") {
+        if (memberIds.size == 1 && memberIds[0] == selfUserId) {
+            return "saved_messages"
+        }
         return memberIds.firstOrNull { it != selfUserId }
             ?.let(usersById::get)
             ?.avatarUrl
-            ?.sanitizeServerString()
-            ?.takeIf { it.isNotBlank() }
     }
     return null
 }
