@@ -843,27 +843,27 @@ private fun ChatPane(
         }
     }
 
-    val typingText = remember(typingUsers, state.usersById) {
+    val typingText = remember(typingUsers, state.usersById, strings) {
         if (typingUsers.isEmpty()) null
         else {
             val names = typingUsers.mapNotNull { state.usersById[it]?.username?.split(" ")?.firstOrNull() }
             when {
-                names.isEmpty() -> "someone is typing..."
-                names.size == 1 -> "${names[0]} is typing..."
-                names.size == 2 -> "${names[0]} and ${names[1]} are typing..."
-                else -> "${names.size} people are typing..."
+                names.isEmpty() -> strings.typingSomeone
+                names.size == 1 -> "${names[0]} ${strings.typingSingle}"
+                names.size == 2 -> "${names[0]} ${strings.typingDouble} ${names[1]}"
+                else -> "${names.size} ${strings.typingMulti}"
             }
         }
     }
 
     val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount, typingText) {
-        if (selectedChat == null) return@remember "conversation"
+        if (selectedChat == null) return@remember ""
         if (typingText != null) return@remember typingText
         if (selectedChat.chatType == "private") {
-            if (isOnline) "online" else "last seen recently"
+            if (isOnline) strings.membersOnline else strings.lastSeenRecently
         } else {
             val total = selectedChat.memberIds.size
-            if (onlineCount > 0) "$total members, $onlineCount online" else "$total members"
+            if (onlineCount > 0) "$total ${strings.membersCount}, $onlineCount ${strings.membersOnline}" else "$total ${strings.membersCount}"
         }
     }
 
@@ -980,6 +980,7 @@ private fun ChatPane(
                     }
 
                     MessageRow(
+                        strings = strings,
                         message = message,
                         ownMessage = message.senderId == state.session?.userId,
                         senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl,
@@ -1025,7 +1026,7 @@ private fun ChatPane(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "You cannot send messages in this chat.",
+                    text = strings.cannotSendMessage,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1036,6 +1037,7 @@ private fun ChatPane(
 
 @Composable
 private fun MessageRow(
+    strings: NoveoStrings,
     message: ChatMessage,
     ownMessage: Boolean,
     senderAvatarUrl: String?,
@@ -1226,7 +1228,7 @@ private fun MessageRow(
                             }
                         }
 
-                        AttachmentPreview(file = message.content.file, onMediaClick = onMediaClick)
+                        AttachmentPreview(strings = strings, file = message.content.file, onMediaClick = onMediaClick)
                         val caption = message.content.text
 
                         if (!caption.isNullOrBlank()) {
@@ -1373,7 +1375,7 @@ private fun PendingMessageBubble(text: String) {
 }
 
 @Composable
-private fun AttachmentPreview(file: MessageFileAttachment?, onMediaClick: (String) -> Unit) {
+private fun AttachmentPreview(strings: NoveoStrings, file: MessageFileAttachment?, onMediaClick: (String) -> Unit) {
     val uriHandler = LocalUriHandler.current
     val normalizedUrl = remember(file?.url) { file?.url.normalizeNoveoUrl() }
     if (file == null) return
@@ -1509,7 +1511,7 @@ private fun ContactRow(
             }
             Spacer(Modifier.width(8.dp))
             OutlinedButton(onClick = onMessage) {
-                Text(if (existingChat != null) "Message" else "Open")
+                Text(if (existingChat != null) strings.messageButton else strings.open)
             }
         }
     }
@@ -1521,8 +1523,8 @@ private fun CreateChannelModal(strings: NoveoStrings, onClose: () -> Unit) {
         Column(modifier = Modifier.fillMaxWidth()) {
             ModalHeader(title = strings.newChat, onClose = onClose)
             Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Create Channel") }
-                Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Create Group") }
+                Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text(strings.newChat) } // Using newChat as placeholder
+                Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text(strings.subscription) } // Placeholder
             }
         }
     }
@@ -1548,13 +1550,13 @@ private fun SettingsModal(
         Column(modifier = Modifier.fillMaxSize()) {
             ModalHeader(
                 title = when (section) {
-                    SettingsSection.MENU -> "Settings"
-                    SettingsSection.SUBSCRIPTION -> "Subscription"
-                    SettingsSection.PROFILE -> "Profile"
-                    SettingsSection.ACCOUNT -> "Account"
-                    SettingsSection.PREFERENCES -> "Preferences"
-                    SettingsSection.CHANGELOG -> "Changelog"
-                    SettingsSection.THEME -> "Themes"
+                    SettingsSection.MENU -> strings.settings
+                    SettingsSection.SUBSCRIPTION -> strings.subscription
+                    SettingsSection.PROFILE -> strings.profile
+                    SettingsSection.ACCOUNT -> strings.account
+                    SettingsSection.PREFERENCES -> strings.preferences
+                    SettingsSection.CHANGELOG -> strings.changelog
+                    SettingsSection.THEME -> strings.themes
                 },
                 onClose = onClose,
                 onBack = when (section) {
@@ -1724,6 +1726,7 @@ private fun SettingsAccountSection(
 
 @Composable
 private fun SettingsPreferencesSection(
+    strings: NoveoStrings,
     onSectionChange: (SettingsSection) -> Unit,
     onSetLanguage: (String) -> Unit,
     currentTheme: ThemePreset,
@@ -1747,19 +1750,19 @@ private fun SettingsPreferencesSection(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        SettingsRow("Themes", Icons.Outlined.Palette) { onSectionChange(SettingsSection.THEME) }
-        SettingsRow("Language", Icons.Outlined.Language) { showLanguageDialog = true }
+        SettingsRow(strings.themes, Icons.Outlined.Palette) { onSectionChange(SettingsSection.THEME) }
+        SettingsRow(strings.language, Icons.Outlined.Language) { showLanguageDialog = true }
         
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
-        DetailCard(title = "Privacy", body = "Security and visibility controls.")
-        DetailCard(title = "Emoji Style", body = "Choose your preferred emoji set.")
+        DetailCard(title = strings.privacy, body = strings.privacyBody)
+        DetailCard(title = strings.emojiStyle, body = strings.emojiBody)
     }
 
     if (showLanguageDialog) {
         AlertDialog(
             onDismissRequest = { showLanguageDialog = false },
-            title = { Text("Select Language") },
+            title = { Text(strings.selectLanguage) },
             text = {
                 LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
                     items(languages) { (name, code) ->
@@ -1789,24 +1792,25 @@ private fun SettingsThemeSection(strings: NoveoStrings, currentTheme: ThemePrese
     ) {
         val themeSections = listOf(
             ThemeSection(
-                title = "Light",
-                subtitle = "Bright themes for daytime usage.",
+                title = strings.themeLight,
+                subtitle = strings.themeLightDesc,
                 presets = listOf(ThemePreset.LIGHT, ThemePreset.SKY_LIGHT, ThemePreset.SUNSET_LIGHT, ThemePreset.SNOWY_DAYDREAM)
             ),
             ThemeSection(
-                title = "Dark",
-                subtitle = "Low-light themes for nighttime usage.",
+                title = strings.themeDark,
+                subtitle = strings.themeDarkDesc,
                 presets = listOf(ThemePreset.DARK, ThemePreset.OCEAN_DARK, ThemePreset.PLUM_DARK, ThemePreset.OLED_DARK)
             ),
             ThemeSection(
-                title = "Premium",
-                subtitle = "Exclusive themes with rich color palettes.",
+                title = strings.themePremium,
+                subtitle = strings.themePremiumDesc,
                 presets = listOf(ThemePreset.SUNSET_SHIMMER, ThemePreset.CHERRY_RED, ThemePreset.RAINBOW_RAGEBAIT, ThemePreset.SANOKI_MEOA)
             )
         )
 
         themeSections.forEach { section ->
             ThemeSectionBlock(
+                strings = strings,
                 section = section,
                 currentTheme = currentTheme,
                 onThemeChange = onThemeChange
@@ -1817,6 +1821,7 @@ private fun SettingsThemeSection(strings: NoveoStrings, currentTheme: ThemePrese
 
 @Composable
 private fun ThemeSectionBlock(
+    strings: NoveoStrings,
     section: ThemeSection,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit
@@ -1836,7 +1841,7 @@ private fun ThemeSectionBlock(
                 Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(preset.label, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     if (preset == currentTheme) {
-                        Text("Selected", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                        Text(strings.themeSelected, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -1848,7 +1853,7 @@ private fun ThemeSectionBlock(
 private fun SettingsChangelogSection(strings: NoveoStrings) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         DetailCard(title = strings.version, body = CLIENT_VERSION)
-        DetailCard(title = strings.whatNew, body = "Improved Settings structure with proper icons, functional profile updates via WebSocket, secure account management (Change Password/Delete Account), and real language selection.")
+        DetailCard(title = strings.whatNew, body = strings.changelogBody)
     }
 }
 
@@ -1870,33 +1875,33 @@ private fun ProfileModal(
             Spacer(Modifier.height(12.dp))
             Text(user.username, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
-            Text(user.handle ?: "No handle", style = MaterialTheme.typography.bodyMedium)
+            Text(user.handle ?: strings.noHandle, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(12.dp))
-            Text(user.bio.ifBlank { "No bio yet." }, textAlign = TextAlign.Center)
+            Text(user.bio.ifBlank { strings.noMessagesYet }, textAlign = TextAlign.Center)
             Spacer(Modifier.height(18.dp))
             DetailCard(
-                title = "Mutual chat state",
-                body = if (findDirectChatForUser(chats, selfUserId, user.id) != null) "This profile already has a private chat you can open." else "No private chat has been found yet in the current Android snapshot."
+                title = strings.mutualChatState,
+                body = if (findDirectChatForUser(chats, selfUserId, user.id) != null) strings.chatFound else strings.chatNotFound
             )
             Spacer(Modifier.height(14.dp))
-            Button(onClick = onMessage, modifier = Modifier.fillMaxWidth()) { Text("Message") }
+            Button(onClick = onMessage, modifier = Modifier.fillMaxWidth()) { Text(strings.messageButton) }
         }
     }
 }
 
 @Composable
-private fun GroupInfoModal(chat: ChatSummary, usersById: Map<String, UserSummary>, onClose: () -> Unit) {
+private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: Map<String, UserSummary>, onClose: () -> Unit) {
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            ModalHeader(title = chat.title.ifBlank { "Chat info" }, onClose = onClose)
+            ModalHeader(title = chat.title.ifBlank { strings.chatInfo }, onClose = onClose)
             Column(modifier = Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 ProfileCircle(name = chat.title, imageUrl = chat.avatarUrl, size = 96.dp)
                 Spacer(Modifier.height(12.dp))
-                Text(chat.title.ifBlank { "Chat" }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(chat.title.ifBlank { strings.messagePlaceholder }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 Text(chat.chatType.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(18.dp))
-                DetailRow(strings.allContacts, chat.memberIds.size.toString())
+                DetailRow(strings.members, chat.memberIds.size.toString())
                 Spacer(Modifier.height(10.dp))
                 if (chat.memberIds.isNotEmpty()) {
                     LazyColumn(
@@ -1963,7 +1968,7 @@ private fun MenuSheet(
         MenuRow(strings.settings, Icons.Outlined.Settings, onOpenSettings)
         Spacer(Modifier.weight(1f))
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Noveo Messenger", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(strings.brandName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
             Text(CLIENT_VERSION, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

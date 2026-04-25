@@ -382,11 +382,11 @@ private fun OnboardingScreen(strings: NoveoStrings, onDismissOnboarding: () -> U
         Spacer(Modifier.height(32.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             if (page < pages.lastIndex) {
-                Text("Skip", modifier = Modifier.clickable { onDismissOnboarding() }.padding(8.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
-                Button(onClick = { page += 1 }) { Text("Next") }
+                Text(strings.skip, modifier = Modifier.clickable { onDismissOnboarding() }.padding(8.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+                Button(onClick = { page += 1 }) { Text(strings.next) }
             } else {
                 Spacer(Modifier.width(1.dp))
-                Button(onClick = onDismissOnboarding) { Text("Get started") }
+                Button(onClick = onDismissOnboarding) { Text(strings.onboardingAction) }
             }
         }
     }
