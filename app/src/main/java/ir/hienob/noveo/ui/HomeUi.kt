@@ -84,6 +84,8 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -889,6 +891,8 @@ private fun ChatPane(
     ) { uri ->
         uri?.let { onAttachFile(it) }
     }
+
+    val selectedTitle = remember(selectedChat, strings) {
         if (selectedChat?.title == "Saved Messages") strings.savedMessages
         else selectedChat?.title?.ifBlank { "Chat" } ?: "Chat"
     }
@@ -1105,7 +1109,7 @@ private fun ChatPane(
                     onPasteUri = { onAttachFile(it) },
                     onActionClick = {
                         val text = draft.trim()
-                        if (text.isBlank() && state.pendingAttachment == null) return@ChatInput
+                        if (text.isBlank() && state.pendingAttachment == null) return@onActionClick
                         onSend(text)
                         draft = ""
                         sendPulse = true
@@ -1537,7 +1541,7 @@ private fun MessageAttachment(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (file.isVideo()) Icons.Outlined.PlayCircle else Icons.Outlined.FilePresent,
+                        imageVector = if (file.isVideo()) Icons.Outlined.PlayArrow else Icons.Outlined.Description,
                         contentDescription = null,
                         tint = if (ownMessage) Color.White else MaterialTheme.colorScheme.primary
                     )
@@ -1558,8 +1562,8 @@ private fun MessageAttachment(
                     )
                 }
                 Icon(
-                    imageVector = Icons.Outlined.Download,
-                    contentDescription = "Download",
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowForward, // Using a standard icon
+                    contentDescription = "Open",
                     modifier = Modifier.size(20.dp),
                     tint = (if (ownMessage) Color.White else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.5f)
                 )
