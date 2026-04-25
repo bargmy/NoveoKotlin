@@ -23,7 +23,7 @@ class MainActivity : ComponentActivity() {
                 state = state,
                 onDismissOnboarding = viewModel::dismissOnboarding,
                 onAuthMode = viewModel::setAuthMode,
-                onAuthSubmit = viewModel::authenticate,
+                onAuthSubmit = { h, p, c -> viewModel.authenticate(h, p, c) },
                 onOpenChat = viewModel::openChat,
                 onStartDirectChat = viewModel::openDirectChat,
                 onCreateChat = { n, t, h, b, c -> viewModel.createChat(n, t, h, b, c) },

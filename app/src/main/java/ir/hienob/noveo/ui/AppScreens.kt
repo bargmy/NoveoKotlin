@@ -244,7 +244,7 @@ fun NoveoRoot(
     state: AppUiState,
     onDismissOnboarding: () -> Unit,
     onAuthMode: (Boolean) -> Unit,
-    onAuthSubmit: (String, String) -> Unit,
+    onAuthSubmit: (String, String, String?) -> Unit,
     onOpenChat: (String) -> Unit,
     onStartDirectChat: (String) -> Unit,
     onCreateChat: (String, String, String?, String?, String?) -> Unit,
