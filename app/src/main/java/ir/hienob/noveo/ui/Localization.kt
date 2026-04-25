@@ -429,7 +429,7 @@ private val translations = mapOf(
         typingMulti = "نفر در حال نوشتن هستند...",
         whatNew = "چه خبر؟",
         version = "نسخه",
-        premiumTitle = "نوو پرمیوم",
+        premiumTitle = "نوئو پرمیوم",
         premiumBody = "باز کردن تم‌های اختصاصی، آپلود فایل‌های بزرگتر و نشان‌های پروفایل منحصر به فرد.",
         walletTitle = "ستاره‌ها و کیف پول",
         walletBody = "مدیریت موجودی دیجیتال برای انعام، هدایا و محتوای پرمیوم.",
@@ -455,7 +455,7 @@ private val translations = mapOf(
         membersOnline = "آنلاین",
         cannotSendMessage = "شما نمی‌توانید در این گفتگو پیام ارسال کنید.",
         loginTitle = "خوش آمدید",
-        signupTitle = "عضویت در نوو",
+        signupTitle = "عضویت در نوئو",
         handlePlaceholder = "نام کاربری",
         passwordPlaceholder = "رمز عبور",
         loginButton = "ورود",
@@ -465,11 +465,11 @@ private val translations = mapOf(
         onboardingTitle = "امن. سریع. مدرن.",
         onboardingBody = "نسل بعدی پیام‌رسانی را با رمزگذاری سمت سرور تجربه کنید.",
         onboardingAction = "شروع کنید",
-        brandName = "نوو",
+        brandName = "نوئو",
         changelogBody = "بهبود ساختار تنظیمات با آیکون‌های مناسب، بروزرسانی پروفایل از طریق WebSocket، مدیریت حساب کاربری امن و انتخاب زبان واقعی.",
         onboardingPages = listOf(
             "با مخاطبین خود در یک جا گفتگو کنید.",
-            "با پوسته موبایل نوو به سرعت وارد گفتگوها شوید.",
+            "با پوسته موبایل نوئو به سرعت وارد گفتگوها شوید.",
             "همگام بمانید و به محض ورود پیام‌رسانی را شروع کنید."
         )
     ),
