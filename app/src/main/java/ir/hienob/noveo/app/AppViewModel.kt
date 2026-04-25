@@ -221,7 +221,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apkFile)
+            val uri = FileProvider.getUriForFile(context, "ir.hienob.noveo.updates.provider", apkFile)
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

@@ -27,12 +27,15 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="ir.hienob.noveo.fileprovider"
+            android:authorities="ir.hienob.noveo.updates.provider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PATHS"
-                android:resource="@xml/file_paths" />
+                android:resource="@xml/update_paths" />
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_paths" />
         </provider>
     </application>
 </manifest>
