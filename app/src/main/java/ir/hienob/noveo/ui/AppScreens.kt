@@ -259,7 +259,8 @@ fun NoveoRoot(
     onSetLanguage: (String) -> Unit,
     onDismissUpdate: () -> Unit,
     onDownloadUpdate: () -> Unit,
-    onInstallUpdate: () -> Unit
+    onInstallUpdate: () -> Unit,
+    onCheckUpdate: () -> Unit
 ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current
@@ -319,8 +320,8 @@ fun NoveoRoot(
                         onDismissUpdate = onDismissUpdate,
                         onDownloadUpdate = onDownloadUpdate,
                         onInstallUpdate = onInstallUpdate,
+                        onCheckUpdate = onCheckUpdate,
                         currentTheme = currentTheme,
-
                         onThemeChange = { currentTheme = it }
                     )
                 }

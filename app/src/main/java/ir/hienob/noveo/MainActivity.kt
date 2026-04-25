@@ -36,7 +36,8 @@ class MainActivity : ComponentActivity() {
                 onSetLanguage = { c -> viewModel.setLanguage(c) },
                 onDismissUpdate = viewModel::dismissUpdate,
                 onDownloadUpdate = viewModel::downloadUpdate,
-                onInstallUpdate = viewModel::installUpdate
+                onInstallUpdate = viewModel::installUpdate,
+                onCheckUpdate = { viewModel.checkForUpdate(manual = true) }
             )
         }
     }

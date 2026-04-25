@@ -201,6 +201,7 @@ internal fun HomeScreen(
     onDismissUpdate: () -> Unit,
     onDownloadUpdate: () -> Unit,
     onInstallUpdate: () -> Unit,
+    onCheckUpdate: () -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit
 ) {
@@ -552,7 +553,8 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 onUpdateProfile = onUpdateProfile,
                 onChangePassword = onChangePassword,
                 onDeleteAccount = onDeleteAccount,
-                onSetLanguage = onSetLanguage
+                onSetLanguage = onSetLanguage,
+                onCheckUpdate = onCheckUpdate
             )
         }
 
@@ -621,6 +623,7 @@ private fun SidebarPane(
             
             state.updateInfo?.let { info ->
                 UpdateBubble(
+                    strings = strings,
                     updateInfo = info,
                     onDismiss = onDismissUpdate,
                     onUpdate = onDownloadUpdate,
@@ -859,17 +862,27 @@ private fun ChatPane(
         }
     }
 
-    val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount, typingText) {
+    val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount, typingText, strings) {
         if (selectedChat == null) return@remember ""
         if (typingText != null) return@remember typingText
         if (selectedChat.chatType == "private") {
-            if (isOnline) strings.membersOnline else strings.lastSeenRecently
+            if (isOnline) strings.membersOnline 
+            else {
+                val lastSeen = profileUser?.lastSeen
+                if (lastSeen != null && lastSeen > 0) {
+                    val date = java.util.Date(lastSeen * 1000L)
+                    val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(date)
+                    "${strings.lastSeenAt} $time"
+                } else {
+                    strings.lastSeenRecently
+                }
+            }
         } else {
             val total = selectedChat.memberIds.size
             val totalStr = localizeDigits(total.toString(), strings.languageCode)
             val onlineStr = localizeDigits(onlineCount.toString(), strings.languageCode)
             val rawSubtitle = if (onlineCount > 0) "$totalStr ${strings.membersCount}${strings.comma} $onlineStr ${strings.membersOnline}" else "$totalStr ${strings.membersCount}"
-            if (strings.languageCode == "fa" || strings.languageCode == "ar") "\u200E$rawSubtitle" else rawSubtitle
+            if (strings.languageCode == "fa" || strings.languageCode == "ar") "\u200F$rawSubtitle" else rawSubtitle
         }
     }
 
@@ -893,18 +906,12 @@ private fun ChatPane(
 
     // Handle history loading vs new messages
     val lastMessageId = remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(state.messages) {
+    LaunchedEffect(state.messages.size) {
         if (state.messages.isEmpty()) return@LaunchedEffect
         val newLastId = state.messages.last().id
-        val wasAtBottom = !listState.canScrollForward
-        
         if (lastMessageId.value != null && newLastId != lastMessageId.value) {
-            // If a new message arrived and user was at bottom, or it's their own message
-            val lastMsg = state.messages.last()
-            val isOwn = lastMsg.senderId == state.session?.userId
-            if (wasAtBottom || isOwn) {
-                listState.animateScrollToItem(state.messages.lastIndex)
-            }
+            // New message arrived
+            listState.animateScrollToItem(state.messages.lastIndex)
         }
         lastMessageId.value = newLastId
     }
@@ -925,10 +932,10 @@ private fun ChatPane(
 
     Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Back button always visible if in a chat, even in landscape
+            // Back button
             HeaderIconButton(icon = Icons.AutoMirrored.Outlined.ArrowBack, onClick = onBackToChats)
             Spacer(Modifier.width(8.dp))
             
@@ -942,11 +949,11 @@ private fun ChatPane(
                     .padding(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ProfileCircle(name = selectedTitle, imageUrl = selectedChat?.avatarUrl, size = 42.dp)
+                ProfileCircle(name = selectedTitle, imageUrl = selectedChat?.avatarUrl, size = 40.dp)
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(selectedTitle, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall)
+                    Text(selectedTitle, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+                    Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.width(6.dp))
@@ -954,7 +961,7 @@ private fun ChatPane(
         }
 
         state.error?.takeIf { it.isNotBlank() }?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp))
+            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(6.dp))
         }
 
@@ -967,21 +974,24 @@ private fun ChatPane(
                 state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp) // Grouping handles spacing
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                items(state.messages.size, key = { state.messages[it].id }) { index ->
-                    val message = state.messages[index]
+                items(
+                    items = state.messages,
+                    key = { it.id },
+                    contentType = { "message" }
+                ) { message ->
+                    val index = state.messages.indexOf(message)
                     val prevMessage = if (index > 0) state.messages[index - 1] else null
-                    val nextMessage = if (index < state.messages.size - 1) state.messages[index + 1] else null
                     
-                    val showSenderInfo = remember(message, prevMessage) {
+                    val showSenderInfo = remember(message.id, prevMessage?.id) {
                         prevMessage == null || 
                         prevMessage.senderId != message.senderId || 
                         (message.timestamp - prevMessage.timestamp) > 300 ||
                         prevMessage.senderId == "system"
                     }
 
-                    val repliedMessage = remember(message.replyToId, state.messages) {
+                    val repliedMessage = remember(message.replyToId) {
                         message.replyToId?.let { rid -> state.messages.find { it.id == rid } }
                     }
 
@@ -998,6 +1008,8 @@ private fun ChatPane(
                         isHighlighted = highlightedMessageId == message.id
                     )
                 }
+            }
+        }
             }
         }
 
@@ -1538,7 +1550,8 @@ private fun SettingsModal(
     onUpdateProfile: (String, String) -> Unit,
     onChangePassword: (String, String) -> Unit,
     onDeleteAccount: (String) -> Unit,
-    onSetLanguage: (String) -> Unit
+    onSetLanguage: (String) -> Unit,
+    onCheckUpdate: () -> Unit
 ) {
     val me = state.session?.userId?.let { state.usersById[it] }
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
@@ -1566,7 +1579,7 @@ private fun SettingsModal(
                     SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings)
                     SettingsSection.PROFILE -> SettingsProfileSection(strings, me, onUpdateProfile)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(strings, onSectionChange, onSetLanguage, currentTheme, onThemeChange)
+                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(strings, onSectionChange, onSetLanguage, onCheckUpdate, currentTheme, onThemeChange)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection(strings)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
                 }
@@ -1714,7 +1727,7 @@ private fun SettingsAccountSection(strings: NoveoStrings, state: AppUiState, onL
 }
 
 @Composable
-private fun SettingsPreferencesSection(strings: NoveoStrings, onSectionChange: (SettingsSection) -> Unit, onSetLanguage: (String) -> Unit, currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
+private fun SettingsPreferencesSection(strings: NoveoStrings, onSectionChange: (SettingsSection) -> Unit, onSetLanguage: (String) -> Unit, onCheckUpdate: () -> Unit, currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
     val scrollState = rememberScrollState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     val languages = listOf(
@@ -1735,6 +1748,7 @@ private fun SettingsPreferencesSection(strings: NoveoStrings, onSectionChange: (
     ) {
         SettingsRow(strings.themes, Icons.Outlined.Palette) { onSectionChange(SettingsSection.THEME) }
         SettingsRow(strings.language, Icons.Outlined.Language) { showLanguageDialog = true }
+        SettingsRow(strings.checkForUpdates, Icons.Outlined.History) { onCheckUpdate() }
         
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -2251,6 +2265,7 @@ private fun FullscreenMediaModal(url: String, onDismiss: () -> Unit) {
 
 @Composable
 private fun UpdateBubble(
+    strings: NoveoStrings,
     updateInfo: ir.hienob.noveo.app.UpdateInfo,
     onDismiss: () -> Unit,
     onUpdate: () -> Unit,
@@ -2264,41 +2279,41 @@ private fun UpdateBubble(
             .padding(8.dp),
         shape = RoundedCornerShape(12.dp),
         color = Color(0xFFE8F5E9),
-        tonalElevation = 2.dp
+        tonalElevation = 1.dp
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = "Update ${updateInfo.version} available!",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF2E7D32)
-            )
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = strings.updateAvailable.format(updateInfo.version),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2E7D32),
+                    modifier = Modifier.weight(1f)
+                )
+                
+                if (updateInfo.isDownloaded) {
+                    TextButton(onClick = onInstall, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text(strings.install, color = Color(0xFF2E7D32), style = MaterialTheme.typography.labelLarge)
+                    }
+                } else if (!updateInfo.isDownloading) {
+                    TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text(strings.dismiss, color = Color(0xFF757575), style = MaterialTheme.typography.labelLarge)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    TextButton(onClick = onUpdate, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text(strings.update, color = Color(0xFF2E7D32), style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
             
             if (updateInfo.isDownloading) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(4.dp))
                 LinearProgressIndicator(
                     progress = updateInfo.downloadProgress,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
                     color = Color(0xFF2E7D32),
                     trackColor = Color(0xFFC8E6C9)
                 )
-            }
-
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                if (updateInfo.isDownloaded) {
-                    TextButton(onClick = onInstall) {
-                        Text("Install", color = Color(0xFF2E7D32))
-                    }
-                } else if (!updateInfo.isDownloading) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Dismiss", color = Color(0xFF757575))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = onUpdate) {
-                        Text("Update", color = Color(0xFF2E7D32))
-                    }
-                }
             }
         }
     }

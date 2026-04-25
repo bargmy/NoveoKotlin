@@ -32,7 +32,8 @@ internal fun parseUsers(payload: JSONObject): Pair<Map<String, UserSummary>, Set
             isVerified = item.optBoolean("isVerified", false),
             profileSkin = parseProfileSkin(item.optJSONObject("profileSkin")),
             starsBalance = item.optDouble("starsBalance", 0.0),
-            languageCode = item.optString("languageCode").sanitizeServerString().ifBlank { "en" }
+            languageCode = item.optString("languageCode").sanitizeServerString().ifBlank { "en" },
+            lastSeen = item.optLong("lastSeen", item.optLong("last_seen", 0L)).takeIf { it > 0 }
         )
     }
     return users to onlineIds

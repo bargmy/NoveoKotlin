@@ -55,7 +55,8 @@ data class AppUiState(
     val typingUsers: Map<String, Set<String>> = emptyMap(), // chatId -> set of userIds
     val replyingToMessage: ChatMessage? = null,
     val languageCode: String = java.util.Locale.getDefault().language,
-    val updateInfo: UpdateInfo? = null
+    val updateInfo: UpdateInfo? = null,
+    val isCheckingUpdate: Boolean = false
 )
 
 data class UpdateInfo(
@@ -87,9 +88,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         checkForUpdate()
     }
 
-    fun checkForUpdate() {
+    fun checkForUpdate(manual: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
-            val updateJson = api.checkForUpdate() ?: return@launch
+            if (manual) _uiState.value = _uiState.value.copy(isCheckingUpdate = true)
+            val updateJson = api.checkForUpdate()
+            if (manual) delay(500) // Small delay for UX
+
+            if (updateJson == null) {
+                if (manual) {
+                    withContext(Dispatchers.Main) {
+                        _uiState.value = _uiState.value.copy(isCheckingUpdate = false, error = getStrings(_uiState.value.languageCode).noUpdateAvailable)
+                        delay(2000)
+                        _uiState.value = _uiState.value.copy(error = null)
+                    }
+                }
+                return@launch
+            }
+
             val version = updateJson.optString("version")
             val url = updateJson.optString("url")
             val currentVersion = ir.hienob.noveo.BuildConfig.VERSION_NAME
@@ -98,14 +113,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val apkFile = File(getApplication<Application>().getExternalFilesDir(null), "update-$version.apk")
                 withContext(Dispatchers.Main) {
                     _uiState.value = _uiState.value.copy(
+                        isCheckingUpdate = false,
                         updateInfo = UpdateInfo(
                             version = version,
                             url = url,
                             isAvailable = true,
                             isDownloaded = apkFile.exists(),
-                            localPath = if (apkFile.exists()) apkFile.absolutePath else null
+                            localPath = if (apkFile.exists()) apkFile.absolutePath else null,
+                            isDismissed = false // Re-show bubble if manual check
                         )
                     )
+                }
+            } else if (manual) {
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(isCheckingUpdate = false, error = getStrings(_uiState.value.languageCode).noUpdateAvailable)
+                    delay(2000)
+                    _uiState.value = _uiState.value.copy(error = null)
                 }
             }
         }
