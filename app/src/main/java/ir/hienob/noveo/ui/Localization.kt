@@ -2,6 +2,7 @@ package ir.hienob.noveo.ui
 
 data class NoveoStrings(
     val languageCode: String = "en",
+    val comma: String = ",",
     val menu: String = "Menu",
     val settings: String = "Settings",
     val allContacts: String = "All Contacts",
@@ -97,9 +98,10 @@ data class NoveoStrings(
 )
 
 private val translations = mapOf(
-    "en" to NoveoStrings(languageCode = "en"),
+    "en" to NoveoStrings(languageCode = "en", comma = ","),
     "de" to NoveoStrings(
         languageCode = "de",
+        comma = ",",
         menu = "Menü",
         settings = "Einstellungen",
         allContacts = "Alle Kontakte",
@@ -195,6 +197,7 @@ private val translations = mapOf(
     ),
     "ru" to NoveoStrings(
         languageCode = "ru",
+        comma = ",",
         menu = "Меню",
         settings = "Настройки",
         allContacts = "Контакты",
@@ -290,6 +293,7 @@ private val translations = mapOf(
     ),
     "zh" to NoveoStrings(
         languageCode = "zh",
+        comma = "，",
         menu = "菜单",
         settings = "设置",
         allContacts = "联系人",
@@ -385,6 +389,7 @@ private val translations = mapOf(
     ),
     "fa" to NoveoStrings(
         languageCode = "fa",
+        comma = "،",
         menu = "منو",
         settings = "تنظیمات",
         allContacts = "مخاطبین",
@@ -480,6 +485,7 @@ private val translations = mapOf(
     ),
     "es" to NoveoStrings(
         languageCode = "es",
+        comma = ",",
         menu = "Menú",
         settings = "Ajustes",
         allContacts = "Todos los contactos",
@@ -575,6 +581,7 @@ private val translations = mapOf(
     ),
     "fr" to NoveoStrings(
         languageCode = "fr",
+        comma = ",",
         menu = "Menu",
         settings = "Paramètres",
         allContacts = "Tous les contacts",
@@ -670,6 +677,7 @@ private val translations = mapOf(
     ),
     "ar" to NoveoStrings(
         languageCode = "ar",
+        comma = "،",
         menu = "القائمة",
         settings = "الإعدادات",
         allContacts = "كل الجهات",
@@ -765,6 +773,7 @@ private val translations = mapOf(
     ),
     "tr" to NoveoStrings(
         languageCode = "tr",
+        comma = ",",
         menu = "Menü",
         settings = "Ayarlar",
         allContacts = "Tüm Kişiler",
@@ -831,7 +840,7 @@ private val translations = mapOf(
         themePremiumDesc = "Zengin renk paletlerine sahip özel temalar.",
         mutualChatState = "Karşılıklı sohbet durumu",
         chatFound = "Bu profilin zaten özel bir sohbeti var.",
-        chatNotFound = "Özel sohbet bulunamadı.",
+        chatNotFound = "Özel sohbet bulunamadى.",
         messageButton = "Mesaj",
         chatInfo = "Sohbet Bilgisi",
         members = "Üyeler",
@@ -843,7 +852,7 @@ private val translations = mapOf(
         signupTitle = "Noveo'ya Katıl",
         handlePlaceholder = "Kullanıcı adı",
         passwordPlaceholder = "Şifre",
-        loginButton = "Giriş Yap",
+        loginButton = "Giriش Yap",
         signupButton = "Kayıt Ol",
         switchSignup = "Yeni misiniz? Hesap oluşturun",
         switchLogin = "Zaten hesabınız var mı? Giriş yapın",
@@ -872,6 +881,10 @@ fun localizeDigits(input: String, languageCode: String): String {
         charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
     }
     return input.map { char ->
-        if (char in '0'..'9') targetDigits[char - '0'] else char
+        if (char in '0'..'9') targetDigits[char - '0'] 
+        else if (char == ',') {
+            if (languageCode == "fa" || languageCode == "ar") '،' else ','
+        }
+        else char
     }.joinToString("")
 }

@@ -844,7 +844,7 @@ private fun ChatPane(
             val total = selectedChat.memberIds.size
             val totalStr = localizeDigits(total.toString(), strings.languageCode)
             val onlineStr = localizeDigits(onlineCount.toString(), strings.languageCode)
-            if (onlineCount > 0) "$totalStr ${strings.membersCount}, $onlineStr ${strings.membersOnline}" else "$totalStr ${strings.membersCount}"
+            if (onlineCount > 0) "$totalStr ${strings.membersCount}${strings.comma} $onlineStr ${strings.membersOnline}" else "$totalStr ${strings.membersCount}"
         }
     }
 
