@@ -36,7 +36,7 @@ data class NoveoStrings(
     val selectLanguage: String = "Select Language",
     val messagePlaceholder: String = "Message",
     val noMessagesYet: String = "No messages yet",
-    val selectChatHint = "Select a chat to start messaging",
+    val selectChatHint: String = "Select a chat to start messaging",
     val noHandle: String = "No handle",
     val searchPlaceholder: String = "Search...",
     val online: String = "online",
