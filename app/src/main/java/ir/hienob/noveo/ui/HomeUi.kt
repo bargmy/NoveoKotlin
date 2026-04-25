@@ -169,7 +169,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.3.2 Kotlin"
+private const val CLIENT_VERSION = "v0.3.3 Kotlin"
 private val TelegramComposerBlue = Color(0xFF229AF0)
 private val TelegramComposerPanel = Color(0xFFF6F7F8)
 private val TelegramComposerField = Color.White
@@ -239,6 +239,7 @@ internal fun HomeScreen(
     val density = LocalDensity.current
     val menuWidth = 296.dp
     val menuWidthPx = with(density) { menuWidth.toPx() }
+    val backSwipeEdgePx = with(density) { 32.dp.toPx() }
     
     // Core offsets
     val sidebarOffset = remember { androidx.compose.animation.core.Animatable(-menuWidthPx) }
@@ -304,8 +305,12 @@ internal fun HomeScreen(
                 .fillMaxSize()
                 .pointerInput(state.selectedChatId, showMenu, isAnyModalVisible, compact) {
                     if (isAnyModalVisible) return@pointerInput
+                    var allowChatBackDrag = false
                     detectHorizontalDragGestures(
-                        onDragStart = {
+                        onDragStart = { offset ->
+                            allowChatBackDrag = compact &&
+                                state.selectedChatId != null &&
+                                offset.x <= backSwipeEdgePx
                             scope.launch {
                                 sidebarOffset.stop()
                                 chatBackOffset.stop()
@@ -314,6 +319,7 @@ internal fun HomeScreen(
                         onHorizontalDrag = { change, dragAmount ->
                             change.consume()
                             if (compact && state.selectedChatId != null) {
+                                if (!allowChatBackDrag) return@detectHorizontalDragGestures
                                 // Chat back: only positive drag
                                 val target = chatBackOffset.value + dragAmount
                                 if (target >= 0) {
@@ -637,7 +643,7 @@ private fun SidebarPane(
                 strings = strings,
                 showSearch = showSearch,
                 searchQuery = searchQuery,
-                connectionTitle = strings.brandName,
+                connectionTitle = state.connectionTitle,
                 onMenuClick = onMenuClick,
                 onSearchToggle = onSearchToggle,
                 onSearchQueryChange = onSearchQueryChange
@@ -2360,6 +2366,14 @@ private fun String?.normalizeNoveoUrl(): String? {
     val value = this?.trim().orEmpty().replace("\\", "/")
     if (value.isBlank()) return null
     if (value.startsWith("data:")) return value
+    val noCaptchaMatch = Regex(
+        pattern = "^(?:(?:https?|wss?)://)?server_no_captcha(?::\\d+)?(?:(/.*)?)$",
+        option = RegexOption.IGNORE_CASE
+    ).matchEntire(value)
+    if (noCaptchaMatch != null) {
+        val path = noCaptchaMatch.groupValues.getOrNull(1).orEmpty()
+        return if (path.isBlank()) NOVEO_BASE_URL else "$NOVEO_BASE_URL$path"
+    }
     if (value.startsWith("//")) return "https:$value"
     if (value.startsWith("http://") || value.startsWith("https://")) return value
     if (value.startsWith("ws://")) return value.replaceFirst("ws://", "http://")

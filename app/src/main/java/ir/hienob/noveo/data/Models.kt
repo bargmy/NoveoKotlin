@@ -112,6 +112,13 @@ data class HomeData(
     val chats: List<ChatSummary>
 )
 
+data class CachedHomeState(
+    val usersById: Map<String, UserSummary>,
+    val onlineUserIds: Set<String>,
+    val chats: List<ChatSummary>,
+    val messagesByChat: Map<String, List<ChatMessage>>
+)
+
 data class MessageLoadResult(
     val usersById: Map<String, UserSummary>,
     val messages: List<ChatMessage>

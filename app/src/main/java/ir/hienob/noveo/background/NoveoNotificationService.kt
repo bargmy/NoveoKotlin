@@ -25,12 +25,14 @@ import ir.hienob.noveo.data.SessionStore
 import ir.hienob.noveo.data.SocketEvent
 import ir.hienob.noveo.data.UserSummary
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 
 class NoveoNotificationService : LifecycleService() {
@@ -124,22 +126,30 @@ class NoveoNotificationService : LifecycleService() {
     private fun connectSocket(session: Session) {
         socketJob?.cancel()
         socketJob = serviceScope.launch {
-            socket.connect(session) { knownUsers }.collect { event ->
-                _socketEvents.emit(event)
-                if (event is SocketEvent.NewMessage && !isAppInForeground) {
-                    if (event.message.senderId == activeSession?.userId) return@collect
-                    val settings = sessionStore.readNotificationSettings()
-                    if (settings.enabled) {
-                        val shouldNotify = when (event.message.chatType) {
-                            "private" -> settings.dms
-                            "group" -> settings.groups
-                            "channel" -> settings.channels
-                            else -> true
-                        }
-                        if (shouldNotify) {
-                            showNotification(event.message)
+            while (true) {
+                try {
+                    socket.connect(session) { knownUsers }.collect { event ->
+                        _socketEvents.emit(event)
+                        if (event is SocketEvent.NewMessage && !isAppInForeground) {
+                            if (event.message.senderId == activeSession?.userId) return@collect
+                            val settings = sessionStore.readNotificationSettings()
+                            if (settings.enabled) {
+                                val shouldNotify = when (event.message.chatType) {
+                                    "private" -> settings.dms
+                                    "group" -> settings.groups
+                                    "channel" -> settings.channels
+                                    else -> true
+                                }
+                                if (shouldNotify) {
+                                    showNotification(event.message)
+                                }
+                            }
                         }
                     }
+                } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    _socketEvents.emit(SocketEvent.ConnectionState(connected = false))
+                    delay(3000)
                 }
             }
         }

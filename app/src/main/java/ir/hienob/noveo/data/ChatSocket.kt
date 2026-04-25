@@ -11,6 +11,7 @@ import okhttp3.WebSocketListener
 import org.json.JSONObject
 
 sealed class SocketEvent {
+    data class ConnectionState(val connected: Boolean, val detail: String? = null) : SocketEvent()
     data class NewMessage(val message: ChatMessage) : SocketEvent()
     data class MessageSent(val message: ChatMessage) : SocketEvent()
     data class Typing(val chatId: String, val senderId: String) : SocketEvent()
@@ -56,6 +57,7 @@ class ChatSocket(
         val socket: WebSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 activeSocket = webSocket
+                trySend(SocketEvent.ConnectionState(connected = true))
                 val reconnectPayload = JSONObject()
                     .put("type", "reconnect")
                     .put("userId", session.userId)
@@ -134,11 +136,13 @@ class ChatSocket(
                     401, 403 -> "Noveo rejected the realtime connection (HTTP $code)."
                     else -> t.message ?: t.javaClass.simpleName
                 }
+                trySend(SocketEvent.ConnectionState(connected = false, detail = message))
                 channel.close(IllegalStateException(message, t))
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 activeSocket = null
+                trySend(SocketEvent.ConnectionState(connected = false, detail = reason.takeIf { it.isNotBlank() }))
                 channel.close()
             }
         })

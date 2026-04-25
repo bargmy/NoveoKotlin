@@ -277,6 +277,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val session = sessionStore.read()
             val notifySettings = sessionStore.readNotificationSettings()
+            val cachedHomeState = sessionStore.readCachedHomeState()
             if (session == null) {
                 _uiState.value = _uiState.value.copy(
                     startupState = StartupState.Onboarding,
@@ -286,11 +287,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
+            restoreCachedHomeState(cachedHomeState)
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
                 session = session,
-                loading = true,
-                connectionTitle = "Noveo",
+                loading = cachedHomeState?.chats.isNullOrEmpty(),
+                connectionTitle = if (cachedHomeState == null) "Noveo" else "Connecting..",
                 notificationSettings = notifySettings
             )
             NoveoNotificationService.start(getApplication())
@@ -367,6 +369,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 loading = cachedMessages.isEmpty(),
                 replyingToMessage = null
             )
+            persistCachedHomeState()
             refreshHomeSilently()
         }
     }
@@ -399,6 +402,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             replyingToMessage = null
         )
         messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
+        persistCachedHomeState()
 
         val contentObj = org.json.JSONObject().put("text", text)
         if (replyingTo != null) {
@@ -460,6 +464,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
              NoveoNotificationService.updateKnownUsers(_uiState.value.usersById)
         }
         when (event) {
+            is SocketEvent.ConnectionState -> {
+                val currentState = _uiState.value
+                _uiState.value = _uiState.value.copy(
+                    loading = currentState.chats.isEmpty() && event.connected,
+                    connectionTitle = "Connecting..",
+                    connectionDetail = event.detail
+                )
+            }
             is SocketEvent.NewMessage -> handleIncomingMessage(event.message)
             is SocketEvent.MessageSent -> handleIncomingMessage(event.message)
             is SocketEvent.Typing -> handleTyping(event.chatId, event.senderId)
@@ -469,6 +481,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     usersById = _uiState.value.usersById + event.usersById,
                     onlineUserIds = event.onlineIds
                 )
+                persistCachedHomeState()
             }
             is SocketEvent.ChatUpdated -> refreshHomeSilently()
             is SocketEvent.HistoryUpdate -> {
@@ -493,6 +506,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     connectionTitle = "Noveo",
                     languageCode = self?.languageCode ?: _uiState.value.languageCode
                 )
+                persistCachedHomeState()
             }
             is SocketEvent.OlderMessages -> {
                 val currentMessages = messageCacheByChat[event.chatId].orEmpty()
@@ -511,6 +525,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     _uiState.value = _uiState.value.copy(chats = updatedChats)
                 }
+                persistCachedHomeState()
             }
         }
     }
@@ -529,7 +544,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 session = session,
                 wallet = wallet,
                 contacts = contacts,
-                connectionTitle = "Noveo",
+                connectionTitle = if (_uiState.value.chats.isEmpty()) "Connecting.." else _uiState.value.connectionTitle,
             )
             NoveoNotificationService.updateKnownUsers(_uiState.value.usersById)
             
@@ -603,6 +618,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             messages = if (isSelectedChat) cachedMessages else latestState.messages,
             chats = currentChats
         )
+        persistCachedHomeState()
 
         if (isSelectedChat && msg.senderId != session.userId) {
             markAsSeen(msg.id)
@@ -636,6 +652,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } else it
         }
         _uiState.value = _uiState.value.copy(messages = messages)
+        persistCachedHomeState()
     }
     
     fun searchPublicDirectory(query: String) {
@@ -693,6 +710,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             delay(500)
             refreshHomeSilently()
         }
+    }
+
+    private fun restoreCachedHomeState(cachedHomeState: CachedHomeState?) {
+        messageCacheByChat.clear()
+        if (cachedHomeState == null) return
+        messageCacheByChat.putAll(cachedHomeState.messagesByChat.mapValues { (_, messages) ->
+            messages.sortedBy { it.timestamp }
+        })
+        _uiState.value = _uiState.value.copy(
+            usersById = cachedHomeState.usersById,
+            onlineUserIds = cachedHomeState.onlineUserIds,
+            chats = cachedHomeState.chats
+        )
+    }
+
+    private fun persistCachedHomeState() {
+        val currentState = _uiState.value
+        if (currentState.session == null) return
+        sessionStore.writeCachedHomeState(
+            CachedHomeState(
+                usersById = currentState.usersById,
+                onlineUserIds = currentState.onlineUserIds,
+                chats = currentState.chats,
+                messagesByChat = messageCacheByChat.mapValues { (_, messages) ->
+                    messages.sortedBy { it.timestamp }
+                }
+            )
+        )
     }
 }
 
