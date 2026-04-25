@@ -176,6 +176,7 @@ private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map
             .ifBlank { chatId },
         senderId = senderId,
         senderName = resolveSenderName(senderId, message, usersById),
+        chatType = message.optString("chatType", "private").sanitizeServerString(),
         content = parseMessageContent(message.opt("content")),
         timestamp = timestamp,
         seenBy = seenBy,

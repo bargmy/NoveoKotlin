@@ -26,6 +26,24 @@ class SessionStore(context: Context) {
             .apply()
     }
 
+    fun readNotificationSettings(): ir.hienob.noveo.app.NotificationSettings {
+        return ir.hienob.noveo.app.NotificationSettings(
+            enabled = prefs.getBoolean("notify_enabled", true),
+            groups = prefs.getBoolean("notify_groups", true),
+            channels = prefs.getBoolean("notify_channels", true),
+            dms = prefs.getBoolean("notify_dms", true)
+        )
+    }
+
+    fun writeNotificationSettings(settings: ir.hienob.noveo.app.NotificationSettings) {
+        prefs.edit()
+            .putBoolean("notify_enabled", settings.enabled)
+            .putBoolean("notify_groups", settings.groups)
+            .putBoolean("notify_channels", settings.channels)
+            .putBoolean("notify_dms", settings.dms)
+            .apply()
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
     }

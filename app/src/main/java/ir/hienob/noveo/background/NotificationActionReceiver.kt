@@ -1,0 +1,52 @@
+package ir.hienob.noveo.background
+
+import android.app.NotificationManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import androidx.core.app.RemoteInput
+import ir.hienob.noveo.data.NoveoApi
+import ir.hienob.noveo.data.SessionStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+
+class NotificationActionReceiver : BroadcastReceiver() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val api = NoveoApi()
+
+    override fun onReceive(context: Context, intent: Intent) {
+        val chatId = intent.getStringExtra("chatId") ?: return
+        val messageId = intent.getStringExtra("messageId")
+        val sessionStore = SessionStore(context)
+
+        when (intent.action) {
+            "ir.hienob.noveo.ACTION_REPLY" -> {
+                val remoteInput = RemoteInput.getResultsFromIntent(intent)
+                val replyText = remoteInput?.getCharSequence("key_text_reply")?.toString()
+                if (!replyText.isNullOrBlank()) {
+                    scope.launch {
+                        val session = sessionStore.read() ?: return@launch
+                        api.sendMessage(session, chatId, replyText)
+                        // Clear notification
+                        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        nm.cancel(chatId.hashCode())
+                    }
+                }
+            }
+            "ir.hienob.noveo.ACTION_SEEN" -> {
+                if (messageId != null) {
+                    scope.launch {
+                        val session = sessionStore.read() ?: return@launch
+                        api.markAsSeen(session, chatId, messageId)
+                        // Clear notification
+                        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        nm.cancel(chatId.hashCode())
+                    }
+                }
+            }
+        }
+    }
+}

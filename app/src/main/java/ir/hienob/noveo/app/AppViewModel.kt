@@ -4,6 +4,9 @@ package ir.hienob.noveo.app
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
+import android.os.PowerManager
+import ir.hienob.noveo.background.NoveoNotificationService
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSocket
 import ir.hienob.noveo.data.ChatSummary
@@ -59,7 +62,16 @@ data class AppUiState(
     val replyingToMessage: ChatMessage? = null,
     val languageCode: String = java.util.Locale.getDefault().language,
     val updateInfo: UpdateInfo? = null,
-    val isCheckingUpdate: Boolean = false
+    val isCheckingUpdate: Boolean = false,
+    val notificationSettings: NotificationSettings = NotificationSettings(),
+    val isBatteryOptimized: Boolean = true
+)
+
+data class NotificationSettings(
+    val enabled: Boolean = true,
+    val groups: Boolean = true,
+    val channels: Boolean = true,
+    val dms: Boolean = true
 )
 
 data class UpdateInfo(
@@ -76,19 +88,44 @@ data class UpdateInfo(
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val sessionStore = SessionStore(application)
     private val api = NoveoApi()
-    private val socket = ChatSocket()
     private val messageCacheByChat = mutableMapOf<String, List<ChatMessage>>()
 
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
-    private var socketJob: Job? = null
     private var socketResyncJob: Job? = null
     private var selectedChatRefreshJob: Job? = null
 
     init {
         restoreSession()
         checkForUpdate()
+        checkBatteryOptimization()
+        
+        viewModelScope.launch {
+            NoveoNotificationService.socketEvents.collect { event ->
+                handleSocketEvent(event)
+            }
+        }
+    }
+
+    private fun checkBatteryOptimization() {
+        val pm = getApplication<Application>().getSystemService(Context.POWER_SERVICE) as PowerManager
+        _uiState.value = _uiState.value.copy(
+            isBatteryOptimized = !pm.isIgnoringBatteryOptimizations(getApplication<Application>().packageName)
+        )
+    }
+
+    fun requestDisableBatteryOptimization() {
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:${getApplication<Application>().packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        getApplication<Application>().startActivity(intent)
+    }
+
+    fun updateNotificationSettings(settings: NotificationSettings) {
+        _uiState.value = _uiState.value.copy(notificationSettings = settings)
+        sessionStore.writeNotificationSettings(settings)
     }
 
     fun checkForUpdate(manual: Boolean = false) {
@@ -238,10 +275,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun restoreSession() {
         viewModelScope.launch {
             val session = sessionStore.read()
+            val notifySettings = sessionStore.readNotificationSettings()
             if (session == null) {
                 _uiState.value = _uiState.value.copy(
                     startupState = StartupState.Onboarding,
                     loading = false,
+                    notificationSettings = notifySettings
                 )
                 return@launch
             }
@@ -251,7 +290,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 session = session,
                 loading = true,
                 connectionTitle = "Noveo",
+                notificationSettings = notifySettings
             )
+            NoveoNotificationService.start(getApplication())
             loadHome(session)
         }
     }
@@ -272,6 +313,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (_uiState.value.authModeSignup) api.signup(handle, password) else api.login(handle, password)
                 }
                 sessionStore.write(session)
+                NoveoNotificationService.start(getApplication())
                 loadHome(session)
             }.onFailure {
                 _uiState.value = _uiState.value.copy(startupState = StartupState.Auth, loading = false, error = it.message ?: "Authentication failed")
@@ -280,7 +322,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
-        socketJob?.cancel()
+        getApplication<Application>().stopService(Intent(getApplication(), NoveoNotificationService::class.java))
         socketResyncJob?.cancel()
         selectedChatRefreshJob?.cancel()
         messageCacheByChat.clear()
@@ -366,7 +408,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("clientTempId", tempId)
             .put("replyToId", replyingTo?.id)
         
-        val sent = socket.send(payload)
+        val sent = NoveoNotificationService.send(payload)
     }
 
     fun sendTyping() {
@@ -375,7 +417,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val payload = org.json.JSONObject()
             .put("type", "typing")
             .put("chatId", chatId)
-        socket.send(payload)
+        NoveoNotificationService.send(payload)
     }
 
     fun markAsSeen(messageId: String) {
@@ -385,7 +427,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("type", "message_seen")
             .put("chatId", chatId)
             .put("messageId", messageId)
-        socket.send(payload)
+        NoveoNotificationService.send(payload)
     }
 
     fun loadOlderMessages() {
@@ -399,18 +441,75 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("beforeTimestamp", oldestMsg.timestamp)
             .put("beforeMessageId", oldestMsg.id)
         
-        socket.send(payload)
+        NoveoNotificationService.send(payload)
     }
 
     fun refreshHomeSilently() {
         val session = _uiState.value.session ?: return
         val payload = org.json.JSONObject().put("type", "resync_state")
-        socket.send(payload)
+        NoveoNotificationService.send(payload)
+    }
+
+    private fun handleSocketEvent(event: SocketEvent) {
+        val session = _uiState.value.session ?: return
+        when (event) {
+            is SocketEvent.NewMessage -> handleIncomingMessage(event.message)
+            is SocketEvent.MessageSent -> handleIncomingMessage(event.message)
+            is SocketEvent.Typing -> handleTyping(event.chatId, event.senderId)
+            is SocketEvent.MessageSeenUpdate -> handleSeenUpdate(event.chatId, event.messageId, event.userId)
+            is SocketEvent.UserListUpdate -> {
+                _uiState.value = _uiState.value.copy(
+                    usersById = _uiState.value.usersById + event.usersById,
+                    onlineUserIds = event.onlineIds
+                )
+            }
+            is SocketEvent.ChatUpdated -> refreshHomeSilently()
+            is SocketEvent.HistoryUpdate -> {
+                event.messagesByChat.forEach { (chatId, incomingMessages) ->
+                    messageCacheByChat[chatId] = mergeMessages(
+                        messageCacheByChat[chatId].orEmpty(),
+                        incomingMessages
+                    )
+                }
+                val selectedChatMessages = _uiState.value.selectedChatId
+                    ?.let { messageCacheByChat[it].orEmpty() }
+                    ?: _uiState.value.messages
+
+                val self = event.users[session.userId]
+                
+                _uiState.value = _uiState.value.copy(
+                    chats = event.chats,
+                    usersById = _uiState.value.usersById + event.users,
+                    messages = selectedChatMessages,
+                    loading = false,
+                    connectionDetail = null,
+                    connectionTitle = "Noveo",
+                    languageCode = self?.languageCode ?: _uiState.value.languageCode
+                )
+            }
+            is SocketEvent.OlderMessages -> {
+                val currentMessages = messageCacheByChat[event.chatId].orEmpty()
+                val updatedMessages = mergeMessages(currentMessages, event.messages)
+                messageCacheByChat[event.chatId] = updatedMessages
+                
+                val updatedChats = _uiState.value.chats.map {
+                    if (it.id == event.chatId) it.copy(hasMoreHistory = event.hasMoreHistory) else it
+                }
+
+                if (event.chatId == _uiState.value.selectedChatId) {
+                    _uiState.value = _uiState.value.copy(
+                        messages = updatedMessages,
+                        chats = updatedChats
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(chats = updatedChats)
+                }
+            }
+        }
     }
 
     private suspend fun loadHome(session: Session) {
-        // STRICTLY observe socket, no API load for chats
-        observeSocket(session)
+        startSocketResyncLoop()
         
         // Only load non-socket features via HTTP
         runCatching {
@@ -426,86 +525,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 connectionTitle = "Noveo",
             )
         }
-    }
-
-    private fun observeSocket(session: Session) {
-        if (socketJob?.isActive == true) return
-        startSocketResyncLoop()
-        socketJob = viewModelScope.launch {
-            while (true) {
-                runCatching {
-                    socket.connect(
-                        session = session,
-                        getKnownUsers = { _uiState.value.usersById }
-                    ).collect { event ->
-                        when (event) {
-                            is SocketEvent.NewMessage -> handleIncomingMessage(event.message)
-                            is SocketEvent.MessageSent -> handleIncomingMessage(event.message)
-                            is SocketEvent.Typing -> handleTyping(event.chatId, event.senderId)
-                            is SocketEvent.MessageSeenUpdate -> handleSeenUpdate(event.chatId, event.messageId, event.userId)
-                            is SocketEvent.UserListUpdate -> {
-                                _uiState.value = _uiState.value.copy(
-                                    usersById = _uiState.value.usersById + event.usersById,
-                                    onlineUserIds = event.onlineIds
-                                )
-                            }
-                            is SocketEvent.ChatUpdated -> refreshHomeSilently()
-                            is SocketEvent.HistoryUpdate -> {
-                                event.messagesByChat.forEach { (chatId, incomingMessages) ->
-                                    messageCacheByChat[chatId] = mergeMessages(
-                                        messageCacheByChat[chatId].orEmpty(),
-                                        incomingMessages
-                                    )
-                                }
-                                val selectedChatMessages = _uiState.value.selectedChatId
-                                    ?.let { messageCacheByChat[it].orEmpty() }
-                                    ?: _uiState.value.messages
-
-                                val self = event.users[session.userId]
-                                
-                                _uiState.value = _uiState.value.copy(
-                                    chats = event.chats,
-                                    usersById = _uiState.value.usersById + event.users,
-                                    messages = selectedChatMessages,
-                                    loading = false,
-                                    connectionDetail = null,
-                                    connectionTitle = "Noveo",
-                                    languageCode = self?.languageCode ?: _uiState.value.languageCode
-                                )
-                            }
-                            is SocketEvent.OlderMessages -> {
-                                val currentMessages = messageCacheByChat[event.chatId].orEmpty()
-                                val updatedMessages = mergeMessages(currentMessages, event.messages)
-                                messageCacheByChat[event.chatId] = updatedMessages
-                                
-                                val updatedChats = _uiState.value.chats.map {
-                                    if (it.id == event.chatId) it.copy(hasMoreHistory = event.hasMoreHistory) else it
-                                }
-
-                                if (event.chatId == _uiState.value.selectedChatId) {
-                                    _uiState.value = _uiState.value.copy(
-                                        messages = updatedMessages,
-                                        chats = updatedChats
-                                    )
-                                } else {
-                                    _uiState.value = _uiState.value.copy(chats = updatedChats)
-                                }
-                            }
-                        }
-                    }
-                }.onFailure {
-                    _uiState.value = _uiState.value.copy(
-                        connectionTitle = "Noveo",
-                        connectionDetail = null
-                    )
-                    delay(1500)
-                }
-            }
-        }
-    }
-
-    private fun ensureSocketObserved(session: Session) {
-        observeSocket(session)
     }
 
     private fun startSelectedChatRefresh(session: Session, chatId: String) {
@@ -627,7 +646,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("type", "update_profile")
             .put("username", username)
             .put("bio", bio)
-        socket.send(payload)
+        NoveoNotificationService.send(payload)
         // Optimistic update or wait for sync? The server should broadcast a user update.
         // For now, refresh home silently after a short delay
         viewModelScope.launch {
@@ -641,21 +660,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("type", "change_password")
             .put("oldPassword", old)
             .put("newPassword", new)
-        socket.send(payload)
+        NoveoNotificationService.send(payload)
     }
 
     fun deleteAccount(password: String) {
         val payload = org.json.JSONObject()
             .put("type", "delete_account")
             .put("password", password)
-        socket.send(payload)
+        NoveoNotificationService.send(payload)
     }
 
     fun setLanguage(code: String) {
         val payload = org.json.JSONObject()
             .put("type", "update_profile")
             .put("languageCode", code)
-        socket.send(payload)
+        NoveoNotificationService.send(payload)
         _uiState.value = _uiState.value.copy(languageCode = code)
         viewModelScope.launch {
             delay(500)

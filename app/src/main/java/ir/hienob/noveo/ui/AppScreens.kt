@@ -260,7 +260,9 @@ fun NoveoRoot(
     onDismissUpdate: () -> Unit,
     onDownloadUpdate: () -> Unit,
     onInstallUpdate: () -> Unit,
-    onCheckUpdate: () -> Unit
+    onCheckUpdate: () -> Unit,
+    onUpdateNotificationSettings: (NotificationSettings) -> Unit,
+    onRequestBatteryOptimization: () -> Unit
 ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current
@@ -321,7 +323,10 @@ fun NoveoRoot(
                         onDownloadUpdate = onDownloadUpdate,
                         onInstallUpdate = onInstallUpdate,
                         onCheckUpdate = onCheckUpdate,
+                        onUpdateNotificationSettings = onUpdateNotificationSettings,
+                        onRequestBatteryOptimization = onRequestBatteryOptimization,
                         currentTheme = currentTheme,
+
                         onThemeChange = { currentTheme = it }
                     )
                 }

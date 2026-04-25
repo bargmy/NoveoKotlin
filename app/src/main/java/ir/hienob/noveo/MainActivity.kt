@@ -37,7 +37,9 @@ class MainActivity : ComponentActivity() {
                 onDismissUpdate = viewModel::dismissUpdate,
                 onDownloadUpdate = viewModel::downloadUpdate,
                 onInstallUpdate = viewModel::installUpdate,
-                onCheckUpdate = { viewModel.checkForUpdate(manual = true) }
+                onCheckUpdate = { viewModel.checkForUpdate(manual = true) },
+                onUpdateNotificationSettings = { viewModel.updateNotificationSettings(it) },
+                onRequestBatteryOptimization = { viewModel.requestDisableBatteryOptimization() }
             )
         }
     }

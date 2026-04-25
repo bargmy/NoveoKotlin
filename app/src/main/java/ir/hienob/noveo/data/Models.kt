@@ -96,6 +96,7 @@ data class ChatMessage(
     val chatId: String,
     val senderId: String,
     val senderName: String = "User",
+    val chatType: String = "private",
     val content: MessageContent,
     val timestamp: Long = 0L,
     val seenBy: List<String> = emptyList(),

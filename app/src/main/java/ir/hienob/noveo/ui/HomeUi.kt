@@ -173,7 +173,7 @@ private val TelegramComposerText = Color(0xFF000000)
 private val TelegramComposerCursor = Color(0xFF459DE1)
 
 private enum class SettingsSection {
-    MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG, THEME
+    MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG, THEME, NOTIFICATIONS
 }
 
 private data class ThemeSection(
@@ -202,6 +202,8 @@ internal fun HomeScreen(
     onDownloadUpdate: () -> Unit,
     onInstallUpdate: () -> Unit,
     onCheckUpdate: () -> Unit,
+    onUpdateNotificationSettings: (NotificationSettings) -> Unit,
+    onRequestBatteryOptimization: () -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit
 ) {
@@ -554,7 +556,9 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 onChangePassword = onChangePassword,
                 onDeleteAccount = onDeleteAccount,
                 onSetLanguage = onSetLanguage,
-                onCheckUpdate = onCheckUpdate
+                onCheckUpdate = onCheckUpdate,
+                onUpdateNotificationSettings = onUpdateNotificationSettings,
+                onRequestBatteryOptimization = onRequestBatteryOptimization
             )
         }
 
@@ -1550,7 +1554,9 @@ private fun SettingsModal(
     onChangePassword: (String, String) -> Unit,
     onDeleteAccount: (String) -> Unit,
     onSetLanguage: (String) -> Unit,
-    onCheckUpdate: () -> Unit
+    onCheckUpdate: () -> Unit,
+    onUpdateNotificationSettings: (NotificationSettings) -> Unit,
+    onRequestBatteryOptimization: () -> Unit
 ) {
     val me = state.session?.userId?.let { state.usersById[it] }
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
@@ -1564,11 +1570,13 @@ private fun SettingsModal(
                     SettingsSection.PREFERENCES -> strings.preferences
                     SettingsSection.CHANGELOG -> strings.changelog
                     SettingsSection.THEME -> strings.themes
+                    SettingsSection.NOTIFICATIONS -> strings.notificationSettings
                 },
                 onClose = onClose,
                 onBack = when (section) {
                     SettingsSection.MENU -> null
                     SettingsSection.THEME -> ({ onSectionChange(SettingsSection.PREFERENCES) })
+                    SettingsSection.NOTIFICATIONS -> ({ onSectionChange(SettingsSection.PREFERENCES) })
                     else -> ({ onSectionChange(SettingsSection.MENU) })
                 }
             )
@@ -1578,9 +1586,10 @@ private fun SettingsModal(
                     SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings)
                     SettingsSection.PROFILE -> SettingsProfileSection(strings, me, onUpdateProfile)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(strings, onSectionChange, onSetLanguage, onCheckUpdate, currentTheme, onThemeChange)
+                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, currentTheme, onThemeChange, onRequestBatteryOptimization)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection(strings)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
+                    SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings)
                 }
             } // Build fix pass 2
         }
@@ -1726,7 +1735,16 @@ private fun SettingsAccountSection(strings: NoveoStrings, state: AppUiState, onL
 }
 
 @Composable
-private fun SettingsPreferencesSection(strings: NoveoStrings, onSectionChange: (SettingsSection) -> Unit, onSetLanguage: (String) -> Unit, onCheckUpdate: () -> Unit, currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
+private fun SettingsPreferencesSection(
+    state: AppUiState,
+    strings: NoveoStrings,
+    onSectionChange: (SettingsSection) -> Unit,
+    onSetLanguage: (String) -> Unit,
+    onCheckUpdate: () -> Unit,
+    currentTheme: ThemePreset,
+    onThemeChange: (ThemePreset) -> Unit,
+    onRequestBatteryOptimization: () -> Unit
+) {
     val scrollState = rememberScrollState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     val languages = listOf(
@@ -1747,12 +1765,38 @@ private fun SettingsPreferencesSection(strings: NoveoStrings, onSectionChange: (
     ) {
         SettingsRow(strings.themes, Icons.Outlined.Palette) { onSectionChange(SettingsSection.THEME) }
         SettingsRow(strings.language, Icons.Outlined.Language) { showLanguageDialog = true }
-        SettingsRow(strings.checkForUpdates, Icons.Outlined.History) { onCheckUpdate() }
-        
+        SettingsRow(strings.notificationSettings, Icons.Outlined.Notifications) { onSectionChange(SettingsSection.NOTIFICATIONS) }
+
+        val updateText = when {
+            state.isCheckingUpdate -> strings.checkingForUpdates
+            state.updateInfo != null && state.updateInfo.isAvailable && !state.updateInfo.isDismissed -> strings.updateAvailable.format(state.updateInfo.version)
+            state.updateInfo != null && !state.updateInfo.isAvailable -> strings.youAreUpdated
+            else -> strings.checkForUpdates
+        }
+        SettingsRow(updateText, Icons.Outlined.History) { onCheckUpdate() }
+
+        if (state.isBatteryOptimized) {
+            Spacer(Modifier.height(8.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(strings.batteryOptimization, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(strings.batteryOptimizationBody, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = onRequestBatteryOptimization) {
+                        Text(strings.requestPermission)
+                    }
+                }
+            }
+        }
+
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
         DetailCard(title = strings.privacy, body = strings.privacyBody)
-        DetailCard(title = strings.emojiStyle, body = strings.emojiBody)
     }
 
     if (showLanguageDialog) {
@@ -1763,9 +1807,9 @@ private fun SettingsPreferencesSection(strings: NoveoStrings, onSectionChange: (
                 LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
                     items(languages) { (name, code) ->
                         Card(
-                            modifier = Modifier.fillMaxWidth().clickable { 
+                            modifier = Modifier.fillMaxWidth().clickable {
                                 onSetLanguage(code)
-                                showLanguageDialog = false 
+                                showLanguageDialog = false
                             },
                             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
                         ) {
@@ -1774,11 +1818,45 @@ private fun SettingsPreferencesSection(strings: NoveoStrings, onSectionChange: (
                     }
                 }
             },
-            confirmButton = { Button(onClick = { showLanguageDialog = false }) { Text("Cancel") } }
+            confirmButton = { TextButton(onClick = { showLanguageDialog = false }) { Text(strings.cancel) } }
         )
     }
 }
 
+@Composable
+private fun SettingsNotificationSection(
+    state: AppUiState,
+    strings: NoveoStrings,
+    onUpdateNotificationSettings: (NotificationSettings) -> Unit
+) {
+    val settings = state.notificationSettings
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        NotificationToggle(strings.enableNotifications, settings.enabled) {
+            onUpdateNotificationSettings(settings.copy(enabled = it))
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        NotificationToggle(strings.notifyDms, settings.dms) {
+            onUpdateNotificationSettings(settings.copy(dms = it))
+        }
+        NotificationToggle(strings.notifyGroups, settings.groups) {
+            onUpdateNotificationSettings(settings.copy(groups = it))
+        }
+        NotificationToggle(strings.notifyChannels, settings.channels) {
+            onUpdateNotificationSettings(settings.copy(channels = it))
+        }
+    }
+}
+
+@Composable
+private fun NotificationToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable { onCheckedChange(!checked) }.padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        androidx.compose.material3.Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
 @Composable
 private fun SettingsThemeSection(strings: NoveoStrings, currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
     val scrollState = rememberScrollState()
