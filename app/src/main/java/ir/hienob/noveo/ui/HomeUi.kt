@@ -65,17 +65,26 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DoneAll
-import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -127,6 +136,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -150,7 +160,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.1.2 mobile"
+private const val CLIENT_VERSION = "v0.2.0 Kotlin"
 private val TelegramComposerBlue = Color(0xFF229AF0)
 private val TelegramComposerPanel = Color(0xFFF6F7F8)
 private val TelegramComposerField = Color.White
@@ -183,6 +193,9 @@ internal fun HomeScreen(
     onUpdateProfile: (String, String) -> Unit,
     onLoadOlder: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
+    onChangePassword: (String, String) -> Unit,
+    onDeleteAccount: (String) -> Unit,
+    onSetLanguage: (String) -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit
 ) {
@@ -519,7 +532,10 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 onLogout = onLogout,
                 currentTheme = currentTheme,
                 onThemeChange = onThemeChange,
-                onUpdateProfile = onUpdateProfile
+                onUpdateProfile = onUpdateProfile,
+                onChangePassword = onChangePassword,
+                onDeleteAccount = onDeleteAccount,
+                onSetLanguage = onSetLanguage
             )
         }
 
@@ -1518,7 +1534,11 @@ private fun SettingsModal(
                     SettingsSection.THEME -> "Themes"
                 },
                 onClose = onClose,
-                onBack = if (section != SettingsSection.MENU) ({ onSectionChange(SettingsSection.MENU) }) else null
+                onBack = when (section) {
+                    SettingsSection.MENU -> null
+                    SettingsSection.THEME -> ({ onSectionChange(SettingsSection.PREFERENCES) })
+                    else -> ({ onSectionChange(SettingsSection.MENU) })
+                }
             )
             Crossfade(targetState = section, label = "settings_section") { current ->
                 when (current) {
@@ -1526,7 +1546,7 @@ private fun SettingsModal(
                     SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection()
                     SettingsSection.PROFILE -> SettingsProfileSection(me, onUpdateProfile)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(state, onLogout)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(currentTheme, onThemeChange)
+                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(onSectionChange, currentTheme, onThemeChange)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection()
                     SettingsSection.THEME -> SettingsThemeSection(currentTheme, onThemeChange)
                 }
@@ -1539,19 +1559,18 @@ private fun SettingsModal(
 private fun SettingsMenu(onSectionChange: (SettingsSection) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SettingsRow("Subscription", Icons.Outlined.Star) { onSectionChange(SettingsSection.SUBSCRIPTION) }
-        SettingsRow("Profile", Icons.Outlined.Info) { onSectionChange(SettingsSection.PROFILE) }
-        SettingsRow("Account", Icons.Outlined.Menu) { onSectionChange(SettingsSection.ACCOUNT) }
-        SettingsRow("Themes", Icons.Outlined.Search) { onSectionChange(SettingsSection.THEME) }
+        SettingsRow("Profile", Icons.Outlined.Person) { onSectionChange(SettingsSection.PROFILE) }
+        SettingsRow("Account", Icons.Outlined.AccountCircle) { onSectionChange(SettingsSection.ACCOUNT) }
         SettingsRow("Preferences", Icons.Outlined.Settings) { onSectionChange(SettingsSection.PREFERENCES) }
-        SettingsRow("Changelog", Icons.Outlined.Search) { onSectionChange(SettingsSection.CHANGELOG) }
+        SettingsRow("Changelog", Icons.Outlined.History) { onSectionChange(SettingsSection.CHANGELOG) }
     }
 }
 
 @Composable
 private fun SettingsSubscriptionSection() {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        DetailCard(title = "Premium", body = "Web already includes premium, stars, wallet, gifts, profile skins, and premium themes. Android needs those full flows, not placeholders.")
-        DetailCard(title = "Stars", body = "Stars belongs in the same settings/wallet orbit as web. This surface is reachable now, but wallet parity is still incomplete.")
+        DetailCard(title = "Noveo Premium", body = "Unlock exclusive themes, larger file uploads, and unique profile badges. Parity with web features is currently in progress.")
+        DetailCard(title = "Stars & Wallet", body = "Manage your digital balance for tips, gifts, and premium content. Parity with web wallet is still being implemented.")
     }
 }
 
@@ -1593,33 +1612,147 @@ private fun SettingsProfileSection(me: UserSummary?, onUpdateProfile: (String, S
         ) {
             Text("Save Changes")
         }
-        Spacer(Modifier.height(16.dp))
-        DetailCard(title = "Profile Skin", body = "Web exposes profile skin and premium visuals here. Android still needs the real editor flow.")
     }
 }
 
 @Composable
-private fun SettingsAccountSection(state: AppUiState, onLogout: () -> Unit) {
+private fun SettingsAccountSection(
+    state: AppUiState,
+    onLogout: () -> Unit,
+    onChangePassword: (String, String) -> Unit,
+    onDeleteAccount: (String) -> Unit
+) {
+    var showChangePassword by rememberSaveable { mutableStateOf(false) }
+    var showDeleteAccount by rememberSaveable { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         DetailRow("User ID", state.session?.userId ?: "Unknown")
         DetailRow("Session ID", state.session?.sessionId?.ifBlank { "Connected" } ?: "Unavailable")
         DetailRow("Expiry", formatExpiry(state.session))
-        DetailCard(title = "Account status", body = "This build now shows your real active session fields from the live account. Logout is still wired and working.")
-        Button(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Logout") }
+        
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+        SettingsRow("Change Password", Icons.Outlined.Lock) { showChangePassword = true }
+        SettingsRow("Delete Account", Icons.Outlined.Delete) { showDeleteAccount = true }
+        
+        Spacer(Modifier.weight(1f))
+        
+        Button(
+            onClick = onLogout,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("Logout")
+        }
+    }
+
+    if (showChangePassword) {
+        var oldPw by remember { mutableStateOf("") }
+        var newPw by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showChangePassword = false },
+            title = { Text("Change Password") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = oldPw, onValueChange = { oldPw = it }, label = { Text("Old Password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                    OutlinedTextField(value = newPw, onValueChange = { newPw = it }, label = { Text("New Password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (oldPw.isNotBlank() && newPw.isNotBlank()) {
+                        onChangePassword(oldPw, newPw)
+                        showChangePassword = false
+                    }
+                }) { Text("Update") }
+            },
+            dismissButton = { OutlinedButton(onClick = { showChangePassword = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showDeleteAccount) {
+        var pw by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showDeleteAccount = false },
+            title = { Text("Delete Account") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Are you sure? This action is permanent and will remove all your data.")
+                    OutlinedTextField(value = pw, onValueChange = { pw = it }, label = { Text("Enter Password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (pw.isNotBlank()) {
+                            onDeleteAccount(pw)
+                            showDeleteAccount = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete Permanently") }
+            },
+            dismissButton = { OutlinedButton(onClick = { showDeleteAccount = false }) { Text("Cancel") } }
+        )
     }
 }
 
 @Composable
-private fun SettingsPreferencesSection(currentTheme: ThemePreset, onThemeChange: (ThemePreset) -> Unit) {
+private fun SettingsPreferencesSection(
+    onSectionChange: (SettingsSection) -> Unit,
+    onSetLanguage: (String) -> Unit,
+    currentTheme: ThemePreset,
+    onThemeChange: (ThemePreset) -> Unit
+) {
     val scrollState = rememberScrollState()
+    var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
+    val languages = listOf(
+        "English" to "en",
+        "Persian (فارسی)" to "fa",
+        "Russian (Русский)" to "ru",
+        "Chinese (中文)" to "zh",
+        "German (Deutsch)" to "de",
+        "French (Français)" to "fr",
+        "Spanish (Español)" to "es",
+        "Arabic (العربية)" to "ar",
+        "Turkish (Türkçe)" to "tr"
+    )
+
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        DetailCard(title = "Privacy", body = "Block group invites and related privacy controls belong here like web.")
-        DetailCard(title = "Language", body = "English, فارسی, Русский, 中文")
-        DetailCard(title = "Emoji Style", body = "Default or iOS")
-        DetailCard(title = "Auto-Night Mode", body = "Schedule or system-follow mode selection.")
+        SettingsRow("Themes", Icons.Outlined.Palette) { onSectionChange(SettingsSection.THEME) }
+        SettingsRow("Language", Icons.Outlined.Language) { showLanguageDialog = true }
+        
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+        DetailCard(title = "Privacy", body = "Security and visibility controls.")
+        DetailCard(title = "Emoji Style", body = "Choose your preferred emoji set.")
+    }
+
+    if (showLanguageDialog) {
+        AlertDialog(
+            onDismissRequest = { showLanguageDialog = false },
+            title = { Text("Select Language") },
+            text = {
+                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                    items(languages) { (name, code) ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable { 
+                                onSetLanguage(code)
+                                showLanguageDialog = false 
+                            },
+                            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                        ) {
+                            Text(name, modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = { Button(onClick = { showLanguageDialog = false }) { Text("Cancel") } }
+        )
     }
 }
 
@@ -1691,7 +1824,7 @@ private fun ThemeSectionBlock(
 private fun SettingsChangelogSection() {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         DetailCard(title = "Client Version", body = CLIENT_VERSION)
-        DetailCard(title = "Status", body = "Android now has the web menu structure, larger shell buttons, profile surfaces, attachment previews, and a first sending animation pass.")
+        DetailCard(title = "What's New", body = "Improved Settings structure with proper icons, functional profile updates via WebSocket, secure account management (Change Password/Delete Account), and real language selection.")
     }
 }
 

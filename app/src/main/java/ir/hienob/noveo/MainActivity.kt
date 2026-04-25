@@ -30,7 +30,10 @@ class MainActivity : ComponentActivity() {
                 onLogout = viewModel::logout,
                 onUpdateProfile = { u, b -> viewModel.updateProfile(u, b) },
                 onLoadOlder = viewModel::loadOlderMessages,
-                onReply = viewModel::setReplyingTo
+                onReply = viewModel::setReplyingTo,
+                onChangePassword = { o, n -> viewModel.changePassword(o, n) },
+                onDeleteAccount = { p -> viewModel.deleteAccount(p) },
+                onSetLanguage = { c -> viewModel.setLanguage(c) }
             )
         }
     }

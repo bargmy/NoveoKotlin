@@ -451,12 +451,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateProfile(username: String, bio: String) {
-        val session = _uiState.value.session ?: return
+        val payload = org.json.JSONObject()
+            .put("type", "update_profile")
+            .put("username", username)
+            .put("bio", bio)
+        socket.send(payload)
+        // Optimistic update or wait for sync? The server should broadcast a user update.
+        // For now, refresh home silently after a short delay
         viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { api.updateProfile(session, username, bio) }
-                loadHome(session)
-            }
+            delay(500)
+            refreshHomeSilently()
+        }
+    }
+
+    fun changePassword(old: String, new: String) {
+        val payload = org.json.JSONObject()
+            .put("type", "change_password")
+            .put("oldPassword", old)
+            .put("newPassword", new)
+        socket.send(payload)
+    }
+
+    fun deleteAccount(password: String) {
+        val payload = org.json.JSONObject()
+            .put("type", "delete_account")
+            .put("password", password)
+        socket.send(payload)
+    }
+
+    fun setLanguage(code: String) {
+        val payload = org.json.JSONObject()
+            .put("type", "update_profile")
+            .put("languageCode", code)
+        socket.send(payload)
+        viewModelScope.launch {
+            delay(500)
+            refreshHomeSilently()
         }
     }
 }
