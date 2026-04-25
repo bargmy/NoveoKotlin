@@ -295,11 +295,9 @@ jobs:
           branch: ${REF_NAME}
           commit: ${SHORT_SHA}
           sha256: ${APK_HASH:-unknown}
+          ${DRIVE_LINK:+drive: ${DRIVE_LINK}}
           run: ${RUN_URL}
-
-          📥 Drive Link:
-          ${DRIVE_LINK:-Not available}
-EOF
+          EOF
           )
 
           curl --fail --silent --show-error \
@@ -359,3 +357,4 @@ EOF
       - name: Clean up rclone config
         if: always()
         run: rm -f ~/.config/rclone/rclone.conf
+
