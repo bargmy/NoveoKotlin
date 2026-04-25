@@ -116,3 +116,10 @@ data class MessageLoadResult(
     val usersById: Map<String, UserSummary>,
     val messages: List<ChatMessage>
 )
+
+data class NotificationSettings(
+    val enabled: Boolean = true,
+    val groups: Boolean = true,
+    val channels: Boolean = true,
+    val dms: Boolean = true
+)

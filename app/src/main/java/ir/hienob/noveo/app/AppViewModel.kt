@@ -67,13 +67,6 @@ data class AppUiState(
     val isBatteryOptimized: Boolean = true
 )
 
-data class NotificationSettings(
-    val enabled: Boolean = true,
-    val groups: Boolean = true,
-    val channels: Boolean = true,
-    val dms: Boolean = true
-)
-
 data class UpdateInfo(
     val version: String,
     val url: String,
@@ -349,7 +342,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openChat(chatId: String) {
         val session = _uiState.value.session ?: return
-        ensureSocketObserved(session)
         startSelectedChatRefresh(session, chatId)
         viewModelScope.launch {
             val cachedMessages = messageCacheByChat[chatId].orEmpty().sortedBy { it.timestamp }
