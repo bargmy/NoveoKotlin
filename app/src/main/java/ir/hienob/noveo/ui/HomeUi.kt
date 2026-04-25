@@ -194,6 +194,7 @@ internal fun HomeScreen(
     state: AppUiState,
     onOpenChat: (String) -> Unit,
     onStartDirectChat: (String) -> Unit,
+    onCreateChat: (String, String, String?, String?, String?) -> Unit,
     onSearchPublic: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
@@ -216,14 +217,6 @@ internal fun HomeScreen(
 ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current
-    
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            onUpdateNotificationSettings(state.notificationSettings.copy(enabled = true))
-        }
-    }
 
     var showMenu by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
@@ -236,6 +229,32 @@ internal fun HomeScreen(
     var showGroupInfo by rememberSaveable { mutableStateOf(false) }
     var selectedMediaUrl by rememberSaveable { mutableStateOf<String?>(null) }
 
+    val isAnyModalVisible = showContactsModal || showCreateModal || showSettingsModal || 
+                          (showGroupInfo && state.selectedChatId != null) || 
+                          profileUserId != null || selectedMediaUrl != null || showSearch
+
+    androidx.activity.compose.BackHandler(enabled = isAnyModalVisible || showMenu || state.selectedChatId != null) {
+        when {
+            selectedMediaUrl != null -> selectedMediaUrl = null
+            profileUserId != null -> profileUserId = null
+            showGroupInfo -> showGroupInfo = false
+            showSettingsModal -> showSettingsModal = false
+            showCreateModal -> showCreateModal = false
+            showContactsModal -> showContactsModal = false
+            showSearch -> { showSearch = false; searchQuery = "" }
+            showMenu -> showMenu = false
+            state.selectedChatId != null -> onBackToChats()
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            onUpdateNotificationSettings(state.notificationSettings.copy(enabled = true))
+        }
+    }
+
     val density = LocalDensity.current
     val menuWidth = 296.dp
     val menuWidthPx = with(density) { menuWidth.toPx() }
@@ -246,11 +265,6 @@ internal fun HomeScreen(
     val chatBackOffset = remember { androidx.compose.animation.core.Animatable(0f) }
     
     val scope = rememberCoroutineScope()
-
-    // Modal check to ignore swiping
-    val isAnyModalVisible = showContactsModal || showCreateModal || showSettingsModal || 
-                          (showGroupInfo && state.selectedChatId != null) || 
-                          profileUserId != null || selectedMediaUrl != null || showSearch
 
     // Sync menu state with animation
     LaunchedEffect(showMenu) {
@@ -555,7 +569,11 @@ internal fun HomeScreen(
             )
         }
 ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
-    CreateChannelModal(strings = strings, onClose = { showCreateModal = false })
+    CreateChannelModal(
+        strings = strings,
+        onCreate = onCreateChat,
+        onClose = { showCreateModal = false }
+    )
 }
 
         if (selectedMediaUrl != null) {
@@ -1555,16 +1573,97 @@ private fun ContactRow(
 }
 
 @Composable
-private fun CreateChannelModal(strings: NoveoStrings, onClose: () -> Unit) {
+private fun CreateChannelModal(
+    strings: NoveoStrings,
+    onCreate: (String, String, String?, String?, String?) -> Unit,
+    onClose: () -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var handle by remember { mutableStateOf("") }
+    var bio by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf("group") }
+    var showCaptcha by remember { mutableStateOf(false) }
+
+    if (showCaptcha) {
+        CaptchaModal(
+            onToken = { token ->
+                showCaptcha = false
+                onCreate(name, type, handle.takeIf { it.isNotBlank() }, bio.takeIf { it.isNotBlank() }, token)
+                onClose()
+            },
+            onDismiss = { showCaptcha = false }
+        )
+    }
+
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
             ModalHeader(title = strings.newChat, onClose = onClose)
             Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text(strings.newChat) } // Using newChat as placeholder
-                Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text(strings.subscription) } // Placeholder
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(strings.newChat) }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = handle, onValueChange = { handle = it }, label = { Text("Handle (optional)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = bio, onValueChange = { bio = it }, label = { Text("Bio (optional)") }, modifier = Modifier.fillMaxWidth())
+                
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { type = "group" },
+                        modifier = Modifier.weight(1f),
+                        border = if (type == "group") BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else ButtonDefaults.outlinedButtonBorder
+                    ) { Text("Group") }
+                    OutlinedButton(
+                        onClick = { type = "channel" },
+                        modifier = Modifier.weight(1f),
+                        border = if (type == "channel") BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else ButtonDefaults.outlinedButtonBorder
+                    ) { Text("Channel") }
+                }
+                
+                Button(
+                    onClick = { if (name.isNotBlank()) showCaptcha = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = name.isNotBlank()
+                ) { Text(strings.create) }
             }
         }
     }
+}
+
+@Composable
+private fun CaptchaModal(onToken: (String) -> Unit, onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
+        title = { Text("Solve Puzzle") },
+        text = {
+            Box(modifier = Modifier.fillMaxWidth().height(400.dp)) {
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { context ->
+                        android.webkit.WebView(context).apply {
+                            settings.javaScriptEnabled = true
+                            webViewClient = object : android.webkit.WebViewClient() {
+                                override fun shouldOverrideUrlLoading(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                                    val url = request?.url?.toString() ?: ""
+                                    if (url.contains("token=")) {
+                                        val token = url.substringAfter("token=")
+                                        onToken(token)
+                                        return true
+                                    }
+                                    return false
+                                }
+                            }
+                            addJavascriptInterface(object {
+                                @android.webkit.JavascriptInterface
+                                fun onCaptchaSolved(token: String) {
+                                    onToken(token)
+                                }
+                            }, "Android")
+                            loadUrl("https://web.noveo.ir/puzzle.php")
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    )
 }
 
 @Composable

@@ -247,6 +247,7 @@ fun NoveoRoot(
     onAuthSubmit: (String, String) -> Unit,
     onOpenChat: (String) -> Unit,
     onStartDirectChat: (String) -> Unit,
+    onCreateChat: (String, String, String?, String?, String?) -> Unit,
     onSearchPublic: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
@@ -309,6 +310,7 @@ fun NoveoRoot(
                         state = state,
                         onOpenChat = onOpenChat,
                         onStartDirectChat = onStartDirectChat,
+                        onCreateChat = onCreateChat,
                         onSearchPublic = onSearchPublic,
                         onBackToChats = onBackToChats,
                         onSend = onSend,
@@ -408,10 +410,21 @@ private fun AuthScreen(
     strings: NoveoStrings,
     state: AppUiState,
     onAuthMode: (Boolean) -> Unit,
-    onAuthSubmit: (String, String) -> Unit
+    onAuthSubmit: (String, String, String?) -> Unit
 ) {
     var handle by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var showCaptcha by remember { mutableStateOf(false) }
+
+    if (showCaptcha) {
+        CaptchaModal(
+            onToken = { token ->
+                showCaptcha = false
+                onAuthSubmit(handle, password, token)
+            },
+            onDismiss = { showCaptcha = false }
+        )
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(20.dp),
@@ -430,7 +443,17 @@ private fun AuthScreen(
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(strings.passwordPlaceholder) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         Spacer(Modifier.height(16.dp))
-        Button(onClick = { onAuthSubmit(handle, password) }, enabled = !state.loading, modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = {
+                if (state.authModeSignup) {
+                    showCaptcha = true
+                } else {
+                    onAuthSubmit(handle, password, null)
+                }
+            },
+            enabled = !state.loading,
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Text(if (state.authModeSignup) strings.signupButton else strings.loginButton)
         }
         state.error?.let {
@@ -438,4 +461,44 @@ private fun AuthScreen(
             Text(it, color = MaterialTheme.colorScheme.error)
         }
     }
+}
+
+@Composable
+private fun CaptchaModal(onToken: (String) -> Unit, onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
+        title = { Text("Solve Puzzle") },
+        text = {
+            Box(modifier = Modifier.fillMaxWidth().height(400.dp)) {
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { context ->
+                        android.webkit.WebView(context).apply {
+                            settings.javaScriptEnabled = true
+                            webViewClient = object : android.webkit.WebViewClient() {
+                                override fun shouldOverrideUrlLoading(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                                    val url = request?.url?.toString() ?: ""
+                                    if (url.contains("token=")) {
+                                        val token = url.substringAfter("token=")
+                                        onToken(token)
+                                        return true
+                                    }
+                                    return false
+                                }
+                            }
+                            addJavascriptInterface(object {
+                                @android.webkit.JavascriptInterface
+                                fun onCaptchaSolved(token: String) {
+                                    onToken(token)
+                                }
+                            }, "Android")
+                            loadUrl("https://web.noveo.ir/puzzle.php")
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    )
 }

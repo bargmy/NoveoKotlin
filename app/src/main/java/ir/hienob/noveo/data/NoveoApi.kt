@@ -21,7 +21,34 @@ class NoveoApi(
     private val origin: String = "https://noveo.ir"
 ) {
     fun login(handle: String, password: String): Session = auth(JSONObject().put("type", "login_with_password").put("username", handle).put("password", password).put("languageCode", "en"))
-    fun signup(handle: String, password: String): Session = auth(JSONObject().put("type", "register").put("username", handle).put("password", password).put("languageCode", "en"))
+    fun signup(handle: String, password: String, captchaToken: String? = null): Session = auth(
+        JSONObject()
+            .put("type", "register")
+            .put("username", handle)
+            .put("password", password)
+            .put("languageCode", "en")
+            .apply { if (captchaToken != null) put("captchaToken", captchaToken) }
+    )
+
+    fun createChat(session: Session, name: String, type: String, handle: String? = null, bio: String? = null, captchaToken: String? = null) {
+        val url = "https://noveo.ir:8443/chat/create".toHttpUrl()
+        val body = JSONObject()
+            .put("title", name)
+            .put("chatType", type)
+            .put("handle", handle)
+            .put("bio", bio)
+            .apply { if (captchaToken != null) put("captchaToken", captchaToken) }
+            .toString()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Chat creation failed (${response.code})")
+        }
+    }
 
     fun getStarsOverview(session: Session): Wallet {
         val url = "https://noveo.ir:8443/stars/overview".toHttpUrl()

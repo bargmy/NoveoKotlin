@@ -295,9 +295,11 @@ jobs:
           branch: ${REF_NAME}
           commit: ${SHORT_SHA}
           sha256: ${APK_HASH:-unknown}
-          ${DRIVE_LINK:+drive: ${DRIVE_LINK}}
           run: ${RUN_URL}
-          EOF
+
+          📥 Drive Link:
+          ${DRIVE_LINK:-Not available}
+EOF
           )
 
           curl --fail --silent --show-error \

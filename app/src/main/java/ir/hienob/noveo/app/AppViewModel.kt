@@ -309,18 +309,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(authModeSignup = signup, error = null)
     }
 
-    fun authenticate(handle: String, password: String) {
+    fun authenticate(handle: String, password: String, captchaToken: String? = null) {
         viewModelScope.launch {
             runCatching {
                 _uiState.value = _uiState.value.copy(startupState = StartupState.Home, loading = true, connectionTitle = "Noveo")
                 val session = withContext(Dispatchers.IO) {
-                    if (_uiState.value.authModeSignup) api.signup(handle, password) else api.login(handle, password)
+                    if (_uiState.value.authModeSignup) api.signup(handle, password, captchaToken) else api.login(handle, password)
                 }
                 sessionStore.write(session)
                 NoveoNotificationService.start(getApplication())
                 loadHome(session)
             }.onFailure {
                 _uiState.value = _uiState.value.copy(startupState = StartupState.Auth, loading = false, error = it.message ?: "Authentication failed")
+            }
+        }
+    }
+
+    fun createChat(name: String, type: String, handle: String? = null, bio: String? = null, captchaToken: String? = null) {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            runCatching {
+                _uiState.value = _uiState.value.copy(loading = true)
+                withContext(Dispatchers.IO) {
+                    api.createChat(session, name, type, handle, bio, captchaToken)
+                }
+                loadHome(session)
+                _uiState.value = _uiState.value.copy(loading = false)
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(loading = false, error = it.message ?: "Chat creation failed")
             }
         }
     }

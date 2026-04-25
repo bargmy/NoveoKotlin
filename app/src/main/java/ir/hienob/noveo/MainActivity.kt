@@ -26,6 +26,7 @@ class MainActivity : ComponentActivity() {
                 onAuthSubmit = viewModel::authenticate,
                 onOpenChat = viewModel::openChat,
                 onStartDirectChat = viewModel::openDirectChat,
+                onCreateChat = { n, t, h, b, c -> viewModel.createChat(n, t, h, b, c) },
                 onSearchPublic = viewModel::searchPublicDirectory,
                 onBackToChats = viewModel::backToChatList,
                 onSend = viewModel::sendMessage,
