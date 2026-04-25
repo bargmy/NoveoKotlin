@@ -21,6 +21,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -205,13 +206,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (!apkFile.exists()) return
 
         val context = getApplication<Application>()
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apkFile)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        
+        runCatching {
+            // Android 8.0+ check for unknown apps permission
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                if (!context.packageManager.canRequestPackageInstalls()) {
+                    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                    return@runCatching
+                }
+            }
+
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apkFile)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }.onFailure {
+            _uiState.value = _uiState.value.copy(error = "Installation failed: ${it.message}")
         }
-        context.startActivity(intent)
     }
 
     fun restoreSession() {
