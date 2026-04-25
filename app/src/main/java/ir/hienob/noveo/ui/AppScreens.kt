@@ -487,7 +487,8 @@ private fun CaptchaModal(
                         android.webkit.WebView(context).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            settings.userAgentString = "NoveoKotlin/0.3.4"
+                            settings.userAgentString = "NoveoKotlin/0.4.0"
+
                             
                             webViewClient = object : android.webkit.WebViewClient() {
                                 override fun shouldOverrideUrlLoading(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): Boolean {

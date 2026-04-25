@@ -169,7 +169,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.3.5 Kotlin"
+private const val CLIENT_VERSION = "v0.4.0 Kotlin"
 private val TelegramComposerBlue = Color(0xFF229AF0)
 private val TelegramComposerPanel = Color(0xFFF6F7F8)
 private val TelegramComposerField = Color.White
@@ -1563,77 +1563,6 @@ private fun MessageAttachment(
                     modifier = Modifier.size(20.dp),
                     tint = (if (ownMessage) Color.White else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.5f)
                 )
-            }
-        }
-    }
-}
-    val uriHandler = LocalUriHandler.current
-    val normalizedUrl = remember(file?.url) { file?.url.normalizeNoveoUrl() }
-    if (file == null) return
-
-    if (normalizedUrl != null && file.isImage()) {
-        Card(
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.size(128.dp).clickable { onMediaClick(normalizedUrl) },
-            colors = CardDefaults.cardColors(containerColor = Color(0x1F94A3B8))
-        ) {
-            AsyncImage(
-                model = normalizedUrl,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit
-            )
-        }
-        return
-    }
-
-    if (normalizedUrl != null && file.isVideo()) {
-        Card(
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.width(320.dp).aspectRatio(16f / 9f).clickable { onMediaClick(normalizedUrl) },
-            colors = CardDefaults.cardColors(containerColor = Color.Black)
-        ) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                // In a real app we'd use a VideoPlayer, for now we show a play icon placeholder exactly like a non-playing preview
-                Icon(Icons.Outlined.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
-                AsyncImage(
-                    model = normalizedUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize().alpha(0.5f),
-                    contentScale = ContentScale.Fit
-                )
-            }
-        }
-        return
-    }
-
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = !normalizedUrl.isNullOrBlank()) { normalizedUrl?.let(uriHandler::openUri) }
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Info, // Standard file icon
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(file.name.ifBlank { "File" }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                Text(strings.clickToDownload, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
