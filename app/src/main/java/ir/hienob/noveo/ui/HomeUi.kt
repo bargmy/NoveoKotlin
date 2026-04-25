@@ -599,23 +599,11 @@ private fun SidebarPane(
                 strings = strings,
                 showSearch = showSearch,
                 searchQuery = searchQuery,
-                connectionTitle = state.connectionTitle,
+                connectionTitle = strings.brandName,
                 onMenuClick = onMenuClick,
                 onSearchToggle = onSearchToggle,
                 onSearchQueryChange = onSearchQueryChange
             )
-            state.error?.takeIf { it.isNotBlank() }?.let {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(MaterialTheme.colorScheme.errorContainer)
-                        .padding(12.dp)
-                ) {
-                    Text(it, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
-                }
-            }
             if (showSearch) {
                 SearchResultsList(
                     strings = strings,
@@ -723,17 +711,7 @@ private fun SidebarHeader(
     onSearchToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit
 ) {
-    val statusTransition = rememberInfiniteTransition(label = "connection_status_fade")
-    val statusAlpha by statusTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "connection_status_alpha"
-    )
-    val titleAlpha = if (connectionTitle == "Noveo") 1f else statusAlpha
+    val titleAlpha = 1f
 
     Row(
         modifier = Modifier

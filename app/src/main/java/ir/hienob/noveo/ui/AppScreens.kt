@@ -290,15 +290,12 @@ fun NoveoRoot(
         ThemePreset.SANOKI_MEOA -> sanokiMeoaScheme
     }
 
-    val layoutDirection = remember(state.languageCode) {
-        if (state.languageCode == "fa" || state.languageCode == "ar") LayoutDirection.Rtl else LayoutDirection.Ltr
-    }
-
+    val layoutDirection = LayoutDirection.Ltr
     CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
         MaterialTheme(colorScheme = colorScheme) {
             Surface(modifier = Modifier.fillMaxSize()) {
                 when (state.startupState) {
-                    StartupState.Splash -> ConnectingShell(state.connectionTitle)
+                    StartupState.Splash -> ConnectingShell(strings.brandName)
                     StartupState.Onboarding -> OnboardingScreen(strings, onDismissOnboarding)
                     StartupState.Auth -> AuthScreen(strings, state, onAuthMode, onAuthSubmit)
                     StartupState.Home -> HomeScreen(

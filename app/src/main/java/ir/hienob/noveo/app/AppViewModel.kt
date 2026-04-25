@@ -47,7 +47,7 @@ data class AppUiState(
     val contacts: List<UserSummary> = emptyList(),
     val typingUsers: Map<String, Set<String>> = emptyMap(), // chatId -> set of userIds
     val replyingToMessage: ChatMessage? = null,
-    val languageCode: String = "en"
+    val languageCode: String = java.util.Locale.getDefault().language
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -82,7 +82,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 startupState = StartupState.Home,
                 session = session,
                 loading = true,
-                connectionTitle = "Connecting...",
+                connectionTitle = "Noveo",
             )
             loadHome(session)
         }
@@ -99,7 +99,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun authenticate(handle: String, password: String) {
         viewModelScope.launch {
             runCatching {
-                _uiState.value = _uiState.value.copy(startupState = StartupState.Home, loading = true, connectionTitle = "Connecting...")
+                _uiState.value = _uiState.value.copy(startupState = StartupState.Home, loading = true, connectionTitle = "Noveo")
                 val session = withContext(Dispatchers.IO) {
                     if (_uiState.value.authModeSignup) api.signup(handle, password) else api.login(handle, password)
                 }
@@ -255,7 +255,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 session = session,
                 wallet = wallet,
                 contacts = contacts,
-                connectionTitle = "Connecting...",
+                connectionTitle = "Noveo",
             )
         }
     }
@@ -327,8 +327,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }.onFailure {
                     _uiState.value = _uiState.value.copy(
-                        connectionTitle = "Connecting...",
-                        connectionDetail = "Connection lost, retrying..."
+                        connectionTitle = "Noveo",
+                        connectionDetail = null
                     )
                     delay(1500)
                 }
