@@ -194,7 +194,7 @@ class TelegramBubbleShape(
         val path = androidx.compose.ui.graphics.Path().apply {
             val w = size.width
             val h = size.height
-            val r = cornerRadius
+            val r = 16f * density.density
             val tr = 6f * density.density
             
             if (isOutgoing) {
@@ -203,11 +203,8 @@ class TelegramBubbleShape(
                 quadraticTo(w, 0f, w, r)
                 
                 if (hasTail) {
-                    lineTo(w, h - r)
-                    // Refined Telegram tail for outgoing
-                    lineTo(w, h - 10f * density.density)
-                    cubicTo(w, h, w + tr, h, w + tr, h)
-                    lineTo(w - r, h)
+                    lineTo(w - 10f * density.density, h)
+                    quadraticTo(w, h, w, h - 10f * density.density)
                 } else {
                     lineTo(w, h - r)
                     quadraticTo(w, h, w - r, h)
@@ -218,6 +215,12 @@ class TelegramBubbleShape(
                 lineTo(0f, r)
                 quadraticTo(0f, 0f, r, 0f)
             } else {
+                // Incoming bubble
+                if (hasTail) {
+                    moveTo(0f, 0f) // Start at top-left tail point if we use a different approach
+                    // Actually let's do a standard rounded rect and then the tail
+                }
+                
                 moveTo(r, 0f)
                 lineTo(w - r, 0f)
                 quadraticTo(w, 0f, w, r)
@@ -226,14 +229,13 @@ class TelegramBubbleShape(
                 lineTo(r, h)
                 
                 if (hasTail) {
-                    // Refined Telegram tail for incoming
+                    // The "Tail" for Telegram incoming (bottom-left)
                     lineTo(10f * density.density, h)
-                    cubicTo(-tr, h, 0f, h, 0f, h - 10f * density.density)
-                    lineTo(0f, r)
+                    quadraticTo(0f, h, 0f, h - 10f * density.density)
                 } else {
                     quadraticTo(0f, h, 0f, h - r)
-                    lineTo(0f, r)
                 }
+                lineTo(0f, r)
                 quadraticTo(0f, 0f, r, 0f)
             }
             close()
@@ -2627,13 +2629,14 @@ private fun String?.normalizeNoveoUrl(): String? {
 
 @Composable
 private fun FullscreenMediaModal(url: String, onDismiss: () -> Unit) {
+    val normalizedUrl = remember(url) { url.normalizeNoveoUrl() }
     Surface(
         color = Color.Black,
         modifier = Modifier.fillMaxSize()
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             AsyncImage(
-                model = url,
+                model = normalizedUrl,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit

@@ -230,13 +230,13 @@ internal fun ChatInput(
                         targetState = draft.isBlank() && !hasAttachment,
                         transitionSpec = { 
                             if (targetState) {
-                                // Transition to Mic: slide out paperplane to top right, slide in mic from bottom
-                                (slideInVertically { it } + fadeIn()) togetherWith 
-                                (slideOutVertically { -it } + slideOutHorizontally { it } + fadeOut())
+                                // Transition TO Mic (Send button flies out to top-right)
+                                (slideInVertically { it } + fadeIn(tween(200, delayMillis = 100))) togetherWith 
+                                (slideOutVertically { -it } + slideOutHorizontally { it } + fadeOut(tween(200)))
                             } else {
-                                // Transition to Send: fly in paperplane from bottom left
+                                // Transition TO Send (Paperplane flies in from bottom-left)
                                 (slideInVertically { it } + slideInHorizontally { -it } + fadeIn(tween(250))) togetherWith 
-                                (scaleOut(tween(150)) + fadeOut(tween(150)))
+                                (fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.5f))
                             }
                         },
                         label = "send_icon_animation"
