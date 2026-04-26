@@ -1035,7 +1035,13 @@ private fun ChatPane(
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(selectedTitle, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(selectedTitle, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+                        if (selectedChat?.isVerified == true) {
+                            Spacer(Modifier.width(4.dp))
+                            VerifiedIcon(modifier = Modifier.size(16.dp))
+                        }
+                    }
                     Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -1641,7 +1647,13 @@ private fun ContactRow(
                 ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = 46.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(user.username, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(user.username, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (user.isVerified) {
+                            Spacer(Modifier.width(4.dp))
+                            VerifiedIcon(modifier = Modifier.size(14.dp))
+                        }
+                    }
                     Text(
                         user.handle ?: user.bio.ifBlank { if (user.isOnline) strings.online else strings.offline },
                         maxLines = 1,
@@ -2165,7 +2177,13 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
                                     ProfileCircle(name = user?.username ?: memberId, imageUrl = user?.avatarUrl, size = 40.dp)
                                     Spacer(Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(user?.username ?: memberId, fontWeight = FontWeight.SemiBold)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(user?.username ?: memberId, fontWeight = FontWeight.SemiBold)
+                                            if (user?.isVerified == true) {
+                                                Spacer(Modifier.width(4.dp))
+                                                VerifiedIcon(modifier = Modifier.size(14.dp))
+                                            }
+                                        }
                                         Text(user?.handle ?: user?.bio?.ifBlank { memberId } ?: memberId, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
@@ -2281,7 +2299,7 @@ private fun ChatRow(
                     Text(chatTitle, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (chat.isVerified) {
                         Spacer(Modifier.width(4.dp))
-                        Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        VerifiedIcon()
                     }
                 }
                 Spacer(Modifier.height(2.dp))
