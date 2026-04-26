@@ -161,10 +161,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.lerp
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.material3.lerp
-import androidx.compose.ui.text.lerp
+import androidx.compose.ui.unit.lerp as lerpDp
+import androidx.compose.ui.text.lerp as lerpTextStyle
+import androidx.compose.ui.util.lerp as lerpFloat
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import ir.hienob.noveo.R
@@ -2248,9 +2247,9 @@ private fun ProfileModal(
             
             // Collapsing Header
             Surface(
-                modifier = Modifier.fillMaxWidth().height(lerp(expandedHeight, collapsedHeight, fraction)),
+                modifier = Modifier.fillMaxWidth().height(lerpDp(expandedHeight, collapsedHeight, fraction)),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = lerp(0.dp, 4.dp, fraction)
+                tonalElevation = lerpDp(0.dp, 4.dp, fraction)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     // Close Button
@@ -2261,9 +2260,9 @@ private fun ProfileModal(
                     )
                     
                     // Avatar and Name
-                    val avatarSize = lerp(96.dp, 36.dp, fraction)
-                    val avatarOffsetX = lerp(0.dp, (-140).dp, fraction) // Adjust based on screen width roughly
-                    val avatarOffsetY = lerp(20.dp, 0.dp, fraction)
+                    val avatarSize = lerpDp(96.dp, 36.dp, fraction)
+                    val avatarOffsetX = lerpDp(0.dp, (-140).dp, fraction) // Adjust based on screen width roughly
+                    val avatarOffsetY = lerpDp(20.dp, 0.dp, fraction)
                     
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -2275,10 +2274,10 @@ private fun ProfileModal(
                         }
                         
                         if (fraction < 0.8f) {
-                            Spacer(Modifier.height(lerp(12.dp, 0.dp, fraction)))
+                            Spacer(Modifier.height(lerpDp(12.dp, 0.dp, fraction)))
                             Text(
                                 user.username, 
-                                style = lerp(MaterialTheme.typography.headlineSmall, MaterialTheme.typography.titleMedium, fraction),
+                                style = lerpTextStyle(MaterialTheme.typography.headlineSmall, MaterialTheme.typography.titleMedium, fraction),
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.alpha(1f - fraction)
                             )
@@ -2299,7 +2298,7 @@ private fun ProfileModal(
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
                                 .padding(start = 64.dp)
-                                .alpha(lerp(0f, 1f, (fraction - 0.5f) * 2))
+                                .alpha(lerpFloat(0f, 1f, (fraction - 0.5f) * 2))
                         )
                     }
                 }
@@ -2373,9 +2372,9 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
             
             // Collapsing Header
             Surface(
-                modifier = Modifier.fillMaxWidth().height(lerp(expandedHeight, collapsedHeight, fraction)),
+                modifier = Modifier.fillMaxWidth().height(lerpDp(expandedHeight, collapsedHeight, fraction)),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = lerp(0.dp, 4.dp, fraction)
+                tonalElevation = lerpDp(0.dp, 4.dp, fraction)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     // Close Button
@@ -2386,9 +2385,9 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
                     )
                     
                     // Avatar and Name
-                    val avatarSize = lerp(96.dp, 36.dp, fraction)
-                    val avatarOffsetX = lerp(0.dp, (-140).dp, fraction)
-                    val avatarOffsetY = lerp(20.dp, 0.dp, fraction)
+                    val avatarSize = lerpDp(96.dp, 36.dp, fraction)
+                    val avatarOffsetX = lerpDp(0.dp, (-140).dp, fraction)
+                    val avatarOffsetY = lerpDp(20.dp, 0.dp, fraction)
                     
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -2400,10 +2399,10 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
                         }
                         
                         if (fraction < 0.8f) {
-                            Spacer(Modifier.height(lerp(12.dp, 0.dp, fraction)))
+                            Spacer(Modifier.height(lerpDp(12.dp, 0.dp, fraction)))
                             Text(
                                 chatTitle, 
-                                style = lerp(MaterialTheme.typography.headlineSmall, MaterialTheme.typography.titleMedium, fraction),
+                                style = lerpTextStyle(MaterialTheme.typography.headlineSmall, MaterialTheme.typography.titleMedium, fraction),
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.alpha(1f - fraction)
                             )
@@ -2424,7 +2423,7 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
                                 .padding(start = 64.dp)
-                                .alpha(lerp(0f, 1f, (fraction - 0.5f) * 2))
+                                .alpha(lerpFloat(0f, 1f, (fraction - 0.5f) * 2))
                         )
                     }
                 }
