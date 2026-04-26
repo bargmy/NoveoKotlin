@@ -48,7 +48,8 @@ data class UserSummary(
 data class MessageFileAttachment(
     val url: String = "",
     val name: String = "",
-    val type: String = ""
+    val type: String = "",
+    val size: Long = 0L
 ) {
     fun isImage(): Boolean = type.startsWith("image/") || name.endsWith(".jpg", true) || name.endsWith(".png", true) || name.endsWith(".gif", true) || name.endsWith(".webp", true)
     fun isVideo(): Boolean = type.startsWith("video/") || name.endsWith(".mp4", true) || name.endsWith(".webm", true)
