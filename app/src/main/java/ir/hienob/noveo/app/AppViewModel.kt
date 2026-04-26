@@ -382,23 +382,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startCreateChatCaptcha(name: String, type: String, handle: String? = null, bio: String? = null) {
-        viewModelScope.launch {
-            runCatching {
-                val session = _uiState.value.session ?: return@launch
-                val started = withContext(Dispatchers.IO) {
-                    api.startCaptcha(session, "create_chat")
-                }
-                _uiState.value = _uiState.value.copy(
-                    captchaInfo = CaptchaInfo(
-                        sessionId = started.getString("sessionId"),
-                        action = "create_chat",
-                        extra = mapOf("name" to name, "type" to type, "handle" to (handle ?: ""), "bio" to (bio ?: ""))
-                    )
-                )
-            }.onFailure {
-                _uiState.value = _uiState.value.copy(error = it.message ?: "Failed to start captcha")
-            }
-        }
+        createChat(name, type, handle, bio)
     }
 
     fun logout() {
@@ -429,24 +413,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         
-        // If chat doesn't exist, we start captcha for dm_start
-        viewModelScope.launch {
-            runCatching {
-                val session = _uiState.value.session ?: return@launch
-                val started = withContext(Dispatchers.IO) {
-                    api.startCaptcha(session, "dm_start", mapOf("targetUserId" to userId))
-                }
-                _uiState.value = _uiState.value.copy(
-                    captchaInfo = CaptchaInfo(
-                        sessionId = started.getString("sessionId"),
-                        action = "dm_start",
-                        extra = mapOf("targetUserId" to userId)
-                    )
-                )
-            }.onFailure {
-                _uiState.value = _uiState.value.copy(error = it.message ?: "Failed to start captcha")
-            }
-        }
+        createChat(name = "Direct Chat", type = "private", handle = null, bio = null)
     }
 
     fun onCaptchaTokenReceived(token: String) {

@@ -1049,12 +1049,10 @@ private fun ChatPane(
     }
     
     val typingUsers = state.typingUsers[selectedChat?.id].orEmpty()
-    val isImeVisible = WindowInsets.isImeVisible
     
-    LaunchedEffect(isImeVisible) {
-        if (isImeVisible && state.messages.isNotEmpty()) {
-            delay(100)
-            listState.animateScrollToItem(state.messages.lastIndex)
+    val showScrollToBottom by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 5
         }
     }
 
@@ -1262,6 +1260,35 @@ private fun ChatPane(
                 
                 HeaderIconButton(icon = Icons.Outlined.Call, onClick = {}, tint = tgColors.headerIcon)
                 HeaderIconButton(icon = Icons.Outlined.Search, onClick = {}, tint = tgColors.headerIcon, modifier = Modifier.padding(end = 4.dp))
+            }
+        }
+
+        // 2.5 Scroll to Bottom Button
+        AnimatedVisibility(
+            visible = showScrollToBottom,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 100.dp)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clickable { 
+                        scope.launch { listState.animateScrollToItem(state.messages.lastIndex) }
+                    },
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 4.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.filled.KeyboardArrowDown,
+                        contentDescription = "Scroll to bottom",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
         }
 
@@ -2356,7 +2383,16 @@ private fun ProfileModal(
                                 if (user.bio.isNotBlank()) {
                                     InfoItem(label = "Bio", value = user.bio)
                                 }
-                                InfoItem(label = "Join Date", value = "April 2026")
+                                val joinedDateText = remember(user.joinedAt) {
+                                    val joinedAt = user.joinedAt
+                                    if (joinedAt != null && joinedAt > 0) {
+                                        val date = Date(joinedAt * 1000L)
+                                        SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(date)
+                                    } else {
+                                        "April 2026"
+                                    }
+                                }
+                                InfoItem(label = "Join Date", value = joinedDateText)
                             }
                         }
 

@@ -42,7 +42,8 @@ data class UserSummary(
     val profileSkin: ProfileSkin? = null,
     val starsBalance: Double = 0.0,
     val languageCode: String = "en",
-    val lastSeen: Long? = null
+    val lastSeen: Long? = null,
+    val joinedAt: Long? = null
 )
 
 data class MessageFileAttachment(

@@ -33,7 +33,8 @@ internal fun parseUsers(payload: JSONObject): Pair<Map<String, UserSummary>, Set
             profileSkin = parseProfileSkin(item.optJSONObject("profileSkin")),
             starsBalance = item.optDouble("starsBalance", 0.0),
             languageCode = item.optString("languageCode").sanitizeServerString().ifBlank { "en" },
-            lastSeen = item.optLong("lastSeen", item.optLong("last_seen", 0L)).takeIf { it > 0 }
+            lastSeen = item.optLong("lastSeen", item.optLong("last_seen", 0L)).takeIf { it > 0 },
+            joinedAt = item.optLong("joinedAt", item.optLong("createdAt", 0L)).takeIf { it > 0 }
         )
     }
     return users to onlineIds

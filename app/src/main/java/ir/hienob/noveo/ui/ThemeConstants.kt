@@ -21,21 +21,21 @@ fun telegramColors(): TelegramThemeColors {
             composerDivider = colorScheme.outlineVariant,
             composerText = colorScheme.onSurface,
             composerCursor = colorScheme.primary,
-            chatSurface = colorScheme.secondaryContainer.copy(alpha = 0.4f), 
+            chatSurface = colorScheme.surfaceVariant.copy(alpha = 0.3f), 
             headerTitle = colorScheme.onSurface,
             headerSubtitle = colorScheme.onSurfaceVariant,
             headerIcon = colorScheme.onSurfaceVariant,
             incomingBubble = colorScheme.surface,
             incomingBubbleSelected = colorScheme.surfaceVariant,
-            outgoingBubble = colorScheme.primaryContainer,
-            outgoingBubbleSelected = colorScheme.primaryContainer.copy(alpha = 0.8f),
+            outgoingBubble = Color(0xFFE2F7B7), 
+            outgoingBubbleSelected = Color(0xFFD3ECA3),
             incomingText = colorScheme.onSurface,
             incomingLink = colorScheme.primary,
             incomingTime = colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            outgoingText = colorScheme.onPrimaryContainer,
-            outgoingTime = colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+            outgoingText = Color(0xFF222222),
+            outgoingTime = Color(0xFF66A060),
             replyIncoming = colorScheme.surfaceVariant,
-            replyOutgoing = colorScheme.onPrimaryContainer.copy(alpha = 0.1f)
+            replyOutgoing = colorScheme.primary.copy(alpha = 0.1f)
         )
     } else {
         // Dark Theme (using colorScheme to sync with user theme)
