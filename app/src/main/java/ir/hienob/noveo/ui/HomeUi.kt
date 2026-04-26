@@ -311,7 +311,8 @@ internal fun HomeScreen(
             showGroupInfo -> {
                 showGroupInfo = false
                 animateModalEntrance = false
-            }            showSettingsModal -> showSettingsModal = false
+            }
+            showSettingsModal -> showSettingsModal = false
             showCreateModal -> showCreateModal = false
             showContactsModal -> showContactsModal = false
             showSearch -> { showSearch = false; searchQuery = "" }
@@ -699,6 +700,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                     usersById = state.usersById,
                     onOpenProfile = { userId -> 
                         profileUserId = userId
+                        showGroupInfo = false
                         animateModalEntrance = false // standard open from list
                     },
                     onClose = { 
@@ -2235,34 +2237,24 @@ private fun ProfileModal(
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
-    val scope = rememberCoroutineScope()
     
     val expandedHeight = 320.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
     
-    // Entrance animation state
-    val entranceAnim = remember { androidx.compose.animation.core.Animatable(if (animateEntrance) 1f else 0f) }
-    LaunchedEffect(animateEntrance) {
-        if (animateEntrance) {
-            entranceAnim.animateTo(0f, tween(durationMillis = 400, easing = FastOutSlowInEasing))
-        }
-    }
-    
-    val scrollFraction = remember { derivedStateOf { 
+    val fraction = remember { derivedStateOf { 
         if (listState.firstVisibleItemIndex > 0) 1f 
         else (listState.firstVisibleItemScrollOffset.toFloat() / (expandedHeightPx - collapsedHeightPx)).coerceIn(0f, 1f)
-    } }
-    
-    // Combine scroll and entrance animation
-    val fraction = maxOf(scrollFraction.value, entranceAnim.value)
+    } }.value
     
     Surface(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val screenWidth = maxWidth
+            
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -2304,14 +2296,15 @@ private fun ProfileModal(
                             Text("Send Message") 
                         }
                         
-                        Spacer(Modifier.height(300.dp)) // Sufficient spacer for collapsing animation
+                        Spacer(Modifier.height(300.dp))
                     }
                 }
             }
             
             // Collapsing Header
+            val currentHeaderHeight = lerpDp(expandedHeight, collapsedHeight, fraction)
             Surface(
-                modifier = Modifier.fillMaxWidth().height(lerpDp(expandedHeight, collapsedHeight, fraction)),
+                modifier = Modifier.fillMaxWidth().height(currentHeaderHeight),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = lerpDp(0.dp, 4.dp, fraction)
             ) {
@@ -2323,44 +2316,50 @@ private fun ProfileModal(
                         modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                     )
                     
-                    // Avatar and Name Logic (Fixed Y=0 for stability)
                     val avatarSize = lerpDp(120.dp, 38.dp, fraction)
-                    val avatarOffsetX = lerpDp(0.dp, (-144).dp, fraction) 
                     
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Box(modifier = Modifier.offset(x = avatarOffsetX)) {
-                            ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = avatarSize)
-                        }
-                        
-                        Spacer(Modifier.height(lerpDp(16.dp, 0.dp, fraction)))
-                        
-                        if (fraction < 0.6f) {
+                    // Avatar position calculation
+                    val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
+                    val collapsedAvatarX = 52.dp // Next to back button
+                    val avatarX = lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
+                    
+                    val expandedAvatarY = (expandedHeight / 2) - (avatarSize / 2) - 20.dp
+                    val collapsedAvatarY = (collapsedHeight / 2) - (avatarSize / 2)
+                    val avatarY = lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
+                    
+                    Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
+                        ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = avatarSize)
+                    }
+                    
+                    // Expanded Name/Status
+                    if (fraction < 0.5f) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .offset(y = expandedAvatarY + avatarSize + 16.dp)
+                                .alpha((1f - fraction * 2f).coerceIn(0f, 1f)),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Text(
                                 user.username, 
                                 style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.alpha((1f - fraction * 2f).coerceIn(0f, 1f))
+                                fontWeight = FontWeight.Bold
                             )
                             Text(
                                 if (user.isOnline) "online" else "last seen recently", 
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.alpha((1f - fraction * 2.5f).coerceIn(0f, 1f))
+                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     
-                    // Title in collapsed state (Match chat headbar position)
-                    if (fraction > 0.6f) {
+                    // Collapsed Name/Status
+                    if (fraction > 0.5f) {
                         Column(
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
-                                .padding(start = 60.dp)
-                                .alpha(((fraction - 0.6f) * 2.5f).coerceIn(0f, 1f))
+                                .padding(start = 100.dp) // Offset by back button + avatar
+                                .alpha(((fraction - 0.5f) * 2f).coerceIn(0f, 1f))
                         ) {
                             Text(
                                 user.username,
@@ -2406,38 +2405,28 @@ private fun GroupInfoModal(
     
     val listState = rememberLazyListState()
     val density = LocalDensity.current
-    val scope = rememberCoroutineScope()
     
     val expandedHeight = 320.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
     
-    // Entrance animation state
-    val entranceAnim = remember { androidx.compose.animation.core.Animatable(if (animateEntrance) 1f else 0f) }
-    LaunchedEffect(animateEntrance) {
-        if (animateEntrance) {
-            entranceAnim.animateTo(0f, tween(durationMillis = 400, easing = FastOutSlowInEasing))
-        }
-    }
-    
-    val scrollFraction = remember { derivedStateOf { 
+    val fraction = remember { derivedStateOf { 
         if (listState.firstVisibleItemIndex > 0) 1f 
         else (listState.firstVisibleItemScrollOffset.toFloat() / (expandedHeightPx - collapsedHeightPx)).coerceIn(0f, 1f)
-    } }
-    
-    // Combine scroll and entrance animation
-    val fraction = maxOf(scrollFraction.value, entranceAnim.value)
+    } }.value
     
     Surface(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val screenWidth = maxWidth
+            
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp) // Extra bottom padding for scroll depth
+                contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
                     Column(
@@ -2500,13 +2489,14 @@ private fun GroupInfoModal(
                 }
                 
                 item {
-                    Spacer(Modifier.height(300.dp)) // Sufficient spacer for collapsing animation
+                    Spacer(Modifier.height(300.dp))
                 }
             }
             
             // Collapsing Header
+            val currentHeaderHeight = lerpDp(expandedHeight, collapsedHeight, fraction)
             Surface(
-                modifier = Modifier.fillMaxWidth().height(lerpDp(expandedHeight, collapsedHeight, fraction)),
+                modifier = Modifier.fillMaxWidth().height(currentHeaderHeight),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = lerpDp(0.dp, 4.dp, fraction)
             ) {
@@ -2518,56 +2508,62 @@ private fun GroupInfoModal(
                         modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                     )
                     
-                    // Avatar and Name Logic (Stable Y = 0)
                     val avatarSize = lerpDp(120.dp, 38.dp, fraction)
-                    val avatarOffsetX = lerpDp(0.dp, (-144).dp, fraction) 
                     
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Box(modifier = Modifier.offset(x = avatarOffsetX)) {
-                            ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize)
-                        }
-                        
-                        Spacer(Modifier.height(lerpDp(16.dp, 0.dp, fraction)))
-                        
-                        if (fraction < 0.6f) {
+                    // Avatar position calculation
+                    val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
+                    val collapsedAvatarX = 52.dp 
+                    val avatarX = lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
+                    
+                    val expandedAvatarY = (expandedHeight / 2) - (avatarSize / 2) - 20.dp
+                    val collapsedAvatarY = (collapsedHeight / 2) - (avatarSize / 2)
+                    val avatarY = lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
+                    
+                    Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
+                        ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize)
+                    }
+                    
+                    // Expanded Title/Subtitle
+                    if (fraction < 0.5f) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .offset(y = expandedAvatarY + avatarSize + 16.dp)
+                                .alpha((1f - fraction * 2f).coerceIn(0f, 1f)),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Text(
                                 chatTitle, 
                                 style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.alpha((1f - fraction * 2f).coerceIn(0f, 1f))
+                                fontWeight = FontWeight.Bold
                             )
                             Text(
                                 "${chat.memberIds.size} members", 
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.alpha((1f - fraction * 2.5f).coerceIn(0f, 1f))
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     
-                    // Title in collapsed state (Match chat headbar position)
-                    if (fraction > 0.6f) {
+                    // Collapsed Title/Subtitle
+                    if (fraction > 0.5f) {
                         Column(
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
-                                .padding(start = 60.dp) // Standard back button + avatar margin
-                                .alpha(((fraction - 0.6f) * 2.5f).coerceIn(0f, 1f))
+                                .padding(start = 100.dp) 
+                                .alpha(((fraction - 0.5f) * 2f).coerceIn(0f, 1f))
                         ) {
                             Text(
                                 chatTitle,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp // Match chat headbar
+                                fontSize = 16.sp
                             )
                             Text(
                                 "${chat.memberIds.size} members",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 13.sp // Match chat headbar
+                                fontSize = 13.sp
                             )
                         }
                     }

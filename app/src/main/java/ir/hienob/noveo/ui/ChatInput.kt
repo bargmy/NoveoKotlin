@@ -114,11 +114,7 @@ internal fun ChatInput(
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // Reply Preview
-                    AnimatedVisibility(
-                        visible = replyingTo != null,
-                        enter = slideInVertically { it } + fadeIn(),
-                        exit = slideOutVertically { it } + fadeOut()
-                    ) {
+                    if (replyingTo != null) {
                         replyingTo?.let { reply ->
                             Row(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(modifier = Modifier.width(2.dp).height(30.dp).background(tgColors.composerBlue, RoundedCornerShape(1.dp)))
@@ -229,15 +225,7 @@ internal fun ChatInput(
                     AnimatedContent(
                         targetState = draft.isBlank() && !hasAttachment,
                         transitionSpec = { 
-                            if (targetState) {
-                                // Transition TO Mic (Send button flies out to top-right)
-                                (slideInVertically { it } + fadeIn(tween(200, delayMillis = 100))) togetherWith 
-                                (slideOutVertically { -it } + slideOutHorizontally { it } + fadeOut(tween(200)))
-                            } else {
-                                // Transition TO Send (Paperplane flies in from bottom-left)
-                                (slideInVertically { it } + slideInHorizontally { -it } + fadeIn(tween(250))) togetherWith 
-                                (fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.5f))
-                            }
+                            fadeIn(tween(150)) togetherWith fadeOut(tween(150))
                         },
                         label = "send_icon_animation"
                     ) { isBlank ->
