@@ -168,7 +168,9 @@ import androidx.compose.ui.text.lerp as lerpTextStyle
 import androidx.compose.ui.util.lerp as lerpFloat
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
-import java.util.*
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import java.text.SimpleDateFormat
 import ir.hienob.noveo.R
 import ir.hienob.noveo.app.AppUiState
@@ -178,9 +180,6 @@ import ir.hienob.noveo.data.MessageFileAttachment
 import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.UserSummary
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
