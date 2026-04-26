@@ -194,7 +194,7 @@ class TelegramBubbleShape(
         val path = androidx.compose.ui.graphics.Path().apply {
             val w = size.width
             val h = size.height
-            val r = 16f * density.density
+            val r = cornerRadius
             val tr = 6f * density.density
             
             if (isOutgoing) {
@@ -203,8 +203,10 @@ class TelegramBubbleShape(
                 quadraticTo(w, 0f, w, r)
                 
                 if (hasTail) {
-                    lineTo(w - 10f * density.density, h)
-                    quadraticTo(w, h, w, h - 10f * density.density)
+                    lineTo(w, h - r)
+                    lineTo(w, h - 10f * density.density)
+                    cubicTo(w, h, w + tr, h, w + tr, h)
+                    lineTo(w - r, h)
                 } else {
                     lineTo(w, h - r)
                     quadraticTo(w, h, w - r, h)
@@ -215,12 +217,6 @@ class TelegramBubbleShape(
                 lineTo(0f, r)
                 quadraticTo(0f, 0f, r, 0f)
             } else {
-                // Incoming bubble
-                if (hasTail) {
-                    moveTo(0f, 0f) // Start at top-left tail point if we use a different approach
-                    // Actually let's do a standard rounded rect and then the tail
-                }
-                
                 moveTo(r, 0f)
                 lineTo(w - r, 0f)
                 quadraticTo(w, 0f, w, r)
@@ -229,9 +225,9 @@ class TelegramBubbleShape(
                 lineTo(r, h)
                 
                 if (hasTail) {
-                    // The "Tail" for Telegram incoming (bottom-left)
                     lineTo(10f * density.density, h)
-                    quadraticTo(0f, h, 0f, h - 10f * density.density)
+                    cubicTo(0f, h, -tr, h, -tr, h)
+                    lineTo(0f, h - 10f * density.density)
                 } else {
                     quadraticTo(0f, h, 0f, h - r)
                 }
