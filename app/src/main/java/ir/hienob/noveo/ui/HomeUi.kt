@@ -177,29 +177,6 @@ import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
 private const val CLIENT_VERSION = "v0.4.1 Kotlin"
-private val TelegramComposerBlue = Color(0xFF229AF0)
-private val TelegramComposerPanel = Color(0xFFF6F7F8)
-private val TelegramComposerField = Color.White
-private val TelegramComposerIcon = Color(0xFF7A8591)
-private val TelegramComposerHint = Color(0xFF7A8591)
-private val TelegramComposerDivider = Color(0x14000000)
-private val TelegramComposerText = Color(0xFF000000)
-private val TelegramComposerCursor = Color(0xFF459DE1)
-private val TelegramChatSurface = Color(0xFF91A8C0) 
-private val TelegramHeaderTitle = Color(0xFF333333)
-private val TelegramHeaderSubtitle = Color(0xFF797979)
-private val TelegramHeaderIcon = Color(0xFF6B7A8C)
-private val TelegramIncomingBubble = Color(0xFFFFFFFF)
-private val TelegramIncomingBubbleSelected = Color(0xFFF2F2F2)
-private val TelegramOutgoingBubble = Color(0xFFEFFDDE) // Corrected classic green
-private val TelegramOutgoingBubbleSelected = Color(0xFFD9F7C5)
-private val TelegramIncomingText = Color(0xFF222222)
-private val TelegramIncomingLink = Color(0xFF127ACA)
-private val TelegramIncomingTime = Color(0xFF939599)
-private val TelegramOutgoingText = Color(0xFF222222) // Classic outgoing text is also dark
-private val TelegramOutgoingTime = Color(0xFF66A060) // Soft green for time
-private val TelegramReplyIncoming = Color(0xFFD8E8F7)
-private val TelegramReplyOutgoing = Color(0x80FFFFFF)
 
 @Immutable
 class TelegramBubbleShape(
@@ -1096,7 +1073,7 @@ private fun ChatPane(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 8.dp, top = 64.dp, bottom = 80.dp),
+            contentPadding = PaddingValues(start = 8.dp, top = 64.dp, end = 8.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
             itemsIndexed(
