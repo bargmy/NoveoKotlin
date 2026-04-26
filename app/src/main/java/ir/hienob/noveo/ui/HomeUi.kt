@@ -1240,7 +1240,7 @@ private fun ChatPane(
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
             ) {
-                Column(modifier = Modifier.animateContentSize()) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     if (state.pendingAttachment != null) {                        Box(modifier = Modifier.padding(horizontal = 8.dp)) {
                             AttachmentPreview(
                                 attachment = state.pendingAttachment,

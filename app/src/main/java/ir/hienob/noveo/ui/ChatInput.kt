@@ -114,7 +114,11 @@ internal fun ChatInput(
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // Reply Preview
-                    if (replyingTo != null) {
+                    AnimatedVisibility(
+                        visible = replyingTo != null,
+                        enter = slideInVertically { it },
+                        exit = slideOutVertically { it }
+                    ) {
                         replyingTo?.let { reply ->
                             Row(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(modifier = Modifier.width(2.dp).height(30.dp).background(tgColors.composerBlue, RoundedCornerShape(1.dp)))
