@@ -289,16 +289,13 @@ jobs:
 
           SHORT_SHA="${SHA:0:7}"
           RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
-          CAPTION=$(cat <<EOF
-          ✅ New Android APK build
-          repo: ${REPO}
-          branch: ${REF_NAME}
-          commit: ${SHORT_SHA}
-          sha256: ${APK_HASH:-unknown}
-          ${DRIVE_LINK:+drive: ${DRIVE_LINK}}
-          run: ${RUN_URL}
-          EOF
-          )
+          CAPTION="✅ New Android APK build
+repo: ${REPO}
+branch: ${REF_NAME}
+commit: ${SHORT_SHA}
+sha256: ${APK_HASH:-unknown}
+drive: ${DRIVE_LINK:-not available}
+run: ${RUN_URL}"
 
           curl --fail --silent --show-error \
             -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
@@ -330,13 +327,11 @@ jobs:
 
           SHORT_SHA="${SHA:0:7}"
           RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
-          CAPTION=$(cat <<EOF
-          ✅ نسخه جدید نوعو کوطلین بیلد  شد!
-          کامیت: ${SHORT_SHA}
-          هش: ${APK_HASH:-unknown}
-          گیتهاب: ${RUN_URL}
-          EOF
-          )
+          CAPTION="✅ نسخه جدید نوعو کوطلین بیلد شد!
+کامیت: ${SHORT_SHA}
+هش: ${APK_HASH:-unknown}
+درایو: ${DRIVE_LINK:-ناموجود}
+گیتهاب: ${RUN_URL}"
 
           RESPONSE="$(
             curl --silent --show-error \
