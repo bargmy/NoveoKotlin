@@ -12,6 +12,7 @@ import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSocket
 import ir.hienob.noveo.data.ChatSummary
 import ir.hienob.noveo.data.MessageContent
+import ir.hienob.noveo.data.MessageFileAttachment
 import ir.hienob.noveo.data.NoveoApi
 import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.data.Session
