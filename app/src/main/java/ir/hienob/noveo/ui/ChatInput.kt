@@ -253,8 +253,8 @@ internal fun ChatInput(
                         val animRotation by transition.animateFloat(
                             label = "rotation",
                             transitionSpec = { tween(250) }
-                        ) { targetIsBlank ->
-                            if (targetIsBlank) -25f else 0f
+                        ) { enterExitState ->
+                            if (!isBlank && enterExitState == androidx.compose.animation.EnterExitState.PreEnter) -25f else 0f
                         }
 
                         Image(
