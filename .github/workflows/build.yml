@@ -244,7 +244,17 @@ jobs:
 
           rclone mkdir "$remote_dir"
           rclone copyto "$APK_PATH" "$remote_apk"
-          drive_link="$(rclone link "$remote_apk")"
+          
+          # Try to get link via rclone link
+          drive_link="$(rclone link "$remote_apk" || true)"
+          
+          # Fallback: get file ID and construct link manually if rclone link failed
+          if [ -z "$drive_link" ]; then
+            file_id=$(rclone lsjson "$remote_apk" | python3 -c "import sys, json; print(json.load(sys.stdin)[0].get('ID', ''))" 2>/dev/null || true)
+            if [ -n "$file_id" ]; then
+              drive_link="https://drive.google.com/file/d/${file_id}/view"
+            fi
+          fi
 
           meta_file="$(mktemp)"
           cat > "$meta_file" <<EOF
@@ -290,12 +300,12 @@ jobs:
           SHORT_SHA="${SHA:0:7}"
           RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
           CAPTION="✅ New Android APK build
-          repo: ${REPO}
-          branch: ${REF_NAME}
-          commit: ${SHORT_SHA}
-          sha256: ${APK_HASH:-unknown}
-          drive: ${DRIVE_LINK:-not available}
-          run: ${RUN_URL}"
+repo: ${REPO}
+branch: ${REF_NAME}
+commit: ${SHORT_SHA}
+sha256: ${APK_HASH:-unknown}
+drive: ${DRIVE_LINK:-not available}
+run: ${RUN_URL}"
 
           curl --fail --silent --show-error \
             -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
@@ -328,10 +338,10 @@ jobs:
           SHORT_SHA="${SHA:0:7}"
           RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
           CAPTION="✅ نسخه جدید نوعو کوطلین بیلد شد!
-          کامیت: ${SHORT_SHA}
-          هش: ${APK_HASH:-unknown}
-          درایو: ${DRIVE_LINK:-ناموجود}
-          گیتهاب: ${RUN_URL}"
+کامیت: ${SHORT_SHA}
+هش: ${APK_HASH:-unknown}
+درایو: ${DRIVE_LINK:-ناموجود}
+گیتهاب: ${RUN_URL}"
 
           RESPONSE="$(
             curl --silent --show-error \
