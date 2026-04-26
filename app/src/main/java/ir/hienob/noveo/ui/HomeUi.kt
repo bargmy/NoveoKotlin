@@ -168,6 +168,8 @@ import androidx.compose.ui.text.lerp as lerpTextStyle
 import androidx.compose.ui.util.lerp as lerpFloat
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
+import java.util.*
+import java.text.SimpleDateFormat
 import ir.hienob.noveo.R
 import ir.hienob.noveo.app.AppUiState
 import ir.hienob.noveo.data.ChatMessage
@@ -183,7 +185,48 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.4.4 Kotlin"
+private const val CLIENT_VERSION = "v0.4.5 Kotlin"
+
+private fun formatLastSeen(lastSeen: Long?, strings: NoveoStrings): String {
+    if (lastSeen == null || lastSeen <= 0) return strings.lastSeenRecently
+    
+    val now = Calendar.getInstance()
+    val date = Calendar.getInstance().apply { timeInMillis = lastSeen * 1000L }
+    
+    val diffMillis = now.timeInMillis - date.timeInMillis
+    val diffSeconds = diffMillis / 1000
+    val diffMinutes = diffSeconds / 60
+    val diffHours = diffMinutes / 60
+    val diffDays = diffHours / 24
+    
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val timeStr = timeFormat.format(date.time)
+    
+    return when {
+        diffSeconds < 60 -> "just now"
+        diffMinutes < 60 -> "$diffMinutes minutes ago"
+        now.get(Calendar.YEAR) == date.get(Calendar.YEAR) && now.get(Calendar.DAY_OF_YEAR) == date.get(Calendar.DAY_OF_YEAR) -> "${strings.lastSeenAt} $timeStr"
+        else -> {
+            val yesterday = Calendar.getInstance().apply { 
+                timeInMillis = now.timeInMillis
+                add(Calendar.DAY_OF_YEAR, -1)
+            }
+            if (yesterday.get(Calendar.YEAR) == date.get(Calendar.YEAR) && yesterday.get(Calendar.DAY_OF_YEAR) == date.get(Calendar.DAY_OF_YEAR)) {
+                "last seen yesterday at $timeStr"
+            } else if (diffDays < 7) {
+                "last seen $diffDays days ago"
+            } else if (diffDays < 30) {
+                val weeks = diffDays / 7
+                if (weeks <= 1) "last seen a week ago" else "last seen $weeks weeks ago"
+            } else if (diffDays < 365) {
+                val months = diffDays / 30
+                if (months <= 1) "last seen a month ago" else "last seen $months months ago"
+            } else {
+                "last seen a long time ago"
+            }
+        }
+    }
+}
 
 @Immutable
 class TelegramBubbleShape(
@@ -1033,19 +1076,9 @@ private fun ChatPane(
         if (selectedChat == null) return@remember ""
         if (typingText != null) return@remember typingText
         if (selectedChat.chatType == "private") {
-            if (isOnline) strings.membersOnline 
-            else {
-                val lastSeen = profileUser?.lastSeen
-                if (lastSeen != null && lastSeen > 0) {
-                    val date = java.util.Date(lastSeen * 1000L)
-                    val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(date)
-                    "${strings.lastSeenAt} $time"
-                } else {
-                    strings.lastSeenRecently
-                }
-            }
-        } else {
-            val total = selectedChat.memberIds.size
+            if (isOnline) strings.membersOnline
+            else formatLastSeen(profileUser?.lastSeen, strings)
+        } else {            val total = selectedChat.memberIds.size
             val totalStr = localizeDigits(total.toString(), strings.languageCode)
             val onlineStr = localizeDigits(onlineCount.toString(), strings.languageCode)
             val rawSubtitle = if (onlineCount > 0) "$totalStr ${strings.membersCount}${strings.comma} $onlineStr ${strings.membersOnline}" else "$totalStr ${strings.membersCount}"
@@ -2393,16 +2426,7 @@ private fun ProfileModal(
                             }
                             val lastSeenText = remember(user, strings) {
                                 if (user.isOnline) "online"
-                                else {
-                                    val lastSeen = user.lastSeen
-                                    if (lastSeen != null && lastSeen > 0) {
-                                        val date = java.util.Date(lastSeen * 1000L)
-                                        val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(date)
-                                        "${strings.lastSeenAt} $time"
-                                    } else {
-                                        "last seen recently"
-                                    }
-                                }
+                                else formatLastSeen(user.lastSeen, strings)
                             }
                             Text(
                                 lastSeenText, 
@@ -2436,16 +2460,7 @@ private fun ProfileModal(
                             }
                             val lastSeenText = remember(user, strings) {
                                 if (user.isOnline) "online"
-                                else {
-                                    val lastSeen = user.lastSeen
-                                    if (lastSeen != null && lastSeen > 0) {
-                                        val date = java.util.Date(lastSeen * 1000L)
-                                        val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(date)
-                                        "${strings.lastSeenAt} $time"
-                                    } else {
-                                        "last seen recently"
-                                    }
-                                }
+                                else formatLastSeen(user.lastSeen, strings)
                             }
                             Text(
                                 lastSeenText,
@@ -2564,16 +2579,7 @@ private fun GroupInfoModal(
                                     }
                                     val lastSeenText = remember(user, strings) {
                                         if (user?.isOnline == true) "online"
-                                        else {
-                                            val lastSeen = user?.lastSeen
-                                            if (lastSeen != null && lastSeen > 0) {
-                                                val date = java.util.Date(lastSeen * 1000L)
-                                                val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(date)
-                                                "${strings.lastSeenAt} $time"
-                                            } else {
-                                                "last seen recently"
-                                            }
-                                        }
+                                        else formatLastSeen(user?.lastSeen, strings)
                                     }
                                     Text(
                                         lastSeenText, 

@@ -324,7 +324,7 @@ class NoveoApi(
         val builder = Request.Builder()
             .url(url)
             .header("Origin", origin)
-            .header("User-Agent", "NoveoKotlin/0.4.0")
+            .header("User-Agent", "NoveoKotlin/0.4.5")
         if (session != null) {
             builder.header("X-User-ID", session.userId)
             builder.header("X-Auth-Token", session.token)

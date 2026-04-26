@@ -497,12 +497,12 @@ private fun CaptchaModal(
                                         onToken(url.substringAfter("token="))
                                         return true
                                     }
+                                    // Allow external URLs to load in the WebView
                                     return false
                                 }
 
                                 override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
                                     super.onPageFinished(view, url)
-                                    // Handle captcha-parent-auth if needed via JS injection or postMessage
                                 }
                             }
                             
@@ -515,8 +515,8 @@ private fun CaptchaModal(
                                 @android.webkit.JavascriptInterface
                                 fun notifyParent(dataJson: String) {
                                     val data = org.json.JSONObject(dataJson)
-                                    if (data.optString("type") == "captcha-frame-ready") {
-                                         // Post auth headers if needed
+                                    val type = data.optString("type")
+                                    if (type == "captcha-frame-ready" || type == "captcha-ready") {
                                          val authHeaders = org.json.JSONObject()
                                          if (session != null) {
                                              authHeaders.put("X-User-ID", session.userId)
@@ -529,14 +529,19 @@ private fun CaptchaModal(
                                          post {
                                              evaluateJavascript("window.postMessage($msg, '*')", null)
                                          }
+                                    } else if (type == "captcha-solved") {
+                                        val token = data.optString("solveToken")
+                                        if (token.isNotBlank()) {
+                                            onToken(token)
+                                        }
+                                    } else if (type == "captcha-cancelled" || type == "captcha-failed") {
+                                        post { onDismiss() }
                                     }
                                 }
                             }, "Android")
 
                             val baseUrl = "https://web.noveo.ir/puzzle.php"
                             val fullUrl = android.net.Uri.parse(baseUrl).buildUpon()
-                                .appendQueryParameter("client", "kotlin")
-                                .appendQueryParameter("platform", "android")
                                 .apply { if (sessionId != null) appendQueryParameter("captchaSessionId", sessionId) }
                                 .build().toString()
 
@@ -546,6 +551,7 @@ private fun CaptchaModal(
                                 headers["X-Auth-Token"] = session.token
                             }
                             headers["X-Noveo-Client"] = "kotlin"
+                            headers["User-Agent"] = "NoveoKotlin/0.4.5"
 
                             loadUrl(fullUrl, headers)
                         }
