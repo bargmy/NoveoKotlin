@@ -159,8 +159,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.lerp
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.material3.lerp
+import androidx.compose.ui.text.lerp
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import ir.hienob.noveo.R
@@ -178,7 +180,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.4.1 Kotlin"
+private const val CLIENT_VERSION = "v0.4.3 Kotlin"
 
 @Immutable
 class TelegramBubbleShape(
@@ -2202,25 +2204,104 @@ private fun ProfileModal(
     onClose: () -> Unit,
     onMessage: () -> Unit
 ) {
-    Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                HeaderIconButton(icon = Icons.Outlined.Close, onClick = onClose)
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    
+    val expandedHeight = 220.dp
+    val collapsedHeight = 56.dp
+    val expandedHeightPx = with(density) { expandedHeight.toPx() }
+    val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
+    
+    val scrollOffset = remember { derivedStateOf { 
+        if (listState.firstVisibleItemIndex > 0) 1f 
+        else (listState.firstVisibleItemScrollOffset.toFloat() / (expandedHeightPx - collapsedHeightPx)).coerceIn(0f, 1f)
+    } }
+    
+    val fraction = scrollOffset.value
+    
+    Surface(
+        shape = RoundedCornerShape(28.dp),
+        tonalElevation = 4.dp,
+        modifier = Modifier.fillMaxWidth().height(500.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = expandedHeight)
+            ) {
+                item {
+                    Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        DetailCard(
+                            title = strings.mutualChatState,
+                            body = if (findDirectChatForUser(chats, selfUserId, user.id) != null) strings.chatFound else strings.chatNotFound
+                        )
+                        Button(onClick = onMessage, modifier = Modifier.fillMaxWidth()) { Text(strings.messageButton) }
+                        
+                        // Add some spacer to allow scrolling
+                        Spacer(Modifier.height(400.dp))
+                    }
+                }
             }
-            ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = 96.dp)
-            Spacer(Modifier.height(12.dp))
-            Text(user.username, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Text(user.handle ?: strings.noHandle, style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(12.dp))
-            Text(user.bio.ifBlank { strings.noMessagesYet }, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(18.dp))
-            DetailCard(
-                title = strings.mutualChatState,
-                body = if (findDirectChatForUser(chats, selfUserId, user.id) != null) strings.chatFound else strings.chatNotFound
-            )
-            Spacer(Modifier.height(14.dp))
-            Button(onClick = onMessage, modifier = Modifier.fillMaxWidth()) { Text(strings.messageButton) }
+            
+            // Collapsing Header
+            Surface(
+                modifier = Modifier.fillMaxWidth().height(lerp(expandedHeight, collapsedHeight, fraction)),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = lerp(0.dp, 4.dp, fraction)
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Close Button
+                    HeaderIconButton(
+                        icon = Icons.Outlined.Close,
+                        onClick = onClose,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                    )
+                    
+                    // Avatar and Name
+                    val avatarSize = lerp(96.dp, 36.dp, fraction)
+                    val avatarOffsetX = lerp(0.dp, (-140).dp, fraction) // Adjust based on screen width roughly
+                    val avatarOffsetY = lerp(20.dp, 0.dp, fraction)
+                    
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Box(modifier = Modifier.offset(x = avatarOffsetX, y = avatarOffsetY)) {
+                            ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = avatarSize)
+                        }
+                        
+                        if (fraction < 0.8f) {
+                            Spacer(Modifier.height(lerp(12.dp, 0.dp, fraction)))
+                            Text(
+                                user.username, 
+                                style = lerp(MaterialTheme.typography.headlineSmall, MaterialTheme.typography.titleMedium, fraction),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.alpha(1f - fraction)
+                            )
+                            Text(
+                                user.handle ?: strings.noHandle, 
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.alpha(1f - fraction)
+                            )
+                        }
+                    }
+                    
+                    // Title in collapsed state
+                    if (fraction > 0.5f) {
+                        Text(
+                            user.username,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .padding(start = 64.dp)
+                                .alpha(lerp(0f, 1f, (fraction - 0.5f) * 2))
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -2231,43 +2312,118 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
         if (chat.title == "Saved Messages") strings.savedMessages
         else chat.title.ifBlank { strings.chatInfo }
     }
+    
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    
+    val expandedHeight = 220.dp
+    val collapsedHeight = 56.dp
+    val expandedHeightPx = with(density) { expandedHeight.toPx() }
+    val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
+    
+    val scrollOffset = remember { derivedStateOf { 
+        if (listState.firstVisibleItemIndex > 0) 1f 
+        else (listState.firstVisibleItemScrollOffset.toFloat() / (expandedHeightPx - collapsedHeightPx)).coerceIn(0f, 1f)
+    } }
+    
+    val fraction = scrollOffset.value
+    
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            ModalHeader(title = chatTitle, onClose = onClose)
-            Column(modifier = Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = 96.dp)
-                Spacer(Modifier.height(12.dp))
-                Text(chatTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
-                Text(chat.chatType.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(18.dp))
-                DetailRow(strings.members, localizeDigits(chat.memberIds.size.toString(), strings.languageCode))
-                Spacer(Modifier.height(10.dp))
-                if (chat.memberIds.isNotEmpty()) {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(top = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(chat.memberIds, key = { it }) { memberId ->
-                            val user = usersById[memberId]
-                            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                                Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    ProfileCircle(name = user?.username ?: memberId, imageUrl = user?.avatarUrl, size = 40.dp)
-                                    Spacer(Modifier.width(10.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(user?.username ?: memberId, fontWeight = FontWeight.SemiBold)
-                                            if (user?.isVerified == true) {
-                                                Spacer(Modifier.width(4.dp))
-                                                VerifiedIcon(modifier = Modifier.size(14.dp))
-                                            }
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = expandedHeight)
+            ) {
+                item {
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)) {
+                        DetailRow(strings.members, localizeDigits(chat.memberIds.size.toString(), strings.languageCode))
+                        Spacer(Modifier.height(10.dp))
+                    }
+                }
+                
+                items(chat.memberIds, key = { it }) { memberId ->
+                    val user = usersById[memberId]
+                    Box(modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
+                        Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                ProfileCircle(name = user?.username ?: memberId, imageUrl = user?.avatarUrl, size = 40.dp)
+                                Spacer(Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(user?.username ?: memberId, fontWeight = FontWeight.SemiBold)
+                                        if (user?.isVerified == true) {
+                                            Spacer(Modifier.width(4.dp))
+                                            VerifiedIcon(modifier = Modifier.size(14.dp))
                                         }
-                                        Text(user?.handle ?: user?.bio?.ifBlank { memberId } ?: memberId, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
+                                    Text(user?.handle ?: user?.bio?.ifBlank { memberId } ?: memberId, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                         }
+                    }
+                }
+                
+                item {
+                    Spacer(Modifier.height(20.dp))
+                }
+            }
+            
+            // Collapsing Header
+            Surface(
+                modifier = Modifier.fillMaxWidth().height(lerp(expandedHeight, collapsedHeight, fraction)),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = lerp(0.dp, 4.dp, fraction)
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Close Button
+                    HeaderIconButton(
+                        icon = Icons.Outlined.Close,
+                        onClick = onClose,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                    )
+                    
+                    // Avatar and Name
+                    val avatarSize = lerp(96.dp, 36.dp, fraction)
+                    val avatarOffsetX = lerp(0.dp, (-140).dp, fraction)
+                    val avatarOffsetY = lerp(20.dp, 0.dp, fraction)
+                    
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Box(modifier = Modifier.offset(x = avatarOffsetX, y = avatarOffsetY)) {
+                            ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize)
+                        }
+                        
+                        if (fraction < 0.8f) {
+                            Spacer(Modifier.height(lerp(12.dp, 0.dp, fraction)))
+                            Text(
+                                chatTitle, 
+                                style = lerp(MaterialTheme.typography.headlineSmall, MaterialTheme.typography.titleMedium, fraction),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.alpha(1f - fraction)
+                            )
+                            Text(
+                                chat.chatType.replaceFirstChar { it.uppercase() }, 
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.alpha(1f - fraction)
+                            )
+                        }
+                    }
+                    
+                    // Title in collapsed state
+                    if (fraction > 0.5f) {
+                        Text(
+                            chatTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .padding(start = 64.dp)
+                                .alpha(lerp(0f, 1f, (fraction - 0.5f) * 2))
+                        )
                     }
                 }
             }
