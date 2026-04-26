@@ -2242,7 +2242,7 @@ private fun ProfileModal(
                             elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
                         ) {
                             Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                InfoItem(label = strings.username, value = user.username)
+                                InfoItem(label = strings.displayName, value = user.username)
                                 if (!user.handle.isNullOrBlank()) {
                                     InfoItem(label = "Handle", value = user.handle)
                                 }
