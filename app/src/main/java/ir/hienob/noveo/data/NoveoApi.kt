@@ -57,23 +57,22 @@ class NoveoApi(
         mimeType: String,
         onProgress: (Float) -> Unit
     ): MessageFileAttachment {
-        val url = "https://web.noveo.ir/puzzle.php?proxy=1&target=/upload/file".toHttpUrl()
+        val url = "https://noveo.ir:8443/upload/file".toHttpUrl()
         
         // Custom request body to track progress
         val requestBody = object : okhttp3.RequestBody() {
             override fun contentType() = mimeType.toMediaType()
             override fun contentLength() = fileData.size.toLong()
             override fun writeTo(sink: okio.BufferedSink) {
-                val bufferSize = 4096
-                var uploaded = 0L
                 val total = contentLength()
+                var uploaded = 0L
+                val buffer = ByteArray(4096)
+                val inputStream = fileData.inputStream()
                 
-                var i = 0
-                while (i < fileData.size) {
-                    val size = minOf(bufferSize, fileData.size - i)
-                    sink.write(fileData, i, size)
-                    i += size
-                    uploaded += size
+                var read: Int
+                while (inputStream.read(buffer).also { read = it } != -1) {
+                    sink.write(buffer, 0, read)
+                    uploaded += read
                     onProgress(uploaded.toFloat() / total)
                 }
             }
@@ -88,12 +87,15 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
-            .header("X-Noveo-Client", "kotlin")
+            .header("User-Agent", "NoveoKotlin/0.4.0")
             .post(multipartBody)
             .build()
 
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("Upload failed (${response.code})")
+            if (!response.isSuccessful) {
+                val errBody = response.body?.string().orEmpty()
+                error("Upload failed (${response.code}): $errBody")
+            }
             val payload = JSONObject(response.body?.string().orEmpty())
             if (!payload.optBoolean("success", false)) error(payload.optString("error", "Unknown error"))
             
@@ -101,7 +103,8 @@ class NoveoApi(
             return MessageFileAttachment(
                 url = fileJson.optString("url"),
                 name = fileJson.optString("name"),
-                type = fileJson.optString("type")
+                type = fileJson.optString("type"),
+                size = fileJson.optLong("size", 0L)
             )
         }
     }

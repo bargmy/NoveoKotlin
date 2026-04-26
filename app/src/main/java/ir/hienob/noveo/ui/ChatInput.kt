@@ -89,7 +89,9 @@ internal fun ChatInput(
     onCancelReply: () -> Unit = {},
     placeholder: String = "Message",
     onAttachClick: () -> Unit = {},
+    onLongAttachClick: () -> Unit = {},
     onPasteUri: (android.net.Uri) -> Unit = {},
+    hasAttachment: Boolean = false,
     colors: ChatInputColors = ChatInputColors(
         fieldTop = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
         fieldBottom = MaterialTheme.colorScheme.surfaceVariant,
@@ -207,6 +209,7 @@ internal fun ChatInput(
                         tint = colors.iconTint,
                         selectorTint = colors.selectorTint,
                         onClick = onAttachClick,
+                        onLongClick = onLongAttachClick,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 1.dp, bottom = 1.dp)
@@ -303,7 +306,7 @@ internal fun ChatInput(
                 )
 
                 AnimatedContent(
-                    targetState = draft.isBlank(),
+                    targetState = draft.isBlank() && !hasAttachment,
                     transitionSpec = {
                         (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut())
                     },
@@ -418,6 +421,7 @@ private fun GlassIconButton(
     tint: Color,
     selectorTint: Color,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -427,10 +431,11 @@ private fun GlassIconButton(
             .size(38.dp)
             .clip(CircleShape)
             .background(selectorTint, CircleShape)
-            .clickable(
+            .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick
+                onClick = onClick,
+                onLongClick = onLongClick
             ),
         contentAlignment = Alignment.Center
     ) {

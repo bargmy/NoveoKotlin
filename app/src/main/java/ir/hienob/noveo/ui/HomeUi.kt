@@ -172,7 +172,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.4.0 Kotlin"
+private const val CLIENT_VERSION = "v0.4.1 Kotlin"
 private val TelegramComposerBlue = Color(0xFF229AF0)
 private val TelegramComposerPanel = Color(0xFFF6F7F8)
 private val TelegramComposerField = Color.White
@@ -887,8 +887,14 @@ private fun ChatPane(
     )
     val scope = rememberCoroutineScope()
 
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri?.let { onAttachFile(it) }
+    }
+
     val filePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let { onAttachFile(it) }
     }
@@ -1106,8 +1112,16 @@ private fun ChatPane(
                     replyingTo = state.replyingToMessage,
                     onCancelReply = { onReply(null) },
                     placeholder = strings.messagePlaceholder,
-                    onAttachClick = { filePicker.launch("*/*") },
+                    onAttachClick = { 
+                        // Modern pickers usually triggered separately, but we can default to photo or show a dialog
+                        // User wants "down side" picker, PickVisualMedia is exactly that
+                        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                    },
+                    onLongAttachClick = {
+                        filePicker.launch(arrayOf("*/*"))
+                    },
                     onPasteUri = { onAttachFile(it) },
+                    hasAttachment = state.pendingAttachment != null,
                     onActionClick = {
                         val text = draft.trim()
                         if (text.isNotBlank() || state.pendingAttachment != null) {
