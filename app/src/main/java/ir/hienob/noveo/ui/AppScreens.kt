@@ -69,12 +69,12 @@ internal enum class ThemePreset(val label: String) {
 private val sunsetLightScheme = lightColorScheme(
     primary = Color(0xFFEA580C),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFEDD5),
+    primaryContainer = Color(0xFFFFF7ED),
     onPrimaryContainer = Color(0xFF431407),
     secondary = Color(0xFFFB923C),
     background = Color(0xFFFFF7ED),
     surface = Color(0xFFFFFAF5),
-    surfaceVariant = Color(0xFFFFEDD5),
+    surfaceVariant = Color(0xFFFDE6D7),
     onSurface = Color(0xFF431407),
     onSurfaceVariant = Color(0xFF7C2D12),
     outline = Color(0xFFFDBA74)

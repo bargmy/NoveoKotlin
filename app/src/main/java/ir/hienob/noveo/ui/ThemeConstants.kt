@@ -21,7 +21,7 @@ fun telegramColors(): TelegramThemeColors {
             composerDivider = colorScheme.outlineVariant,
             composerText = colorScheme.onSurface,
             composerCursor = colorScheme.primary,
-            chatSurface = colorScheme.surfaceVariant.copy(alpha = 0.3f), 
+            chatSurface = Color(0xFFEBEDF0), // Standard neutral light Telegram-ish gray
             headerTitle = colorScheme.onSurface,
             headerSubtitle = colorScheme.onSurfaceVariant,
             headerIcon = colorScheme.onSurfaceVariant,

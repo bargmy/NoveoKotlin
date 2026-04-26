@@ -1053,7 +1053,10 @@ private fun ChatPane(
     
     val showScrollToBottom by remember {
         derivedStateOf {
-            listState.firstVisibleItemIndex > 5
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalItems - lastVisibleItem > 5
         }
     }
 
@@ -1275,7 +1278,15 @@ private fun ChatPane(
                 modifier = Modifier
                     .size(42.dp)
                     .clickable { 
-                        scope.launch { listState.animateScrollToItem(state.messages.lastIndex) }
+                        scope.launch { 
+                            if (state.messages.isNotEmpty()) {
+                                val targetIndex = state.messages.lastIndex
+                                if (listState.firstVisibleItemIndex < targetIndex - 20) {
+                                    listState.scrollToItem(targetIndex - 10)
+                                }
+                                listState.animateScrollToItem(targetIndex)
+                            }
+                        }
                     },
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surface,

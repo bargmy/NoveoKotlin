@@ -69,7 +69,8 @@ data class AppUiState(
     val notificationSettings: NotificationSettings = NotificationSettings(),
     val isBatteryOptimized: Boolean = true,
     val captchaInfo: CaptchaInfo? = null,
-    val pendingAttachment: PendingAttachment? = null
+    val pendingAttachment: PendingAttachment? = null,
+    val directRecipientId: String? = null
 )
 
 data class PendingAttachment(
@@ -405,15 +406,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openDirectChat(userId: String) {
         val state = _uiState.value
-        val existingChat = state.chats.firstOrNull { chat ->
-            chat.chatType == "private" && chat.memberIds.contains(userId)
-        }
-        if (existingChat != null) {
-            openChat(existingChat.id)
-            return
-        }
+        val selfId = state.session?.userId ?: return
         
-        createChat(name = "Direct Chat", type = "private", handle = null, bio = null)
+        val chatId = listOf(selfId, userId).sorted().joinToString("_")
+        val existingChat = state.chats.firstOrNull { it.id == chatId }
+        
+        if (existingChat != null) {
+            _uiState.value = _uiState.value.copy(directRecipientId = null)
+            openChat(chatId)
+        } else {
+            // Create a synthetic chat summary to show in the UI
+            val user = state.usersById[userId]
+            val syntheticChat = ChatSummary(
+                id = chatId,
+                chatType = "private",
+                title = user?.username ?: "Direct Chat",
+                avatarUrl = user?.avatarUrl,
+                memberIds = listOf(selfId, userId),
+                canChat = true
+            )
+            
+            _uiState.value = _uiState.value.copy(
+                chats = state.chats + syntheticChat,
+                selectedChatId = chatId,
+                messages = emptyList(),
+                directRecipientId = userId
+            )
+        }
     }
 
     fun onCaptchaTokenReceived(token: String) {
@@ -563,6 +582,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         .put("content", contentObj.toString())
                         .put("replyToId", replyingTo?.id)
                         .put("clientTempId", tempId)
+                    
+                    val directRecipient = _uiState.value.directRecipientId
+                    if (directRecipient != null) {
+                        payload.put("recipientId", directRecipient)
+                    }
 
                     NoveoNotificationService.send(payload)
                 }
