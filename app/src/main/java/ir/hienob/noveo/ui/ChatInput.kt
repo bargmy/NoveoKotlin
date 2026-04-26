@@ -50,6 +50,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import coil3.compose.SubcomposeAsyncImage
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -259,10 +261,14 @@ internal fun ChatInput(
                                     arrayOf("image/*", "video/*", "application/*", "text/*"),
                                     object : androidx.core.view.OnReceiveContentListener {
                                         override fun onReceiveContent(view: android.view.View, payload: androidx.core.view.ContentInfoCompat): androidx.core.view.ContentInfoCompat? {
-                                            val (uriPart, remaining) = payload.partition { it.uri != null }
-                                            uriPart?.let {
-                                                for (i in 0 until it.itemCount) {
-                                                    it.getItemAt(i).uri?.let { uri -> onPasteUri(uri) }
+                                            val split = payload.partition { it.uri != null }
+                                            val uriPart = split.first
+                                            val remaining = split.second
+                                            
+                                            if (uriPart != null) {
+                                                val clip = uriPart.clip
+                                                for (i in 0 until clip.itemCount) {
+                                                    clip.getItemAt(i).uri?.let { uri -> onPasteUri(uri) }
                                                 }
                                             }
                                             return remaining
@@ -352,7 +358,7 @@ internal fun AttachmentPreview(
                 contentAlignment = Alignment.Center
             ) {
                 if (attachment.mimeType.startsWith("image/")) {
-                    coil.compose.AsyncImage(
+                    AsyncImage(
                         model = attachment.uri,
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),

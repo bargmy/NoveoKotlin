@@ -63,6 +63,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Bookmark
@@ -1109,13 +1110,14 @@ private fun ChatPane(
                     onPasteUri = { onAttachFile(it) },
                     onActionClick = {
                         val text = draft.trim()
-                        if (text.isBlank() && state.pendingAttachment == null) return@onActionClick
-                        onSend(text)
-                        draft = ""
-                        sendPulse = true
-                        scope.launch {
-                            delay(220)
-                            sendPulse = false
+                        if (text.isNotBlank() || state.pendingAttachment != null) {
+                            onSend(text)
+                            draft = ""
+                            sendPulse = true
+                            scope.launch {
+                                delay(220)
+                                sendPulse = false
+                            }
                         }
                     }
                 )
