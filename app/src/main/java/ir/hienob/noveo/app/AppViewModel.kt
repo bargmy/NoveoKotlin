@@ -581,7 +581,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 persistCachedHomeState()
 
                 withContext(Dispatchers.IO) {
-                    api.sendMessage(session, chatId, text, uploadedFile, tempId, replyingTo?.id)
+                    val contentObj = org.json.JSONObject().put("text", text.takeIf { it.isNotBlank() })
+                    if (uploadedFile != null) {
+                        contentObj.put("file", org.json.JSONObject()
+                            .put("url", uploadedFile.url)
+                            .put("name", uploadedFile.name)
+                            .put("type", uploadedFile.type)
+                            .put("size", uploadedFile.size))
+                    }
+
+                    val payload = org.json.JSONObject()
+                        .put("type", "message")
+                        .put("chatId", chatId)
+                        .put("content", contentObj.toString())
+                        .put("replyToId", replyingTo?.id)
+                        .put("clientTempId", tempId)
+
+                    NoveoNotificationService.send(payload)
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -728,7 +744,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun loadHome(session: Session) {
-        startSocketResyncLoop()
+        // startSocketResyncLoop() removed to avoid churn
         
         // Only load non-socket features via HTTP
         runCatching {
@@ -768,18 +784,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun refreshSelectedChat(session: Session, chatId: String, reason: String) {
         // We now rely on WebSocket for real-time updates.
         // If a specific refresh is needed, we could send a targeted message sync request via socket.
-    }
-
-    private fun startSocketResyncLoop() {
-        if (socketResyncJob?.isActive == true) return
-        socketResyncJob = viewModelScope.launch {
-            while (true) {
-                delay(15000)
-                if (_uiState.value.session != null) {
-                    refreshHomeSilently()
-                }
-            }
-        }
     }
 
     private fun handleIncomingMessage(msg: ChatMessage) {
