@@ -6,60 +6,65 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 
 @Composable
-fun telegramColors() = if (MaterialTheme.colorScheme.primary.luminance() < 0.5f) {
-    // Light Theme
-    TelegramThemeColors(
-        composerBlue = Color(0xFF229AF0),
-        composerPanel = Color(0xFFF6F7F8),
-        composerField = Color.White,
-        composerIcon = Color(0xFF7A8591),
-        composerHint = Color(0xFF7A8591),
-        composerDivider = Color(0x14000000),
-        composerText = Color(0xFF000000),
-        composerCursor = Color(0xFF459DE1),
-        chatSurface = Color(0xFF91A8C0),
-        headerTitle = Color(0xFF333333),
-        headerSubtitle = Color(0xFF797979),
-        headerIcon = Color(0xFF6B7A8C),
-        incomingBubble = Color(0xFFFFFFFF),
-        incomingBubbleSelected = Color(0xFFF2F2F2),
-        outgoingBubble = Color(0xFFEFFDDE),
-        outgoingBubbleSelected = Color(0xFFD9F7C5),
-        incomingText = Color(0xFF222222),
-        incomingLink = Color(0xFF127ACA),
-        incomingTime = Color(0xFF939599),
-        outgoingText = Color(0xFF222222),
-        outgoingTime = Color(0xFF66A060),
-        replyIncoming = Color(0xFFD8E8F7),
-        replyOutgoing = Color(0x80FFFFFF)
-    )
-} else {
-    // Dark Theme
-    TelegramThemeColors(
-        composerBlue = Color(0xFF3F96D8),
-        composerPanel = Color(0xFF1C242D),
-        composerField = Color(0xFF1C242D),
-        composerIcon = Color(0xFFA1AAB3),
-        composerHint = Color(0xFFA1AAB3),
-        composerDivider = Color(0x28FFFFFF),
-        composerText = Color(0xFFFFFFFF),
-        composerCursor = Color(0xFF5288C1),
-        chatSurface = Color(0xFF0E1621),
-        headerTitle = Color(0xFFFFFFFF),
-        headerSubtitle = Color(0xFFA1AAB3),
-        headerIcon = Color(0xFFA1AAB3),
-        incomingBubble = Color(0xFF182533),
-        incomingBubbleSelected = Color(0xFF243343),
-        outgoingBubble = Color(0xFF2B5278),
-        outgoingBubbleSelected = Color(0xFF3E668D),
-        incomingText = Color(0xFFFFFFFF),
-        incomingLink = Color(0xFF64B5EF),
-        incomingTime = Color(0xFFA1AAB3),
-        outgoingText = Color(0xFFFFFFFF),
-        outgoingTime = Color(0xFFA1AAB3),
-        replyIncoming = Color(0xFF243343),
-        replyOutgoing = Color(0x28FFFFFF)
-    )
+fun telegramColors(): TelegramThemeColors {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val colorScheme = MaterialTheme.colorScheme
+    
+    return if (!isDark) {
+        // Light Theme (using colorScheme to sync with user theme)
+        TelegramThemeColors(
+            composerBlue = colorScheme.primary,
+            composerPanel = colorScheme.surfaceVariant,
+            composerField = colorScheme.surface,
+            composerIcon = colorScheme.onSurfaceVariant,
+            composerHint = colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            composerDivider = colorScheme.outlineVariant,
+            composerText = colorScheme.onSurface,
+            composerCursor = colorScheme.primary,
+            chatSurface = colorScheme.secondaryContainer.copy(alpha = 0.4f), 
+            headerTitle = colorScheme.onSurface,
+            headerSubtitle = colorScheme.onSurfaceVariant,
+            headerIcon = colorScheme.onSurfaceVariant,
+            incomingBubble = colorScheme.surface,
+            incomingBubbleSelected = colorScheme.surfaceVariant,
+            outgoingBubble = colorScheme.primaryContainer,
+            outgoingBubbleSelected = colorScheme.primaryContainer.copy(alpha = 0.8f),
+            incomingText = colorScheme.onSurface,
+            incomingLink = colorScheme.primary,
+            incomingTime = colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            outgoingText = colorScheme.onPrimaryContainer,
+            outgoingTime = colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+            replyIncoming = colorScheme.surfaceVariant,
+            replyOutgoing = colorScheme.onPrimaryContainer.copy(alpha = 0.1f)
+        )
+    } else {
+        // Dark Theme (using colorScheme to sync with user theme)
+        TelegramThemeColors(
+            composerBlue = colorScheme.primary,
+            composerPanel = colorScheme.surface,
+            composerField = colorScheme.surface,
+            composerIcon = colorScheme.onSurfaceVariant,
+            composerHint = colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            composerDivider = colorScheme.outline,
+            composerText = colorScheme.onSurface,
+            composerCursor = colorScheme.primary,
+            chatSurface = colorScheme.background,
+            headerTitle = colorScheme.onSurface,
+            headerSubtitle = colorScheme.onSurfaceVariant,
+            headerIcon = colorScheme.onSurfaceVariant,
+            incomingBubble = colorScheme.surfaceVariant,
+            incomingBubbleSelected = colorScheme.surfaceVariant.copy(alpha = 0.8f),
+            outgoingBubble = colorScheme.primary,
+            outgoingBubbleSelected = colorScheme.primary.copy(alpha = 0.8f),
+            incomingText = colorScheme.onSurfaceVariant,
+            incomingLink = colorScheme.primaryContainer,
+            incomingTime = colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            outgoingText = colorScheme.onPrimary,
+            outgoingTime = colorScheme.onPrimary.copy(alpha = 0.7f),
+            replyIncoming = colorScheme.surface,
+            replyOutgoing = colorScheme.onPrimary.copy(alpha = 0.1f)
+        )
+    }
 }
 
 data class TelegramThemeColors(

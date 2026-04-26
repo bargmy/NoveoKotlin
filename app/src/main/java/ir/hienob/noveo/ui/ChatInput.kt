@@ -9,7 +9,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -227,8 +229,15 @@ internal fun ChatInput(
                     AnimatedContent(
                         targetState = draft.isBlank() && !hasAttachment,
                         transitionSpec = { 
-                            (scaleIn(animationSpec = tween(150)) + fadeIn(animationSpec = tween(150)))
-                                .togetherWith(scaleOut(animationSpec = tween(150)) + fadeOut(animationSpec = tween(150))) 
+                            if (targetState) {
+                                // Transition to Mic: slide out paperplane to top right, slide in mic from bottom
+                                (slideInVertically { it } + fadeIn()) togetherWith 
+                                (slideOutVertically { -it } + slideOutHorizontally { it } + fadeOut())
+                            } else {
+                                // Transition to Send: fly in paperplane from bottom left
+                                (slideInVertically { it } + slideInHorizontally { -it } + fadeIn(tween(250))) togetherWith 
+                                (scaleOut(tween(150)) + fadeOut(tween(150)))
+                            }
                         },
                         label = "send_icon_animation"
                     ) { isBlank ->
@@ -270,16 +279,26 @@ internal fun AttachmentPreview(
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
-                if (attachment.mimeType.startsWith("image/")) {
-                    AsyncImage(
+                if (attachment.mimeType.startsWith("image/") || attachment.mimeType.startsWith("video/")) {
+                    SubcomposeAsyncImage(
                         model = attachment.uri,
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Crop,
+                        loading = {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        error = {
+                            Icon(Icons.Outlined.Close, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        }
                     )
                 } else {
                     Icon(
-                        imageVector = Icons.Outlined.Close,
+                        imageVector = Icons.Outlined.Close, // Using Close as a generic file icon placeholder
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )

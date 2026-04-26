@@ -7,11 +7,13 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -942,13 +944,7 @@ private fun ChatPane(
     modifier: Modifier = Modifier
 ) {
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
-    var sendPulse by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    val sendScale by animateFloatAsState(
-        targetValue = if (sendPulse) 1.18f else 1f,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "send_button_scale"
-    )
     val scope = rememberCoroutineScope()
 
     val photoPicker = rememberLauncherForActivityResult(
@@ -1127,7 +1123,8 @@ private fun ChatPane(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .height(100.dp)
+                .height(140.dp) // Increased height to cover under the input
+                .offset(y = 45.dp) // Offset so top is roughly at center of chat input
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(Color.Transparent, tgColors.chatSurface.copy(alpha = 0.8f), tgColors.chatSurface),
@@ -1135,7 +1132,7 @@ private fun ChatPane(
                         endY = Float.POSITIVE_INFINITY
                     )
                 )
-                .pointerInput(Unit) {} // Ensure it doesn't intercept touches if not needed
+                .pointerInput(Unit) {} 
         )
 
         // 2. Headbar Layer (ActionBar)
@@ -1223,11 +1220,11 @@ private fun ChatPane(
                     }
                     ChatInput(
                         draft = draft,
-                        onDraftChange = { 
+                        onDraftChange = {
                             draft = it
                             onTyping()
                         },
-                        sendScale = sendScale,
+                        sendScale = 1f,
                         replyingTo = state.replyingToMessage,
                         onCancelReply = { onReply(null) },
                         placeholder = strings.messagePlaceholder,
@@ -1245,11 +1242,6 @@ private fun ChatPane(
                             if (text.isNotBlank() || state.pendingAttachment != null) {
                                 onSend(text)
                                 draft = ""
-                                sendPulse = true
-                                scope.launch {
-                                    delay(220)
-                                    sendPulse = false
-                                }
                             }
                         }
                     )
@@ -1311,10 +1303,10 @@ private fun MessageRow(
 
     LaunchedEffect(message.id) {
         if (ownMessage && message.pending) {
-            launch { animAlpha.animateTo(1f, tween(140)) }
-            launch { animOffsetY.animateTo(0f, tween(220, easing = FastOutSlowInEasing)) }
-            launch { animOffsetX.animateTo(0f, tween(220, easing = FastOutSlowInEasing)) }
-            launch { animScale.animateTo(1f, tween(220, easing = FastOutSlowInEasing)) }
+            launch { animAlpha.animateTo(1f, tween(200)) }
+            launch { animOffsetY.animateTo(0f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)) }
+            launch { animOffsetX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)) }
+            launch { animScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)) }
         }
     }
 
@@ -1386,14 +1378,6 @@ private fun MessageRow(
                 horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
                 modifier = if (ownMessage) Modifier else Modifier.weight(1f, false)
             ) {
-                if (!ownMessage && isGroupChat && showSenderInfo) {
-                    Text(
-                        message.senderName,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                        color = tgColors.incomingLink,
-                        modifier = Modifier.padding(start = 12.dp, bottom = 2.dp)
-                    )
-                }
                 Surface(
                     modifier = Modifier.widthIn(max = 300.dp),
                     shape = TelegramBubbleShape(
@@ -1411,6 +1395,14 @@ private fun MessageRow(
                 ) {
                     val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
                     Column(modifier = Modifier.padding(if (hasVisualMedia) 3.dp else 6.dp).padding(horizontal = 4.dp)) {
+                        if (!ownMessage && isGroupChat && showSenderInfo) {
+                            Text(
+                                message.senderName,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                                color = tgColors.incomingLink,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                            )
+                        }
                         if (repliedMessage != null) {
                             Surface(
                                 modifier = Modifier
