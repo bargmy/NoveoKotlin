@@ -182,7 +182,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.4.3 Kotlin"
+private const val CLIENT_VERSION = "v0.4.4 Kotlin"
 
 @Immutable
 class TelegramBubbleShape(
@@ -1385,7 +1385,8 @@ private fun MessageRow(
                 transformOrigin = TransformOrigin(if (ownMessage) 1f else 0f, 1f)
             }
     ) {
-        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
             if (!ownMessage) {
                 // Telegram only shows avatar in group chats, and only for the last message in a group
                 if (isGroupChat) {
@@ -1408,115 +1409,157 @@ private fun MessageRow(
                 horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
                 modifier = if (ownMessage) Modifier else Modifier.weight(1f, false)
             ) {
-                Surface(
-                    modifier = Modifier.widthIn(max = 300.dp),
-                    shape = TelegramBubbleShape(
-                        isOutgoing = ownMessage,
-                        hasTail = hasTail,
-                        cornerRadius = with(LocalDensity.current) { 16.dp.toPx() }
-                    ),
-                    color = when {
-                        ownMessage && isHighlighted -> tgColors.outgoingBubbleSelected
-                        ownMessage -> tgColors.outgoingBubble
-                        isHighlighted -> tgColors.incomingBubbleSelected
-                        else -> tgColors.incomingBubble
-                    },
-                    shadowElevation = 0.5.dp
-                ) {
-                    val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
-                    Column(modifier = Modifier.padding(if (hasVisualMedia) 3.dp else 6.dp).padding(horizontal = 4.dp)) {
-                        if (!ownMessage && isGroupChat && showSenderInfo) {
-                            Text(
-                                message.senderName,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                                color = tgColors.incomingLink,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-                            )
-                        }
-                        if (repliedMessage != null) {
-                            Surface(
-                                modifier = Modifier
-                                    .padding(bottom = 4.dp)
-                                    .clickable { onScrollToMessage(repliedMessage.id) },
-                                color = if (ownMessage) tgColors.replyOutgoing else tgColors.replyIncoming,
-                                shape = RoundedCornerShape(4.dp)
-                            ) {
-                                Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(2.dp)
-                                            .height(28.dp)
-                                            .background(if (ownMessage) tgColors.outgoingText.copy(alpha = 0.6f) else tgColors.incomingLink, RoundedCornerShape(1.dp))
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = repliedMessage.senderName,
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = repliedMessage.content.previewText(),
-                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
-                                        )
+                val isSticker = message.content.file?.let { it.fileName == "sticker.png" || it.fileName == "sticker.gif" } ?: false
+                
+                if (isSticker) {
+                    val file = message.content.file!!
+                    val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
+                    Box(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Column(horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start) {
+                            SubcomposeAsyncImage(
+                                model = normalizedUrl,
+                                contentDescription = "sticker",
+                                modifier = Modifier.size(160.dp).clickable { onMediaClick(file.url) },
+                                contentScale = ContentScale.Fit,
+                                loading = {
+                                    Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
+                                        androidx.compose.material3.CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
                                     }
                                 }
-                            }
-                        }
-
-                        val file = message.content.file
-                        if (file != null) {
-                            MessageAttachment(
-                                file = file,
-                                ownMessage = ownMessage,
-                                onClick = { onMediaClick(file.url) },
-                                tgColors = tgColors
                             )
-                        }
-                        val caption = message.content.text
-
-                        if (!caption.isNullOrBlank()) {
-                            if (message.content.file != null) Spacer(Modifier.height(4.dp))
-                            Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 4.dp)) {
-                                MarkdownText(
-                                    text = caption,
-                                    color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText
+                            Row(
+                                modifier = Modifier.padding(top = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    timeStr,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = tgColors.incomingTime // Use a neutral color for stickers
                                 )
-                            }
-                        }
-                        
-                        Row(
-                            modifier = Modifier.align(Alignment.End).padding(top = 1.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                timeStr,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
-                            )
-                            if (ownMessage) {
-                                Spacer(Modifier.width(4.dp))
-                                if (message.pending) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Schedule,
-                                        contentDescription = strings.sending,
-                                        modifier = Modifier.size(13.dp),
-                                        tint = tgColors.outgoingTime
-                                    )
-                                } else {
+                                if (ownMessage) {
+                                    Spacer(Modifier.width(4.dp))
                                     val seen = message.seenBy.isNotEmpty()
                                     Icon(
                                         imageVector = if (seen) Icons.Outlined.DoneAll else Icons.Outlined.Check,
                                         contentDescription = if (seen) "Seen" else "Sent",
                                         modifier = Modifier.size(15.dp),
-                                        tint = tgColors.outgoingTime
+                                        tint = tgColors.incomingTime
                                     )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Surface(
+                        modifier = Modifier.widthIn(max = maxWidth * 0.78f),
+                        shape = TelegramBubbleShape(
+                            isOutgoing = ownMessage,
+                            hasTail = hasTail,
+                            cornerRadius = with(LocalDensity.current) { 16.dp.toPx() }
+                        ),
+                        color = when {
+                            ownMessage && isHighlighted -> tgColors.outgoingBubbleSelected
+                            ownMessage -> tgColors.outgoingBubble
+                            isHighlighted -> tgColors.incomingBubbleSelected
+                            else -> tgColors.incomingBubble
+                        },
+                        shadowElevation = 0.5.dp
+                    ) {
+                        val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
+                        Column(modifier = Modifier.padding(if (hasVisualMedia) 3.dp else 6.dp).padding(horizontal = 4.dp)) {
+                            if (!ownMessage && isGroupChat && showSenderInfo) {
+                                Text(
+                                    message.senderName,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                                    color = tgColors.incomingLink,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                                )
+                            }
+                            if (repliedMessage != null) {
+                                Surface(
+                                    modifier = Modifier
+                                        .padding(bottom = 4.dp)
+                                        .clickable { onScrollToMessage(repliedMessage.id) },
+                                    color = if (ownMessage) tgColors.replyOutgoing else tgColors.replyIncoming,
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(2.dp)
+                                                .height(28.dp)
+                                                .background(if (ownMessage) tgColors.outgoingText.copy(alpha = 0.6f) else tgColors.incomingLink, RoundedCornerShape(1.dp))
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = repliedMessage.senderName,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = repliedMessage.content.previewText(),
+                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            val file = message.content.file
+                            if (file != null) {
+                                MessageAttachment(
+                                    file = file,
+                                    ownMessage = ownMessage,
+                                    onClick = { onMediaClick(file.url) },
+                                    tgColors = tgColors
+                                )
+                            }
+                            val caption = message.content.text
+
+                            if (!caption.isNullOrBlank()) {
+                                if (message.content.file != null) Spacer(Modifier.height(4.dp))
+                                Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 4.dp)) {
+                                    MarkdownText(
+                                        text = caption,
+                                        color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText
+                                    )
+                                }
+                            }
+                            
+                            Row(
+                                modifier = Modifier.align(Alignment.End).padding(top = 1.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    timeStr,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
+                                )
+                                if (ownMessage) {
+                                    Spacer(Modifier.width(4.dp))
+                                    if (message.pending) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Schedule,
+                                            contentDescription = strings.sending,
+                                            modifier = Modifier.size(13.dp),
+                                            tint = tgColors.outgoingTime
+                                        )
+                                    } else {
+                                        val seen = message.seenBy.isNotEmpty()
+                                        Icon(
+                                            imageVector = if (seen) Icons.Outlined.DoneAll else Icons.Outlined.Check,
+                                            contentDescription = if (seen) "Seen" else "Sent",
+                                            modifier = Modifier.size(15.dp),
+                                            tint = tgColors.outgoingTime
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2237,6 +2280,7 @@ private fun ProfileModal(
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     
     val expandedHeight = 320.dp
     val collapsedHeight = 56.dp
@@ -2274,7 +2318,9 @@ private fun ProfileModal(
                             Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 InfoItem(label = strings.displayName, value = user.username)
                                 if (!user.handle.isNullOrBlank()) {
-                                    InfoItem(label = "Handle", value = user.handle)
+                                    InfoItem(label = "Handle", value = user.handle, onClick = {
+                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(user.handle))
+                                    })
                                 }
                                 if (user.bio.isNotBlank()) {
                                     InfoItem(label = "Bio", value = user.bio)
@@ -2283,11 +2329,6 @@ private fun ProfileModal(
                             }
                         }
 
-                        DetailCard(
-                            title = "Privacy & Support",
-                            body = if (findDirectChatForUser(chats, selfUserId, user.id) != null) "You have an existing chat with this user." else "No previous direct interaction found."
-                        )
-                        
                         Button(
                             onClick = onMessage, 
                             modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -2382,8 +2423,10 @@ private fun ProfileModal(
 }
 
 @Composable
-private fun InfoItem(label: String, value: String) {
-    Column {
+private fun InfoItem(label: String, value: String, onClick: (() -> Unit)? = null) {
+    Column(
+        modifier = if (onClick != null) Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 4.dp) else Modifier
+    ) {
         Text(value, style = MaterialTheme.typography.bodyLarge)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
     }
@@ -2405,6 +2448,7 @@ private fun GroupInfoModal(
     
     val listState = rememberLazyListState()
     val density = LocalDensity.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     
     val expandedHeight = 320.dp
     val collapsedHeight = 56.dp
@@ -2442,7 +2486,9 @@ private fun GroupInfoModal(
                             Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 InfoItem(label = "Title", value = chatTitle)
                                 if (!chat.handle.isNullOrBlank()) {
-                                    InfoItem(label = "Link", value = "@${chat.handle}")
+                                    InfoItem(label = "Link", value = "@${chat.handle}", onClick = {
+                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("@${chat.handle}"))
+                                    })
                                 }
                                 InfoItem(label = "Type", value = chat.chatType.replaceFirstChar { it.uppercase() })
                             }

@@ -67,10 +67,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.slideIn
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import ir.hienob.noveo.R
-import ir.hienob.noveo.data.ChatMessage
 
 @OptIn(ExperimentalAnimationApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -223,20 +226,39 @@ internal fun ChatInput(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .clip(CircleShape)
                         .clickable(interactionSource = buttonInteraction, indication = null, onClick = onActionClick),
                     contentAlignment = Alignment.Center
                 ) {
+                    val density = androidx.compose.ui.platform.LocalDensity.current
                     AnimatedContent(
                         targetState = draft.isBlank() && !hasAttachment,
                         transitionSpec = { 
-                            fadeIn(tween(150)) togetherWith fadeOut(tween(150))
+                            if (!targetState) { // Mic -> Send
+                                (fadeIn(tween(200)) + 
+                                 slideIn(tween(250, easing = LinearOutSlowInEasing)) { 
+                                     IntOffset(with(density) { -50.dp.roundToPx() }, with(density) { 50.dp.roundToPx() }) 
+                                 }
+                                ).togetherWith(fadeOut(tween(150)))
+                            } else { // Send -> Mic
+                                fadeIn(tween(150)).togetherWith(fadeOut(tween(150)))
+                            }
                         },
                         label = "send_icon_animation"
                     ) { isBlank ->
+                        val animRotation by transition.animateFloat(
+                            label = "rotation",
+                            transitionSpec = { tween(250) }
+                        ) { state ->
+                            if (state) -25f else 0f
+                        }
+
                         Image(
                             painter = painterResource(if (isBlank) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
                             contentDescription = null,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(24.dp).graphicsLayer {
+                                rotationZ = if (isBlank) 0f else animRotation
+                            },
                             colorFilter = ColorFilter.tint(iconColor)
                         )
                     }
