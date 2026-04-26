@@ -56,6 +56,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CornerSize
@@ -183,21 +184,80 @@ private val TelegramComposerHint = Color(0xFF7A8591)
 private val TelegramComposerDivider = Color(0x14000000)
 private val TelegramComposerText = Color(0xFF000000)
 private val TelegramComposerCursor = Color(0xFF459DE1)
-private val TelegramChatSurface = Color(0xFFFFFFFF)
+private val TelegramChatSurface = Color(0xFF91A8C0) 
 private val TelegramHeaderTitle = Color(0xFF333333)
 private val TelegramHeaderSubtitle = Color(0xFF797979)
 private val TelegramHeaderIcon = Color(0xFF6B7A8C)
-private val TelegramIncomingBubble = Color(0xFFF0F0F0)
-private val TelegramIncomingBubbleSelected = Color(0xFFEAEAEA)
-private val TelegramOutgoingBubble = Color(0xFF2D7ED5)
-private val TelegramOutgoingBubbleSelected = Color(0xFF4280D1)
+private val TelegramIncomingBubble = Color(0xFFFFFFFF)
+private val TelegramIncomingBubbleSelected = Color(0xFFF2F2F2)
+private val TelegramOutgoingBubble = Color(0xFFEFFDDE) // Corrected classic green
+private val TelegramOutgoingBubbleSelected = Color(0xFFD9F7C5)
 private val TelegramIncomingText = Color(0xFF222222)
 private val TelegramIncomingLink = Color(0xFF127ACA)
 private val TelegramIncomingTime = Color(0xFF939599)
-private val TelegramOutgoingText = Color.White
-private val TelegramOutgoingTime = Color(0xFFC7E6FF)
+private val TelegramOutgoingText = Color(0xFF222222) // Classic outgoing text is also dark
+private val TelegramOutgoingTime = Color(0xFF66A060) // Soft green for time
 private val TelegramReplyIncoming = Color(0xFFD8E8F7)
 private val TelegramReplyOutgoing = Color(0x80FFFFFF)
+
+@Immutable
+class TelegramBubbleShape(
+    val isOutgoing: Boolean,
+    val hasTail: Boolean,
+    val cornerRadius: Float = 48f
+) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density
+    ): androidx.compose.ui.graphics.Outline {
+        val path = androidx.compose.ui.graphics.Path().apply {
+            val width = size.width
+            val height = size.height
+            val radius = cornerRadius
+
+            if (isOutgoing) {
+                // Outgoing bubble (right aligned)
+                moveTo(radius, 0f)
+                lineTo(width - radius, 0f)
+                quadraticTo(width, 0f, width, radius)
+                lineTo(width, height - radius)
+                if (hasTail) {
+                    // Draw tail on bottom right
+                    quadraticTo(width, height, width - radius / 2, height)
+                    lineTo(width + 12f, height + 4f) // Tiny tail protrusion if we want but Telegram's is usually rounded
+                    // Actually Telegram's tail is a smooth curve.
+                    // For now, let's just do rounded corners.
+                    lineTo(width - radius, height)
+                } else {
+                    quadraticTo(width, height, width - radius, height)
+                }
+                lineTo(radius, height)
+                quadraticTo(0f, height, 0f, height - radius)
+                lineTo(0f, radius)
+                quadraticTo(0f, 0f, radius, 0f)
+            } else {
+                // Incoming bubble (left aligned)
+                moveTo(radius, 0f)
+                lineTo(width - radius, 0f)
+                quadraticTo(width, 0f, width, radius)
+                lineTo(width, height - radius)
+                quadraticTo(width, height, width - radius, height)
+                lineTo(radius, height)
+                if (hasTail) {
+                    quadraticTo(0f, height, -12f, height + 4f) // Approximation
+                    lineTo(0f, height - radius)
+                } else {
+                    quadraticTo(0f, height, 0f, height - radius)
+                }
+                lineTo(0f, radius)
+                quadraticTo(0f, 0f, radius, 0f)
+            }
+            close()
+        }
+        return androidx.compose.ui.graphics.Outline.Generic(path)
+    }
+}
 
 private enum class SettingsSection {
     MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG, THEME, NOTIFICATIONS
@@ -1027,7 +1087,8 @@ private fun ChatPane(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 8.dp)
+                .background(Color.White), // Header is white in light mode
             verticalAlignment = Alignment.CenterVertically
         ) {
             HeaderIconButton(
@@ -1098,23 +1159,26 @@ private fun ChatPane(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp) // Tighter spacing for grouping
             ) {
-                items(
+                itemsIndexed(
                     items = state.messages,
-                    key = { it.id },
-                    contentType = { "message" }
-                ) { message ->
-                    val index = state.messages.indexOf(message)
+                    key = { _, msg -> msg.id },
+                    contentType = { _, _ -> "message" }
+                ) { index, message ->
                     val prevMessage = if (index > 0) state.messages[index - 1] else null
+                    val nextMessage = if (index < state.messages.lastIndex) state.messages[index + 1] else null
                     
-                    val showSenderInfo = remember(message.id, prevMessage?.id) {
-                        prevMessage == null || 
-                        prevMessage.senderId != message.senderId || 
-                        (message.timestamp - prevMessage.timestamp) > 300 ||
-                        prevMessage.senderId == "system"
-                    }
+                    val isFirstInGroup = prevMessage == null || 
+                                         prevMessage.senderId != message.senderId || 
+                                         (message.timestamp - prevMessage.timestamp) > 300 ||
+                                         prevMessage.senderId == "system"
+                    
+                    val isLastInGroup = nextMessage == null || 
+                                        nextMessage.senderId != message.senderId || 
+                                        (nextMessage.timestamp - message.timestamp) > 300 ||
+                                        nextMessage.senderId == "system"
 
                     val repliedMessage = remember(message.replyToId) {
                         message.replyToId?.let { rid -> state.messages.find { it.id == rid } }
@@ -1125,7 +1189,9 @@ private fun ChatPane(
                         message = message,
                         ownMessage = message.senderId == state.session?.userId,
                         senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl,
-                        showSenderInfo = showSenderInfo,
+                        showSenderInfo = isFirstInGroup,
+                        hasTail = isLastInGroup,
+                        isGroupChat = selectedChat?.chatType != "private",
                         onMediaClick = onMediaClick,
                         onOpenProfile = onOpenProfile,
                         repliedMessage = repliedMessage,
@@ -1202,6 +1268,8 @@ private fun MessageRow(
     ownMessage: Boolean,
     senderAvatarUrl: String?,
     showSenderInfo: Boolean,
+    hasTail: Boolean,
+    isGroupChat: Boolean,
     onMediaClick: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
     repliedMessage: ChatMessage? = null,
@@ -1295,24 +1363,22 @@ private fun MessageRow(
                 transformOrigin = TransformOrigin(if (ownMessage) 1f else 0f, 1f)
             }
     ) {
-        val highlightColor by androidx.compose.animation.animateColorAsState(
-            targetValue = if (isHighlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Transparent,
-            animationSpec = tween(500),
-            label = "message_highlight_glow"
-        )
-        Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
             if (!ownMessage) {
-                if (showSenderInfo) {
-                    ProfileCircle(
-                        name = message.senderName,
-                        imageUrl = senderAvatarUrl,
-                        size = 34.dp,
-                        modifier = Modifier.clickable { onOpenProfile(message.senderId) }
-                    )
-                } else {
-                    Spacer(Modifier.width(34.dp))
+                // Telegram only shows avatar in group chats, and only for the last message in a group
+                if (isGroupChat) {
+                    if (hasTail) {
+                        ProfileCircle(
+                            name = message.senderName,
+                            imageUrl = senderAvatarUrl,
+                            size = 38.dp,
+                            modifier = Modifier.clickable { onOpenProfile(message.senderId) }
+                        )
+                    } else {
+                        Spacer(Modifier.width(38.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
                 }
-                Spacer(Modifier.width(8.dp))
             } else {
                 Spacer(Modifier.weight(1f))
             }
@@ -1320,48 +1386,31 @@ private fun MessageRow(
                 horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
                 modifier = if (ownMessage) Modifier else Modifier.weight(1f, false)
             ) {
-                if (!ownMessage && showSenderInfo) {
+                if (!ownMessage && isGroupChat && showSenderInfo) {
                     Text(
                         message.senderName,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
                         color = TelegramIncomingLink,
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        modifier = Modifier.padding(start = 12.dp, bottom = 2.dp)
                     )
                 }
-                Card(
+                Surface(
                     modifier = Modifier.widthIn(max = 320.dp),
-                    shape = RoundedCornerShape(18.dp).copy(
-                        bottomEnd = if (ownMessage) CornerSize(4.dp) else CornerSize(18.dp),
-                        bottomStart = if (!ownMessage) CornerSize(4.dp) else CornerSize(18.dp)
+                    shape = TelegramBubbleShape(
+                        isOutgoing = ownMessage,
+                        hasTail = hasTail,
+                        cornerRadius = with(LocalDensity.current) { 16.dp.toPx() }
                     ),
-                    colors = CardDefaults.cardColors(
-                        containerColor = when {
-                            ownMessage && isHighlighted -> TelegramOutgoingBubbleSelected
-                            ownMessage -> TelegramOutgoingBubble
-                            isHighlighted -> TelegramIncomingBubbleSelected
-                            else -> TelegramIncomingBubble
-                        }
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    color = when {
+                        ownMessage && isHighlighted -> TelegramOutgoingBubbleSelected
+                        ownMessage -> TelegramOutgoingBubble
+                        isHighlighted -> TelegramIncomingBubbleSelected
+                        else -> TelegramIncomingBubble
+                    },
+                    shadowElevation = 0.5.dp
                 ) {
                     val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
-                    Column(modifier = Modifier.padding(if (hasVisualMedia) 6.dp else 12.dp)) {
-                        if (message.content.forwardedInfo) {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
-                                Icon(
-                                    Icons.Outlined.PlayArrow, // Changed to a more "forward" looking icon if possible
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp).alpha(0.7f),
-                                    tint = if (ownMessage) TelegramOutgoingText else TelegramIncomingTime
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    strings.forwarded,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 12.sp),
-                                    color = if (ownMessage) TelegramOutgoingTime else TelegramIncomingTime
-                                )
-                            }
-                        }
+                    Column(modifier = Modifier.padding(if (hasVisualMedia) 4.dp else 8.dp).padding(horizontal = 4.dp)) {
                         if (repliedMessage != null) {
                             Surface(
                                 modifier = Modifier
@@ -1375,7 +1424,7 @@ private fun MessageRow(
                                         modifier = Modifier
                                             .width(2.dp)
                                             .height(20.dp)
-                                            .background(if (ownMessage) TelegramReplyOutgoing else TelegramReplyIncoming, RoundedCornerShape(1.dp))
+                                            .background(if (ownMessage) TelegramReplyOutgoing else TelegramIncomingLink, RoundedCornerShape(1.dp))
                                     )
                                     Spacer(Modifier.width(8.dp))
                                     Column {
@@ -1410,8 +1459,8 @@ private fun MessageRow(
                         val caption = message.content.text
 
                         if (!caption.isNullOrBlank()) {
-                            if (message.content.file != null) Spacer(Modifier.height(8.dp))
-                            Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 0.dp)) {
+                            if (message.content.file != null) Spacer(Modifier.height(4.dp))
+                            Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 4.dp)) {
                                 MarkdownText(
                                     text = caption,
                                     color = if (ownMessage) TelegramOutgoingText else TelegramIncomingText
@@ -1420,21 +1469,21 @@ private fun MessageRow(
                         }
                         
                         Row(
-                            modifier = Modifier.align(Alignment.End).padding(top = 4.dp),
+                            modifier = Modifier.align(Alignment.End).padding(top = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 timeStr,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = if (ownMessage) TelegramOutgoingTime else TelegramIncomingTime
                             )
                             if (ownMessage) {
-                                Spacer(Modifier.width(4.dp))
+                                Spacer(Modifier.width(3.dp))
                                 if (message.pending) {
                                     Icon(
                                         imageVector = Icons.Outlined.Schedule,
                                         contentDescription = strings.sending,
-                                        modifier = Modifier.size(14.dp),
+                                        modifier = Modifier.size(12.dp),
                                         tint = TelegramOutgoingTime
                                     )
                                 } else {
@@ -1442,7 +1491,7 @@ private fun MessageRow(
                                     Icon(
                                         imageVector = if (seen) Icons.Outlined.DoneAll else Icons.Outlined.Check,
                                         contentDescription = if (seen) "Seen" else "Sent",
-                                        modifier = Modifier.size(14.dp),
+                                        modifier = Modifier.size(13.dp),
                                         tint = TelegramOutgoingTime
                                     )
                                 }
