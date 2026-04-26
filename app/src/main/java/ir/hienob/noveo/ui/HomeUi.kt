@@ -1212,7 +1212,7 @@ private fun ChatPane(
                                 color = tgColors.headerTitle,
                                 fontSize = 16.sp
                             )
-                            if (selectedChat?.isVerified == true) {
+                            if (selectedChat?.isVerified == true || profileUser?.isVerified == true) {
                                 Spacer(Modifier.width(4.dp))
                                 VerifiedIcon(modifier = Modifier.size(14.dp))
                             }
@@ -1566,6 +1566,7 @@ private fun MessageRow(
                     }
                 }
             }
+        }
             if (!ownMessage) {
                 Spacer(Modifier.weight(1f))
             }
@@ -2381,13 +2382,32 @@ private fun ProfileModal(
                                 .alpha((1f - fraction * 2f).coerceIn(0f, 1f)),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    user.username, 
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (user.isVerified) {
+                                    Spacer(Modifier.width(6.dp))
+                                    VerifiedIcon(modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            val lastSeenText = remember(user, strings) {
+                                if (user.isOnline) "online"
+                                else {
+                                    val lastSeen = user.lastSeen
+                                    if (lastSeen != null && lastSeen > 0) {
+                                        val date = java.util.Date(lastSeen * 1000L)
+                                        val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(date)
+                                        "${strings.lastSeenAt} $time"
+                                    } else {
+                                        "last seen recently"
+                                    }
+                                }
+                            }
                             Text(
-                                user.username, 
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                if (user.isOnline) "online" else "last seen recently", 
+                                lastSeenText, 
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -2402,14 +2422,35 @@ private fun ProfileModal(
                                 .padding(start = 100.dp) // Offset by back button + avatar
                                 .alpha(((fraction - 0.5f) * 2f).coerceIn(0f, 1f))
                         ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    user.username,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (user.isVerified) {
+                                    Spacer(Modifier.width(4.dp))
+                                    VerifiedIcon(modifier = Modifier.size(14.dp))
+                                }
+                            }
+                            val lastSeenText = remember(user, strings) {
+                                if (user.isOnline) "online"
+                                else {
+                                    val lastSeen = user.lastSeen
+                                    if (lastSeen != null && lastSeen > 0) {
+                                        val date = java.util.Date(lastSeen * 1000L)
+                                        val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(date)
+                                        "${strings.lastSeenAt} $time"
+                                    } else {
+                                        "last seen recently"
+                                    }
+                                }
+                            }
                             Text(
-                                user.username,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
-                            Text(
-                                if (user.isOnline) "online" else "last seen recently",
+                                lastSeenText,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp
@@ -2523,8 +2564,21 @@ private fun GroupInfoModal(
                                             VerifiedIcon(modifier = Modifier.size(14.dp))
                                         }
                                     }
+                                    val lastSeenText = remember(user, strings) {
+                                        if (user?.isOnline == true) "online"
+                                        else {
+                                            val lastSeen = user?.lastSeen
+                                            if (lastSeen != null && lastSeen > 0) {
+                                                val date = java.util.Date(lastSeen * 1000L)
+                                                val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(date)
+                                                "${strings.lastSeenAt} $time"
+                                            } else {
+                                                "last seen recently"
+                                            }
+                                        }
+                                    }
                                     Text(
-                                        if (user?.isOnline == true) "online" else "last seen recently", 
+                                        lastSeenText, 
                                         style = MaterialTheme.typography.bodySmall, 
                                         color = if (user?.isOnline == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -2578,11 +2632,17 @@ private fun GroupInfoModal(
                                 .alpha((1f - fraction * 2f).coerceIn(0f, 1f)),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text(
-                                chatTitle, 
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    chatTitle, 
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (chat.isVerified) {
+                                    Spacer(Modifier.width(6.dp))
+                                    VerifiedIcon(modifier = Modifier.size(18.dp))
+                                }
+                            }
                             Text(
                                 "${chat.memberIds.size} members", 
                                 style = MaterialTheme.typography.bodyMedium,
@@ -2599,12 +2659,20 @@ private fun GroupInfoModal(
                                 .padding(start = 100.dp) 
                                 .alpha(((fraction - 0.5f) * 2f).coerceIn(0f, 1f))
                         ) {
-                            Text(
-                                chatTitle,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    chatTitle,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (chat.isVerified) {
+                                    Spacer(Modifier.width(4.dp))
+                                    VerifiedIcon(modifier = Modifier.size(14.dp))
+                                }
+                            }
                             Text(
                                 "${chat.memberIds.size} members",
                                 style = MaterialTheme.typography.labelSmall,
