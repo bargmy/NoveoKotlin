@@ -1258,7 +1258,6 @@ private fun ChatPane(
         }
     }
 }
-}
 
 @Composable
 private fun MessageRow(
