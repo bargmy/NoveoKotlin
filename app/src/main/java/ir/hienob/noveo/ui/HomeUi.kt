@@ -1570,6 +1570,7 @@ private fun MessageRow(
         }
     }
 }
+}
 
 @Composable
 private fun ReplyPreview(message: ChatMessage, onCancel: () -> Unit) {
