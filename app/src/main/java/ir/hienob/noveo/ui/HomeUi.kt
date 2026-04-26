@@ -202,8 +202,9 @@ class TelegramBubbleShape(
                 
                 if (hasTail) {
                     lineTo(w, h - r)
-                    // Telegram-style tail arc
-                    cubicTo(w, h - r/2, w + tr, h, w + tr, h)
+                    // Refined Telegram tail for outgoing
+                    lineTo(w, h - 10f * density.density)
+                    cubicTo(w, h, w + tr, h, w + tr, h)
                     lineTo(w - r, h)
                 } else {
                     lineTo(w, h - r)
@@ -223,14 +224,14 @@ class TelegramBubbleShape(
                 lineTo(r, h)
                 
                 if (hasTail) {
-                    // Telegram-style incoming tail arc
-                    cubicTo(r/2, h, -tr, h, -tr, h)
-                    lineTo(0f, h - r)
+                    // Refined Telegram tail for incoming
+                    lineTo(10f * density.density, h)
+                    cubicTo(-tr, h, 0f, h, 0f, h - 10f * density.density)
+                    lineTo(0f, r)
                 } else {
                     quadraticTo(0f, h, 0f, h - r)
+                    lineTo(0f, r)
                 }
-                
-                lineTo(0f, r)
                 quadraticTo(0f, 0f, r, 0f)
             }
             close()
@@ -1054,6 +1055,7 @@ private fun ChatPane(
         lastMessageId.value = newLastId
     }
 
+    val tgColors = telegramColors()
     val onScrollToMessage = { messageId: String ->
         val index = state.messages.indexOfFirst { it.id == messageId }
         if (index >= 0) {
@@ -1068,12 +1070,15 @@ private fun ChatPane(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(TelegramChatSurface)) {
+    // Optimization: build a map of messages for fast reply lookup
+    val messagesMap = remember(state.messages) { state.messages.associateBy { it.id } }
+
+    Box(modifier = modifier.fillMaxSize().background(tgColors.chatSurface)) {
         // 1. Messages Layer
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 8.dp, top = 64.dp, end = 8.dp, bottom = 80.dp),
+            contentPadding = PaddingValues(start = 8.dp, top = 64.dp, end = 8.dp, bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
             itemsIndexed(
@@ -1094,8 +1099,8 @@ private fun ChatPane(
                                     (nextMessage.timestamp - message.timestamp) > 300 ||
                                     nextMessage.senderId == "system"
 
-                val repliedMessage = remember(message.replyToId) {
-                    message.replyToId?.let { rid -> state.messages.find { it.id == rid } }
+                val repliedMessage = remember(message.replyToId, messagesMap) {
+                    message.replyToId?.let { rid -> messagesMap[rid] }
                 }
 
                 MessageRow(
@@ -1111,15 +1116,32 @@ private fun ChatPane(
                     repliedMessage = repliedMessage,
                     onReply = { onReply(message) },
                     onScrollToMessage = onScrollToMessage,
-                    isHighlighted = highlightedMessageId == message.id
+                    isHighlighted = highlightedMessageId == message.id,
+                    tgColors = tgColors
                 )
             }
         }
 
+        // Gradient overlay under text input for fade-out effect
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(100.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, tgColors.chatSurface.copy(alpha = 0.8f), tgColors.chatSurface),
+                        startY = 0f,
+                        endY = Float.POSITIVE_INFINITY
+                    )
+                )
+                .pointerInput(Unit) {} // Ensure it doesn't intercept touches if not needed
+        )
+
         // 2. Headbar Layer (ActionBar)
         Surface(
             modifier = Modifier.fillMaxWidth().height(56.dp),
-            color = Color.White,
+            color = tgColors.incomingBubble,
             tonalElevation = 1.dp,
             shadowElevation = 1.dp
         ) {
@@ -1130,7 +1152,7 @@ private fun ChatPane(
                 HeaderIconButton(
                     icon = Icons.AutoMirrored.Outlined.ArrowBack,
                     onClick = onBackToChats,
-                    tint = TelegramHeaderIcon,
+                    tint = tgColors.headerIcon,
                     modifier = Modifier.padding(start = 4.dp)
                 )
                 
@@ -1159,7 +1181,7 @@ private fun ChatPane(
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                color = TelegramHeaderTitle,
+                                color = tgColors.headerTitle,
                                 fontSize = 16.sp
                             )
                             if (selectedChat?.isVerified == true) {
@@ -1169,7 +1191,7 @@ private fun ChatPane(
                         }
                         Text(
                             subtitle,
-                            color = TelegramHeaderSubtitle,
+                            color = tgColors.headerSubtitle,
                             fontSize = 13.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -1177,8 +1199,8 @@ private fun ChatPane(
                     }
                 }
                 
-                HeaderIconButton(icon = Icons.Outlined.Call, onClick = {}, tint = TelegramHeaderIcon)
-                HeaderIconButton(icon = Icons.Outlined.Search, onClick = {}, tint = TelegramHeaderIcon, modifier = Modifier.padding(end = 4.dp))
+                HeaderIconButton(icon = Icons.Outlined.Call, onClick = {}, tint = tgColors.headerIcon)
+                HeaderIconButton(icon = Icons.Outlined.Search, onClick = {}, tint = tgColors.headerIcon, modifier = Modifier.padding(end = 4.dp))
             }
         }
 
@@ -1217,6 +1239,7 @@ private fun ChatPane(
                         },
                         onPasteUri = { onAttachFile(it) },
                         hasAttachment = state.pendingAttachment != null,
+                        tgColors = tgColors,
                         onActionClick = {
                             val text = draft.trim()
                             if (text.isNotBlank() || state.pendingAttachment != null) {
@@ -1235,6 +1258,7 @@ private fun ChatPane(
         }
     }
 }
+}
 
 @Composable
 private fun MessageRow(
@@ -1250,21 +1274,22 @@ private fun MessageRow(
     repliedMessage: ChatMessage? = null,
     onReply: () -> Unit,
     onScrollToMessage: (String) -> Unit,
-    isHighlighted: Boolean = false
+    isHighlighted: Boolean = false,
+    tgColors: TelegramThemeColors = telegramColors()
 ) {
     val haptic = LocalHapticFeedback.current
     val isSystem = message.senderId == "system"
     if (isSystem) {
         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
             Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                color = tgColors.chatSurface.copy(alpha = 0.45f),
                 shape = CircleShape
             ) {
                 Text(
                     message.content.text ?: strings.noMessagesYet,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White
                 )
             }
         }
@@ -1299,7 +1324,7 @@ private fun MessageRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = if (showSenderInfo) 10.dp else 0.dp)
-            .padding(bottom = if (hasTail) 4.dp else 0.dp)
+            .padding(bottom = if (hasTail) 6.dp else 0.dp)
             .pointerInput(message.id) {
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { change, dragAmount ->
@@ -1339,7 +1364,7 @@ private fun MessageRow(
                 transformOrigin = TransformOrigin(if (ownMessage) 1f else 0f, 1f)
             }
     ) {
-        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
             if (!ownMessage) {
                 // Telegram only shows avatar in group chats, and only for the last message in a group
                 if (isGroupChat) {
@@ -1347,11 +1372,11 @@ private fun MessageRow(
                         ProfileCircle(
                             name = message.senderName,
                             imageUrl = senderAvatarUrl,
-                            size = 38.dp,
+                            size = 36.dp,
                             modifier = Modifier.clickable { onOpenProfile(message.senderId) }
                         )
                     } else {
-                        Spacer(Modifier.width(38.dp))
+                        Spacer(Modifier.width(36.dp))
                     }
                     Spacer(Modifier.width(8.dp))
                 }
@@ -1365,42 +1390,42 @@ private fun MessageRow(
                 if (!ownMessage && isGroupChat && showSenderInfo) {
                     Text(
                         message.senderName,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
-                        color = TelegramIncomingLink,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                        color = tgColors.incomingLink,
                         modifier = Modifier.padding(start = 12.dp, bottom = 2.dp)
                     )
                 }
                 Surface(
-                    modifier = Modifier.widthIn(max = 320.dp),
+                    modifier = Modifier.widthIn(max = 300.dp),
                     shape = TelegramBubbleShape(
                         isOutgoing = ownMessage,
                         hasTail = hasTail,
                         cornerRadius = with(LocalDensity.current) { 16.dp.toPx() }
                     ),
                     color = when {
-                        ownMessage && isHighlighted -> TelegramOutgoingBubbleSelected
-                        ownMessage -> TelegramOutgoingBubble
-                        isHighlighted -> TelegramIncomingBubbleSelected
-                        else -> TelegramIncomingBubble
+                        ownMessage && isHighlighted -> tgColors.outgoingBubbleSelected
+                        ownMessage -> tgColors.outgoingBubble
+                        isHighlighted -> tgColors.incomingBubbleSelected
+                        else -> tgColors.incomingBubble
                     },
                     shadowElevation = 0.5.dp
                 ) {
                     val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
-                    Column(modifier = Modifier.padding(if (hasVisualMedia) 4.dp else 8.dp).padding(horizontal = 4.dp)) {
+                    Column(modifier = Modifier.padding(if (hasVisualMedia) 3.dp else 6.dp).padding(horizontal = 4.dp)) {
                         if (repliedMessage != null) {
                             Surface(
                                 modifier = Modifier
                                     .padding(bottom = 4.dp)
                                     .clickable { onScrollToMessage(repliedMessage.id) },
-                                color = Color.Transparent,
-                                shape = RoundedCornerShape(8.dp)
+                                color = if (ownMessage) tgColors.replyOutgoing else tgColors.replyIncoming,
+                                shape = RoundedCornerShape(4.dp)
                             ) {
                                 Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier
                                             .width(2.dp)
-                                            .height(20.dp)
-                                            .background(if (ownMessage) TelegramReplyOutgoing else TelegramIncomingLink, RoundedCornerShape(1.dp))
+                                            .height(28.dp)
+                                            .background(if (ownMessage) tgColors.outgoingText.copy(alpha = 0.6f) else tgColors.incomingLink, RoundedCornerShape(1.dp))
                                     )
                                     Spacer(Modifier.width(8.dp))
                                     Column {
@@ -1408,7 +1433,7 @@ private fun MessageRow(
                                             text = repliedMessage.senderName,
                                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
                                             fontWeight = FontWeight.Bold,
-                                            color = if (ownMessage) TelegramOutgoingText else TelegramIncomingLink,
+                                            color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -1417,7 +1442,7 @@ private fun MessageRow(
                                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
-                                            color = if (ownMessage) TelegramOutgoingTime else TelegramIncomingTime
+                                            color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
                                         )
                                     }
                                 }
@@ -1429,7 +1454,8 @@ private fun MessageRow(
                             MessageAttachment(
                                 file = file,
                                 ownMessage = ownMessage,
-                                onClick = { onMediaClick(file.url) }
+                                onClick = { onMediaClick(file.url) },
+                                tgColors = tgColors
                             )
                         }
                         val caption = message.content.text
@@ -1439,36 +1465,36 @@ private fun MessageRow(
                             Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 4.dp)) {
                                 MarkdownText(
                                     text = caption,
-                                    color = if (ownMessage) TelegramOutgoingText else TelegramIncomingText
+                                    color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText
                                 )
                             }
                         }
                         
                         Row(
-                            modifier = Modifier.align(Alignment.End).padding(top = 2.dp),
+                            modifier = Modifier.align(Alignment.End).padding(top = 1.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 timeStr,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = if (ownMessage) TelegramOutgoingTime else TelegramIncomingTime
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
                             )
                             if (ownMessage) {
-                                Spacer(Modifier.width(3.dp))
+                                Spacer(Modifier.width(4.dp))
                                 if (message.pending) {
                                     Icon(
                                         imageVector = Icons.Outlined.Schedule,
                                         contentDescription = strings.sending,
-                                        modifier = Modifier.size(12.dp),
-                                        tint = TelegramOutgoingTime
+                                        modifier = Modifier.size(13.dp),
+                                        tint = tgColors.outgoingTime
                                     )
                                 } else {
                                     val seen = message.seenBy.isNotEmpty()
                                     Icon(
                                         imageVector = if (seen) Icons.Outlined.DoneAll else Icons.Outlined.Check,
                                         contentDescription = if (seen) "Seen" else "Sent",
-                                        modifier = Modifier.size(13.dp),
-                                        tint = TelegramOutgoingTime
+                                        modifier = Modifier.size(15.dp),
+                                        tint = tgColors.outgoingTime
                                     )
                                 }
                             }
@@ -1586,19 +1612,20 @@ private fun PendingMessageBubble(text: String) {
 private fun MessageAttachment(
     file: MessageFileAttachment,
     ownMessage: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    tgColors: TelegramThemeColors = telegramColors()
 ) {
     val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
     
     if (file.isImage()) {
         Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(10.dp),
             modifier = Modifier
-                .padding(bottom = 4.dp)
+                .padding(bottom = 2.dp)
                 .fillMaxWidth()
-                .heightIn(max = 320.dp)
+                .heightIn(max = 340.dp)
                 .clickable { normalizedUrl?.let { onClick() } },
-            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
         ) {
             SubcomposeAsyncImage(
                 model = normalizedUrl,
@@ -1607,7 +1634,7 @@ private fun MessageAttachment(
                 contentScale = ContentScale.FillWidth,
                 loading = {
                     Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                        androidx.compose.material3.CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp), color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingLink)
                     }
                 }
             )
@@ -1615,50 +1642,44 @@ private fun MessageAttachment(
     } else {
         Surface(
             modifier = Modifier
-                .padding(bottom = 4.dp)
+                .padding(bottom = 2.dp)
                 .fillMaxWidth()
                 .clickable { normalizedUrl?.let { onClick() } },
-            color = (if (ownMessage) Color.White else MaterialTheme.colorScheme.primary).copy(alpha = 0.1f),
+            color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.08f),
             shape = RoundedCornerShape(10.dp)
         ) {
             Row(
-                modifier = Modifier.padding(10.dp),
+                modifier = Modifier.padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(42.dp)
                         .clip(CircleShape)
-                        .background((if (ownMessage) Color.White else MaterialTheme.colorScheme.primary).copy(alpha = 0.2f)),
+                        .background((if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (file.isVideo()) Icons.Outlined.PlayArrow else Icons.Outlined.Description,
                         contentDescription = null,
-                        tint = if (ownMessage) Color.White else MaterialTheme.colorScheme.primary
+                        tint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
                     )
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = file.name,
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        color = if (ownMessage) Color.White else MaterialTheme.colorScheme.onSurface
+                        color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText
                     )
                     Text(
                         text = file.type.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = (if (ownMessage) Color.White else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.6f)
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingText).copy(alpha = 0.6f)
                     )
                 }
-                Icon(
-                    imageVector = Icons.Outlined.ArrowForward, // Using a standard icon
-                    contentDescription = "Open",
-                    modifier = Modifier.size(20.dp),
-                    tint = (if (ownMessage) Color.White else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.5f)
-                )
             }
         }
     }

@@ -1,11 +1,16 @@
 package ir.hienob.noveo.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -65,20 +70,6 @@ import androidx.compose.ui.unit.sp
 import ir.hienob.noveo.R
 import ir.hienob.noveo.data.ChatMessage
 
-internal data class ChatInputColors(
-    val fieldTop: Color,
-    val fieldBottom: Color,
-    val fieldBorder: Color,
-    val iconTint: Color,
-    val selectorTint: Color,
-    val text: Color,
-    val hint: Color,
-    val cursor: Color,
-    val actionTop: Color,
-    val actionBottom: Color,
-    val actionIcon: Color
-)
-
 @OptIn(ExperimentalAnimationApi::class, ExperimentalFoundationApi::class)
 @Composable
 internal fun ChatInput(
@@ -94,21 +85,8 @@ internal fun ChatInput(
     onLongAttachClick: () -> Unit = {},
     onPasteUri: (android.net.Uri) -> Unit = {},
     hasAttachment: Boolean = false,
-    colors: ChatInputColors = ChatInputColors(
-        fieldTop = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-        fieldBottom = MaterialTheme.colorScheme.surfaceVariant,
-        fieldBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f),
-        iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-        selectorTint = Color.Transparent,
-        text = MaterialTheme.colorScheme.onSurfaceVariant,
-        hint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-        cursor = MaterialTheme.colorScheme.primary,
-        actionTop = MaterialTheme.colorScheme.primary,
-        actionBottom = MaterialTheme.colorScheme.primary,
-        actionIcon = MaterialTheme.colorScheme.onPrimary
-    )
+    tgColors: TelegramThemeColors = telegramColors()
 ) {
-    val fieldShape = RoundedCornerShape(22.dp)
     val buttonInteraction = remember { MutableInteractionSource() }
     val inputFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -120,32 +98,35 @@ internal fun ChatInput(
         }
     }
 
-    Box(modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(bottom = 2.dp)) {
+    Box(modifier = modifier.fillMaxWidth().padding(horizontal = 6.dp).padding(bottom = 4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Bottom
         ) {
             // Main Input Bubble
             Surface(
-                modifier = Modifier
-                    .weight(1f),
+                modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(24.dp),
-                color = Color.White,
-                shadowElevation = 2.dp
+                color = tgColors.composerField,
+                shadowElevation = 1.dp
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // Reply Preview
-                    AnimatedContent(targetState = replyingTo, label = "input_reply_preview") { reply ->
-                        if (reply != null) {
-                            Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.width(2.dp).height(28.dp).background(TelegramComposerBlue, RoundedCornerShape(1.dp)))
+                    AnimatedVisibility(
+                        visible = replyingTo != null,
+                        enter = slideInVertically { it } + fadeIn(),
+                        exit = slideOutVertically { it } + fadeOut()
+                    ) {
+                        replyingTo?.let { reply ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.width(2.dp).height(30.dp).background(tgColors.composerBlue, RoundedCornerShape(1.dp)))
                                 Spacer(Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(reply.senderName, style = MaterialTheme.typography.labelMedium, color = TelegramComposerBlue, fontWeight = FontWeight.Bold, maxLines = 1)
-                                    Text(reply.content.previewText(), style = MaterialTheme.typography.bodySmall, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(reply.senderName, style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp), color = tgColors.composerBlue, fontWeight = FontWeight.Bold, maxLines = 1)
+                                    Text(reply.content.previewText(), style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = tgColors.composerHint, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                                 IconButton(onClick = onCancelReply, modifier = Modifier.size(24.dp)) {
-                                    Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                    Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(17.dp), tint = tgColors.composerHint)
                                 }
                             }
                         }
@@ -158,7 +139,7 @@ internal fun ChatInput(
                         GlassIconButton(
                             resId = R.drawable.tg_input_smile,
                             contentDescription = "Emoji",
-                            tint = Color(0xFF7A8591),
+                            tint = tgColors.composerIcon,
                             selectorTint = Color.Transparent,
                             onClick = {},
                             modifier = Modifier.padding(start = 4.dp)
@@ -169,14 +150,14 @@ internal fun ChatInput(
                             contentAlignment = Alignment.CenterStart
                         ) {
                             if (draft.isBlank()) {
-                                Text(placeholder, color = Color(0xFF7A8591), fontSize = 17.sp)
+                                Text(placeholder, color = tgColors.composerHint, fontSize = 17.sp)
                             }
                             BasicTextField(
                                 value = draft,
                                 onValueChange = onDraftChange,
                                 modifier = Modifier.fillMaxWidth().focusRequester(inputFocusRequester),
-                                textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, color = Color.Black),
-                                cursorBrush = SolidColor(TelegramComposerCursor),
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, color = tgColors.composerText),
+                                cursorBrush = SolidColor(tgColors.composerCursor),
                                 minLines = 1,
                                 maxLines = 6
                             )
@@ -213,7 +194,7 @@ internal fun ChatInput(
                         GlassIconButton(
                             resId = R.drawable.tg_msg_input_attach2,
                             contentDescription = "Attach",
-                            tint = Color(0xFF7A8591),
+                            tint = tgColors.composerIcon,
                             selectorTint = Color.Transparent,
                             onClick = onAttachClick,
                             onLongClick = onLongAttachClick,
@@ -226,12 +207,15 @@ internal fun ChatInput(
             Spacer(Modifier.width(8.dp))
 
             // Separate Circular Send/Mic Button
+            val buttonColor = if (draft.isBlank() && !hasAttachment) tgColors.composerField else tgColors.composerBlue
+            val iconColor = if (draft.isBlank() && !hasAttachment) tgColors.composerIcon else Color.White
+            
             Surface(
                 modifier = Modifier
                     .size(48.dp)
                     .scale(sendScale),
                 shape = CircleShape,
-                color = if (draft.isBlank() && !hasAttachment) Color.White else TelegramComposerBlue,
+                color = buttonColor,
                 shadowElevation = 2.dp
             ) {
                 Box(
@@ -242,14 +226,17 @@ internal fun ChatInput(
                 ) {
                     AnimatedContent(
                         targetState = draft.isBlank() && !hasAttachment,
-                        transitionSpec = { (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut()) },
+                        transitionSpec = { 
+                            (scaleIn(animationSpec = tween(150)) + fadeIn(animationSpec = tween(150)))
+                                .togetherWith(scaleOut(animationSpec = tween(150)) + fadeOut(animationSpec = tween(150))) 
+                        },
                         label = "send_icon_animation"
                     ) { isBlank ->
                         Image(
                             painter = painterResource(if (isBlank) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
-                            colorFilter = ColorFilter.tint(if (isBlank) Color(0xFF7A8591) else Color.White)
+                            colorFilter = ColorFilter.tint(iconColor)
                         )
                     }
                 }
@@ -292,7 +279,7 @@ internal fun AttachmentPreview(
                     )
                 } else {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Outlined.Close, // Placeholder icon
+                        imageVector = Icons.Outlined.Close,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -366,9 +353,8 @@ private fun GlassIconButton(
         Image(
             painter = painterResource(resId),
             contentDescription = contentDescription,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier.size(22.dp),
             colorFilter = ColorFilter.tint(tint)
         )
     }
 }
-
