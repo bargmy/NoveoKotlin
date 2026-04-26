@@ -120,169 +120,104 @@ internal fun ChatInput(
         }
     }
 
-    Box(modifier = modifier.fillMaxWidth()) {
+    Box(modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(bottom = 2.dp)) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 9.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Bottom
         ) {
-            Column(
+            // Main Input Bubble
+            Surface(
                 modifier = Modifier
-                    .weight(1f)
-                    .clip(fieldShape)
-                    .background(
-                        brush = Brush.verticalGradient(
-                            listOf(colors.fieldTop, colors.fieldBottom)
-                        )
-                    )
-                    .border(1.dp, colors.fieldBorder, fieldShape)
+                    .weight(1f),
+                shape = RoundedCornerShape(24.dp),
+                color = Color.White,
+                shadowElevation = 2.dp
             ) {
-                // Reply Preview inside the input box
-                AnimatedContent(
-                    targetState = replyingTo,
-                    label = "input_reply_preview"
-                ) { reply ->
-                    if (reply != null) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .width(2.dp)
-                                    .height(28.dp)
-                                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(1.dp))
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = reply.senderName,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = reply.content.previewText(),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = colors.text.copy(alpha = 0.8f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            IconButton(
-                                onClick = onCancelReply,
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Close,
-                                    contentDescription = "Cancel",
-                                    modifier = Modifier.size(16.dp),
-                                    tint = colors.iconTint
-                                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Reply Preview
+                    AnimatedContent(targetState = replyingTo, label = "input_reply_preview") { reply ->
+                        if (reply != null) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.width(2.dp).height(28.dp).background(TelegramComposerBlue, RoundedCornerShape(1.dp)))
+                                Spacer(Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(reply.senderName, style = MaterialTheme.typography.labelMedium, color = TelegramComposerBlue, fontWeight = FontWeight.Bold, maxLines = 1)
+                                    Text(reply.content.previewText(), style = MaterialTheme.typography.bodySmall, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                IconButton(onClick = onCancelReply, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                }
                             }
                         }
                     }
-                }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 40.dp)
-                ) {
-                    GlassIconButton(
-                        resId = R.drawable.tg_input_smile,
-                        contentDescription = "Emoji",
-                        tint = colors.iconTint,
-                        selectorTint = colors.selectorTint,
-                        onClick = {},
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(start = 1.dp, bottom = 1.dp)
-                    )
-
-                    GlassIconButton(
-                        resId = R.drawable.tg_msg_input_attach2,
-                        contentDescription = "Attach",
-                        tint = colors.iconTint,
-                        selectorTint = colors.selectorTint,
-                        onClick = onAttachClick,
-                        onLongClick = onLongAttachClick,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(end = 1.dp, bottom = 1.dp)
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 42.dp, end = 42.dp),
-                        contentAlignment = Alignment.CenterStart
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        BasicTextField(
-                            value = draft,
-                            onValueChange = onDraftChange,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(inputFocusRequester)
-                                .padding(top = 8.dp, bottom = 9.dp),
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                fontSize = 17.sp,
-                                lineHeight = 20.sp,
-                                color = colors.text
-                            ),
-                            cursorBrush = SolidColor(colors.cursor),
-                            minLines = 1,
-                            maxLines = 6,
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Sentences,
-                                imeAction = ImeAction.Default
-                            ),
-                            decorationBox = { innerTextField ->
-                                if (draft.isBlank()) {
-                                    Text(
-                                        text = placeholder,
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            fontSize = 17.sp,
-                                            lineHeight = 20.sp
-                                        ),
-                                        color = colors.hint
-                                    )
-                                }
-                                innerTextField()
-                            }
+                        GlassIconButton(
+                            resId = R.drawable.tg_input_smile,
+                            contentDescription = "Emoji",
+                            tint = Color(0xFF7A8591),
+                            selectorTint = Color.Transparent,
+                            onClick = {},
+                            modifier = Modifier.padding(start = 4.dp)
                         )
-                        
-                        // Content Receiver for pasting files
-                        androidx.compose.ui.viewinterop.AndroidView(
-                            factory = { context ->
-                                val view = android.view.View(context)
-                                androidx.core.view.ViewCompat.setOnReceiveContentListener(
-                                    view,
-                                    arrayOf("image/*", "video/*", "application/*", "text/*"),
-                                    object : androidx.core.view.OnReceiveContentListener {
-                                        override fun onReceiveContent(view: android.view.View, payload: androidx.core.view.ContentInfoCompat): androidx.core.view.ContentInfoCompat? {
-                                            val split = payload.partition { it.uri != null }
-                                            val uriPart = split.first
-                                            val remaining = split.second
-                                            
-                                            if (uriPart != null) {
-                                                val clip = uriPart.clip
-                                                for (i in 0 until clip.itemCount) {
-                                                    clip.getItemAt(i).uri?.let { uri -> onPasteUri(uri) }
+
+                        Box(
+                            modifier = Modifier.weight(1f).padding(vertical = 10.dp, horizontal = 4.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (draft.isBlank()) {
+                                Text(placeholder, color = Color(0xFF7A8591), fontSize = 17.sp)
+                            }
+                            BasicTextField(
+                                value = draft,
+                                onValueChange = onDraftChange,
+                                modifier = Modifier.fillMaxWidth().focusRequester(inputFocusRequester),
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, color = Color.Black),
+                                cursorBrush = SolidColor(TelegramComposerCursor),
+                                minLines = 1,
+                                maxLines = 6
+                            )
+                            
+                            // Content Receiver for pasting files
+                            androidx.compose.ui.viewinterop.AndroidView(
+                                factory = { context ->
+                                    val view = android.view.View(context)
+                                    androidx.core.view.ViewCompat.setOnReceiveContentListener(
+                                        view,
+                                        arrayOf("image/*", "video/*", "application/*", "text/*"),
+                                        object : androidx.core.view.OnReceiveContentListener {
+                                            override fun onReceiveContent(view: android.view.View, payload: androidx.core.view.ContentInfoCompat): androidx.core.view.ContentInfoCompat? {
+                                                val split = payload.partition { it.uri != null }
+                                                val uriPart = split.first
+                                                val remaining = split.second
+                                                
+                                                if (uriPart != null) {
+                                                    val clip = uriPart.clip
+                                                    for (i in 0 until clip.itemCount) {
+                                                        clip.getItemAt(i).uri?.let { uri -> onPasteUri(uri) }
+                                                    }
                                                 }
+                                                return remaining
                                             }
-                                            return remaining
                                         }
-                                    }
-                                )
-                                view
-                            },
-                            modifier = Modifier.matchParentSize()
+                                    )
+                                    view
+                                },
+                                modifier = Modifier.matchParentSize()
+                            )
+                        }
+
+                        GlassIconButton(
+                            resId = R.drawable.tg_msg_input_attach2,
+                            contentDescription = "Attach",
+                            tint = Color(0xFF7A8591),
+                            selectorTint = Color.Transparent,
+                            onClick = onAttachClick,
+                            onLongClick = onLongAttachClick,
+                            modifier = Modifier.padding(end = 4.dp)
                         )
                     }
                 }
@@ -290,48 +225,34 @@ internal fun ChatInput(
 
             Spacer(Modifier.width(8.dp))
 
-            Box(
+            // Separate Circular Send/Mic Button
+            Surface(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(48.dp)
                     .scale(sendScale),
-                contentAlignment = Alignment.Center
+                shape = CircleShape,
+                color = if (draft.isBlank() && !hasAttachment) Color.White else TelegramComposerBlue,
+                shadowElevation = 2.dp
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(
-                            brush = Brush.verticalGradient(
-                                listOf(colors.actionTop, colors.actionBottom)
-                            )
-                        )
-                )
-
-                AnimatedContent(
-                    targetState = draft.isBlank() && !hasAttachment,
-                    transitionSpec = {
-                        (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut())
-                    },
-                    label = "send_icon_animation"
-                ) { isBlank ->
-                    Image(
-                        painter = painterResource(if (isBlank) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
-                        contentDescription = null,
-                        modifier = Modifier.size(if (isBlank) 24.dp else 24.dp),
-                        colorFilter = ColorFilter.tint(colors.actionIcon)
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
                         .fillMaxSize()
-                        .clip(CircleShape)
-                        .clickable(
-                            interactionSource = buttonInteraction,
-                            indication = null,
-                            onClick = onActionClick
+                        .clickable(interactionSource = buttonInteraction, indication = null, onClick = onActionClick),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AnimatedContent(
+                        targetState = draft.isBlank() && !hasAttachment,
+                        transitionSpec = { (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut()) },
+                        label = "send_icon_animation"
+                    ) { isBlank ->
+                        Image(
+                            painter = painterResource(if (isBlank) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            colorFilter = ColorFilter.tint(if (isBlank) Color(0xFF7A8591) else Color.White)
                         )
-                )
+                    }
+                }
             }
         }
     }

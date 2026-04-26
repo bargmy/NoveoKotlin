@@ -213,46 +213,48 @@ class TelegramBubbleShape(
         density: androidx.compose.ui.unit.Density
     ): androidx.compose.ui.graphics.Outline {
         val path = androidx.compose.ui.graphics.Path().apply {
-            val width = size.width
-            val height = size.height
-            val radius = cornerRadius
-
+            val w = size.width
+            val h = size.height
+            val r = cornerRadius
+            val tr = 6f * density.density
+            
             if (isOutgoing) {
-                // Outgoing bubble (right aligned)
-                moveTo(radius, 0f)
-                lineTo(width - radius, 0f)
-                quadraticTo(width, 0f, width, radius)
-                lineTo(width, height - radius)
+                moveTo(r, 0f)
+                lineTo(w - r, 0f)
+                quadraticTo(w, 0f, w, r)
+                
                 if (hasTail) {
-                    // Draw tail on bottom right
-                    quadraticTo(width, height, width - radius / 2, height)
-                    lineTo(width + 12f, height + 4f) // Tiny tail protrusion if we want but Telegram's is usually rounded
-                    // Actually Telegram's tail is a smooth curve.
-                    // For now, let's just do rounded corners.
-                    lineTo(width - radius, height)
+                    lineTo(w, h - r)
+                    // Telegram-style tail arc
+                    cubicTo(w, h - r/2, w + tr, h, w + tr, h)
+                    lineTo(w - r, h)
                 } else {
-                    quadraticTo(width, height, width - radius, height)
+                    lineTo(w, h - r)
+                    quadraticTo(w, h, w - r, h)
                 }
-                lineTo(radius, height)
-                quadraticTo(0f, height, 0f, height - radius)
-                lineTo(0f, radius)
-                quadraticTo(0f, 0f, radius, 0f)
+                
+                lineTo(r, h)
+                quadraticTo(0f, h, 0f, h - r)
+                lineTo(0f, r)
+                quadraticTo(0f, 0f, r, 0f)
             } else {
-                // Incoming bubble (left aligned)
-                moveTo(radius, 0f)
-                lineTo(width - radius, 0f)
-                quadraticTo(width, 0f, width, radius)
-                lineTo(width, height - radius)
-                quadraticTo(width, height, width - radius, height)
-                lineTo(radius, height)
+                moveTo(r, 0f)
+                lineTo(w - r, 0f)
+                quadraticTo(w, 0f, w, r)
+                lineTo(w, h - r)
+                quadraticTo(w, h, w - r, h)
+                lineTo(r, h)
+                
                 if (hasTail) {
-                    quadraticTo(0f, height, -12f, height + 4f) // Approximation
-                    lineTo(0f, height - radius)
+                    // Telegram-style incoming tail arc
+                    cubicTo(r/2, h, -tr, h, -tr, h)
+                    lineTo(0f, h - r)
                 } else {
-                    quadraticTo(0f, height, 0f, height - radius)
+                    quadraticTo(0f, h, 0f, h - r)
                 }
-                lineTo(0f, radius)
-                quadraticTo(0f, 0f, radius, 0f)
+                
+                lineTo(0f, r)
+                quadraticTo(0f, 0f, r, 0f)
             }
             close()
         }
@@ -926,13 +928,19 @@ private fun SidebarHeader(
 }
 
 @Composable
-fun VerifiedIcon(modifier: Modifier = Modifier, tint: Color = MaterialTheme.colorScheme.primary) {
-    Canvas(modifier = modifier.size(18.dp)) {
-        val path1 = androidx.compose.ui.graphics.vector.PathParser().parsePathString("M12.3 2.9c.1.1.2.1.3.2.7.6 1.3 1.1 2 1.7.3.2.6.4.9.4.9.1 1.7.2 2.6.2.5 0 .6.1.7.7.1.9.1 1.8.2 2.6 0 .4.2.7.4 1 .6.7 1.1 1.3 1.7 2 .3.4.3.5 0 .8-.5.6-1.1 1.3-1.6 1.9-.3.3-.5.7-.5 1.2-.1.8-.2 1.7-.2 2.5 0 .4-.2.5-.6.6-.8 0-1.6.1-2.5.2-.5 0-1 .2-1.4.5-.6.5-1.3 1.1-1.9 1.6-.3.3-.5.3-.8 0-.7-.6-1.4-1.2-2-1.8-.3-.2-.6-.4-.9-.4-.9-.1-1.8-.2-2.7-.2-.4 0-.5-.2-.6-.5 0-.9-.1-1.7-.2-2.6 0-.4-.2-.8-.4-1.1-.6-.6-1.1-1.3-1.6-2-.4-.4-.3-.5 0-1 .6-.6 1.1-1.3 1.7-1.9.3-.3.4-.6.4-1 0-.8.1-1.6.2-2.5 0-.5.1-.6.6-.6.9-.1 1.7-.1 2.6-.2.4 0 .7-.2 1-.4.7-.6 1.4-1.2 2.1-1.7.1-.2.3-.3.5-.2z").toPath()
-        val path2 = androidx.compose.ui.graphics.vector.PathParser().parsePathString("M16.4 10.1l-.2.2-5.4 5.4c-.1.1-.2.2-.4 0l-2.6-2.6c-.2-.2-.1-.3 0-.4.2-.2.5-.6.7-.6.3 0 .5.4.7.6l1.1 1.1c.2.2.3.2.5 0l4.3-4.3c.2-.2.4-.3.6 0 .1.2.3.3.4.5.2 0 .3.1.3.1z").toPath()
-        
-        drawPath(path = path1, color = tint)
-        drawPath(path = path2, color = Color.White)
+fun VerifiedIcon(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(14.dp)
+            .background(Color(0xFF2EA6FF), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Check,
+            contentDescription = "Verified",
+            tint = Color.White,
+            modifier = Modifier.size(10.dp)
+        )
     }
 }
 
@@ -1083,180 +1091,169 @@ private fun ChatPane(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize().background(TelegramChatSurface)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .padding(horizontal = 8.dp)
-                .background(Color.White), // Header is white in light mode
-            verticalAlignment = Alignment.CenterVertically
+    Box(modifier = modifier.fillMaxSize().background(TelegramChatSurface)) {
+        // 1. Messages Layer
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 8.dp, top = 64.dp, bottom = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
-            HeaderIconButton(
-                icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                onClick = onBackToChats,
-                tint = TelegramHeaderIcon
-            )
-            Spacer(Modifier.width(2.dp))
-            
+            itemsIndexed(
+                items = state.messages,
+                key = { _, msg -> msg.id },
+                contentType = { _, _ -> "message" }
+            ) { index, message ->
+                val prevMessage = if (index > 0) state.messages[index - 1] else null
+                val nextMessage = if (index < state.messages.lastIndex) state.messages[index + 1] else null
+                
+                val isFirstInGroup = prevMessage == null || 
+                                     prevMessage.senderId != message.senderId || 
+                                     (message.timestamp - prevMessage.timestamp) > 300 ||
+                                     prevMessage.senderId == "system"
+                
+                val isLastInGroup = nextMessage == null || 
+                                    nextMessage.senderId != message.senderId || 
+                                    (nextMessage.timestamp - message.timestamp) > 300 ||
+                                    nextMessage.senderId == "system"
+
+                val repliedMessage = remember(message.replyToId) {
+                    message.replyToId?.let { rid -> state.messages.find { it.id == rid } }
+                }
+
+                MessageRow(
+                    strings = strings,
+                    message = message,
+                    ownMessage = message.senderId == state.session?.userId,
+                    senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl,
+                    showSenderInfo = isFirstInGroup,
+                    hasTail = isLastInGroup,
+                    isGroupChat = selectedChat?.chatType != "private",
+                    onMediaClick = onMediaClick,
+                    onOpenProfile = onOpenProfile,
+                    repliedMessage = repliedMessage,
+                    onReply = { onReply(message) },
+                    onScrollToMessage = onScrollToMessage,
+                    isHighlighted = highlightedMessageId == message.id
+                )
+            }
+        }
+
+        // 2. Headbar Layer (ActionBar)
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            color = Color.White,
+            tonalElevation = 1.dp,
+            shadowElevation = 1.dp
+        ) {
             Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable {
-                        if (profileUserId != null) onOpenProfile(profileUserId) else if (selectedChat != null) onOpenGroupInfo()
-                    }
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                modifier = Modifier.fillMaxSize(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ProfileCircle(
-                    name = selectedTitle,
-                    imageUrl = selectedChat?.avatarUrl,
-                    size = 42.dp,
-                    modifier = Modifier.clickable {
-                        profileUserId?.let { onOpenProfile(it) } ?: onOpenGroupInfo()
-                    }
+                HeaderIconButton(
+                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                    onClick = onBackToChats,
+                    tint = TelegramHeaderIcon,
+                    modifier = Modifier.padding(start = 4.dp)
                 )
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            selectedTitle,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = TelegramHeaderTitle,
-                            fontSize = 16.sp,
-                            lineHeight = 18.sp
-                        )
-                        if (selectedChat?.isVerified == true) {
-                            Spacer(Modifier.width(4.dp))
-                            VerifiedIcon(modifier = Modifier.size(16.dp))
+                
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            if (profileUserId != null) onOpenProfile(profileUserId) else if (selectedChat != null) onOpenGroupInfo()
                         }
-                    }
-                    Text(
-                        subtitle,
-                        color = TelegramHeaderSubtitle,
-                        fontSize = 13.sp,
-                        lineHeight = 15.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        .padding(vertical = 4.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ProfileCircle(
+                        name = selectedTitle,
+                        imageUrl = selectedChat?.avatarUrl,
+                        size = 40.dp,
+                        modifier = Modifier.clickable {
+                            profileUserId?.let { onOpenProfile(it) } ?: onOpenGroupInfo()
+                        }
                     )
-                }
-            }
-            Spacer(Modifier.width(4.dp))
-            HeaderIconButton(icon = Icons.Outlined.Call, onClick = {}, tint = TelegramHeaderIcon)
-        }
-
-        state.error?.takeIf { it.isNotBlank() }?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(6.dp))
-        }
-
-        if (state.loading && state.messages.isEmpty()) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(1.dp) // Tighter spacing for grouping
-            ) {
-                itemsIndexed(
-                    items = state.messages,
-                    key = { _, msg -> msg.id },
-                    contentType = { _, _ -> "message" }
-                ) { index, message ->
-                    val prevMessage = if (index > 0) state.messages[index - 1] else null
-                    val nextMessage = if (index < state.messages.lastIndex) state.messages[index + 1] else null
-                    
-                    val isFirstInGroup = prevMessage == null || 
-                                         prevMessage.senderId != message.senderId || 
-                                         (message.timestamp - prevMessage.timestamp) > 300 ||
-                                         prevMessage.senderId == "system"
-                    
-                    val isLastInGroup = nextMessage == null || 
-                                        nextMessage.senderId != message.senderId || 
-                                        (nextMessage.timestamp - message.timestamp) > 300 ||
-                                        nextMessage.senderId == "system"
-
-                    val repliedMessage = remember(message.replyToId) {
-                        message.replyToId?.let { rid -> state.messages.find { it.id == rid } }
-                    }
-
-                    MessageRow(
-                        strings = strings,
-                        message = message,
-                        ownMessage = message.senderId == state.session?.userId,
-                        senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl,
-                        showSenderInfo = isFirstInGroup,
-                        hasTail = isLastInGroup,
-                        isGroupChat = selectedChat?.chatType != "private",
-                        onMediaClick = onMediaClick,
-                        onOpenProfile = onOpenProfile,
-                        repliedMessage = repliedMessage,
-                        onReply = { onReply(message) },
-                        onScrollToMessage = onScrollToMessage,
-                        isHighlighted = highlightedMessageId == message.id
-                    )
-                }
-            }
-        }
-
-        if (selectedChat?.canChat != false) {
-            Column(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
-                if (state.pendingAttachment != null) {
-                    AttachmentPreview(
-                        attachment = state.pendingAttachment,
-                        onRemove = onRemoveAttachment
-                    )
-                }
-                ChatInput(
-                    draft = draft,
-                    onDraftChange = { 
-                        draft = it
-                        onTyping()
-                    },
-                    sendScale = sendScale,
-                    replyingTo = state.replyingToMessage,
-                    onCancelReply = { onReply(null) },
-                    placeholder = strings.messagePlaceholder,
-                    onAttachClick = { 
-                        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-                    },
-                    onLongAttachClick = {
-                        filePicker.launch(arrayOf("*/*"))
-                    },
-                    onPasteUri = { onAttachFile(it) },
-                    hasAttachment = state.pendingAttachment != null,
-                    onActionClick = {
-                        val text = draft.trim()
-                        if (text.isNotBlank() || state.pendingAttachment != null) {
-                            onSend(text)
-                            draft = ""
-                            sendPulse = true
-                            scope.launch {
-                                delay(220)
-                                sendPulse = false
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                selectedTitle,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = TelegramHeaderTitle,
+                                fontSize = 16.sp
+                            )
+                            if (selectedChat?.isVerified == true) {
+                                Spacer(Modifier.width(4.dp))
+                                VerifiedIcon(modifier = Modifier.size(14.dp))
                             }
                         }
+                        Text(
+                            subtitle,
+                            color = TelegramHeaderSubtitle,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
-                )
+                }
+                
+                HeaderIconButton(icon = Icons.Outlined.Call, onClick = {}, tint = TelegramHeaderIcon)
+                HeaderIconButton(icon = Icons.Outlined.Search, onClick = {}, tint = TelegramHeaderIcon, modifier = Modifier.padding(end = 4.dp))
             }
-        } else {
+        }
+
+        // 3. Floating Input Layer
+        if (selectedChat?.canChat != false) {
             Box(
                 modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
+                    .padding(bottom = 8.dp)
             ) {
-                Text(
-                    text = strings.cannotSendMessage,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column {
+                    if (state.pendingAttachment != null) {
+                        Box(modifier = Modifier.padding(horizontal = 8.dp)) {
+                            AttachmentPreview(
+                                attachment = state.pendingAttachment,
+                                onRemove = onRemoveAttachment
+                            )
+                        }
+                    }
+                    ChatInput(
+                        draft = draft,
+                        onDraftChange = { 
+                            draft = it
+                            onTyping()
+                        },
+                        sendScale = sendScale,
+                        replyingTo = state.replyingToMessage,
+                        onCancelReply = { onReply(null) },
+                        placeholder = strings.messagePlaceholder,
+                        onAttachClick = { 
+                            photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        },
+                        onLongAttachClick = {
+                            filePicker.launch(arrayOf("*/*"))
+                        },
+                        onPasteUri = { onAttachFile(it) },
+                        hasAttachment = state.pendingAttachment != null,
+                        onActionClick = {
+                            val text = draft.trim()
+                            if (text.isNotBlank() || state.pendingAttachment != null) {
+                                onSend(text)
+                                draft = ""
+                                sendPulse = true
+                                scope.launch {
+                                    delay(220)
+                                    sendPulse = false
+                                }
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -1324,7 +1321,8 @@ private fun MessageRow(
         horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = if (showSenderInfo) 4.dp else 1.dp)
+            .padding(top = if (showSenderInfo) 10.dp else 0.dp)
+            .padding(bottom = if (hasTail) 4.dp else 0.dp)
             .pointerInput(message.id) {
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { change, dragAmount ->
