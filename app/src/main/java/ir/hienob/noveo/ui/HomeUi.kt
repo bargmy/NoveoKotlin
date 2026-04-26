@@ -6,7 +6,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -1210,9 +1210,8 @@ private fun ChatPane(
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
             ) {
-                Column {
-                    if (state.pendingAttachment != null) {
-                        Box(modifier = Modifier.padding(horizontal = 8.dp)) {
+                Column(modifier = Modifier.animateContentSize()) {
+                    if (state.pendingAttachment != null) {                        Box(modifier = Modifier.padding(horizontal = 8.dp)) {
                             AttachmentPreview(
                                 attachment = state.pendingAttachment,
                                 onRemove = onRemoveAttachment
@@ -2228,7 +2227,7 @@ private fun ProfileModal(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = expandedHeight, bottom = 24.dp)
+                contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
                     Column(
@@ -2249,7 +2248,7 @@ private fun ProfileModal(
                                 if (user.bio.isNotBlank()) {
                                     InfoItem(label = "Bio", value = user.bio)
                                 }
-                                InfoItem(label = "Join Date", value = "April 2026") // Placeholder as requested for Telegram style
+                                InfoItem(label = "Join Date", value = "April 2026")
                             }
                         }
 
@@ -2265,6 +2264,8 @@ private fun ProfileModal(
                         ) { 
                             Text("Send Message") 
                         }
+                        
+                        Spacer(Modifier.height(300.dp)) // Sufficient spacer for collapsing animation
                     }
                 }
             }
@@ -2276,30 +2277,26 @@ private fun ProfileModal(
                 shadowElevation = lerpDp(0.dp, 4.dp, fraction)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Close Button
+                    // Back Button
                     HeaderIconButton(
                         icon = Icons.AutoMirrored.Outlined.ArrowBack,
                         onClick = onClose,
                         modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                     )
                     
-                    // Avatar and Name Logic
+                    // Avatar and Name Logic (Fixed Y=0 for stability)
                     val avatarSize = lerpDp(120.dp, 38.dp, fraction)
-                    // Move from center (0) to left (-screenHalf + margin)
-                    val avatarOffsetX = lerpDp(0.dp, (-140).dp, fraction) 
-                    // Move from center vertical to top bar center
-                    val avatarOffsetY = lerpDp(0.dp, 0.dp, fraction) 
+                    val avatarOffsetX = lerpDp(0.dp, (-144).dp, fraction) 
                     
                     Column(
-                        modifier = Modifier.fillMaxSize().padding(top = lerpDp(0.dp, 0.dp, fraction)),
+                        modifier = Modifier.fillMaxSize(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Box(modifier = Modifier.offset(x = avatarOffsetX, y = avatarOffsetY)) {
+                        Box(modifier = Modifier.offset(x = avatarOffsetX)) {
                             ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = avatarSize)
                         }
                         
-                        // Main info (only visible when expanded)
                         Spacer(Modifier.height(lerpDp(16.dp, 0.dp, fraction)))
                         
                         if (fraction < 0.6f) {
@@ -2318,23 +2315,25 @@ private fun ProfileModal(
                         }
                     }
                     
-                    // Title in collapsed state (Title Bar style)
+                    // Title in collapsed state (Match chat headbar position)
                     if (fraction > 0.6f) {
                         Column(
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
-                                .padding(start = 64.dp)
+                                .padding(start = 60.dp)
                                 .alpha(((fraction - 0.6f) * 2.5f).coerceIn(0f, 1f))
                         ) {
                             Text(
                                 user.username,
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
                             )
                             Text(
                                 if (user.isOnline) "online" else "last seen recently",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp
                             )
                         }
                     }
@@ -2353,7 +2352,13 @@ private fun InfoItem(label: String, value: String) {
 }
 
 @Composable
-private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: Map<String, UserSummary>, onClose: () -> Unit) {
+private fun GroupInfoModal(
+    chat: ChatSummary, 
+    strings: NoveoStrings, 
+    usersById: Map<String, UserSummary>, 
+    onOpenProfile: (String) -> Unit,
+    onClose: () -> Unit
+) {
     val chatTitle = remember(chat.title, strings) {
         if (chat.title == "Saved Messages") strings.savedMessages
         else chat.title.ifBlank { strings.chatInfo }
@@ -2382,7 +2387,7 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = expandedHeight, bottom = 24.dp)
+                contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp) // Extra bottom padding for scroll depth
             ) {
                 item {
                     Column(
@@ -2420,7 +2425,7 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
                         Card(
                             shape = RoundedCornerShape(12.dp), 
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            onClick = {}
+                            onClick = { onOpenProfile(memberId) }
                         ) {
                             Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 ProfileCircle(name = user?.username ?: memberId, imageUrl = user?.avatarUrl, size = 40.dp)
@@ -2443,6 +2448,10 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
                         }
                     }
                 }
+                
+                item {
+                    Spacer(Modifier.height(300.dp)) // Sufficient spacer for collapsing animation
+                }
             }
             
             // Collapsing Header
@@ -2459,9 +2468,9 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
                         modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                     )
                     
-                    // Avatar and Name Logic
+                    // Avatar and Name Logic (Stable Y = 0)
                     val avatarSize = lerpDp(120.dp, 38.dp, fraction)
-                    val avatarOffsetX = lerpDp(0.dp, (-140).dp, fraction) 
+                    val avatarOffsetX = lerpDp(0.dp, (-144).dp, fraction) 
                     
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -2490,23 +2499,25 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
                         }
                     }
                     
-                    // Title in collapsed state
+                    // Title in collapsed state (Match chat headbar position)
                     if (fraction > 0.6f) {
                         Column(
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
-                                .padding(start = 64.dp)
+                                .padding(start = 60.dp) // Standard back button + avatar margin
                                 .alpha(((fraction - 0.6f) * 2.5f).coerceIn(0f, 1f))
                         ) {
                             Text(
                                 chatTitle,
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp // Match chat headbar
                             )
                             Text(
                                 "${chat.memberIds.size} members",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp // Match chat headbar
                             )
                         }
                     }
@@ -2653,17 +2664,20 @@ private fun WelcomePane(strings: NoveoStrings, modifier: Modifier = Modifier) {
 private fun ModalHost(visible: Boolean, onDismiss: () -> Unit, fullscreen: Boolean = false, content: @Composable () -> Unit) {
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(animationSpec = tween(180)),
-        exit = fadeOut(animationSpec = tween(180))
+        enter = fadeIn(animationSpec = tween(250)),
+        exit = fadeOut(animationSpec = tween(250))
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(if (fullscreen) MaterialTheme.colorScheme.background else Color.Black.copy(alpha = 0.5f))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onDismiss
+                .then(
+                    if (fullscreen) Modifier // No close-on-click for fullscreen
+                    else Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onDismiss
+                    )
                 ),
             contentAlignment = Alignment.Center
         ) {
