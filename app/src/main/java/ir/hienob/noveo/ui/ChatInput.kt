@@ -67,13 +67,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.getValue
+import ir.hienob.noveo.R
+import ir.hienob.noveo.data.ChatMessage
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.slideIn
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalAnimationApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -249,8 +253,8 @@ internal fun ChatInput(
                         val animRotation by transition.animateFloat(
                             label = "rotation",
                             transitionSpec = { tween(250) }
-                        ) { state ->
-                            if (state) -25f else 0f
+                        ) { targetIsBlank ->
+                            if (targetIsBlank) -25f else 0f
                         }
 
                         Image(

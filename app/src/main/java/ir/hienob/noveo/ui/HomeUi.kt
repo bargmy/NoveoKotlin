@@ -162,6 +162,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.lerp as lerpDp
 import androidx.compose.ui.text.lerp as lerpTextStyle
 import androidx.compose.ui.util.lerp as lerpFloat
@@ -1409,7 +1410,7 @@ private fun MessageRow(
                 horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
                 modifier = if (ownMessage) Modifier else Modifier.weight(1f, false)
             ) {
-                val isSticker = message.content.file?.let { it.fileName == "sticker.png" || it.fileName == "sticker.gif" } ?: false
+                val isSticker = message.content.file?.let { it.name == "sticker.png" || it.name == "sticker.gif" } ?: false
                 
                 if (isSticker) {
                     val file = message.content.file!!
@@ -1451,7 +1452,7 @@ private fun MessageRow(
                     }
                 } else {
                     Surface(
-                        modifier = Modifier.widthIn(max = maxWidth * 0.78f),
+                        modifier = Modifier.widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f),
                         shape = TelegramBubbleShape(
                             isOutgoing = ownMessage,
                             hasTail = hasTail,
@@ -1565,10 +1566,6 @@ private fun MessageRow(
                         }
                     }
                 }
-            }
-        }
-            if (!ownMessage) {
-                Spacer(Modifier.weight(1f))
             }
         }
     }
