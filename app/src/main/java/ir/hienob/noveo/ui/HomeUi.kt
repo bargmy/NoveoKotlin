@@ -294,17 +294,23 @@ internal fun HomeScreen(
     var profileUserId by rememberSaveable { mutableStateOf<String?>(null) }
     var showGroupInfo by rememberSaveable { mutableStateOf(false) }
     var selectedMediaUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    var animateModalEntrance by remember { mutableStateOf(false) }
 
-    val isAnyModalVisible = showContactsModal || showCreateModal || showSettingsModal || 
-                          (showGroupInfo && state.selectedChatId != null) || 
+    val isAnyModalVisible = showContactsModal || showCreateModal || showSettingsModal ||
+                          (showGroupInfo && state.selectedChatId != null) ||
                           profileUserId != null || selectedMediaUrl != null || showSearch
 
     androidx.activity.compose.BackHandler(enabled = isAnyModalVisible || showMenu || state.selectedChatId != null) {
         when {
             selectedMediaUrl != null -> selectedMediaUrl = null
-            profileUserId != null -> profileUserId = null
-            showGroupInfo -> showGroupInfo = false
-            showSettingsModal -> showSettingsModal = false
+            profileUserId != null -> {
+                profileUserId = null
+                animateModalEntrance = false
+            }
+            showGroupInfo -> {
+                showGroupInfo = false
+                animateModalEntrance = false
+            }            showSettingsModal -> showSettingsModal = false
             showCreateModal -> showCreateModal = false
             showContactsModal -> showContactsModal = false
             showSearch -> { showSearch = false; searchQuery = "" }
@@ -501,11 +507,15 @@ internal fun HomeScreen(
                                 onMediaClick = { selectedMediaUrl = it },
                                 onAttachFile = onAttachFile,
                                 onRemoveAttachment = onRemoveAttachment,
-                                onOpenProfile = { userId -> profileUserId = userId },
-
-                                onOpenGroupInfo = { showGroupInfo = true },
-                                onReply = { onReply(it) }
-                            )
+                                onOpenProfile = { userId -> 
+                                    profileUserId = userId
+                                    animateModalEntrance = true
+                                },
+                                onOpenGroupInfo = { 
+                                    showGroupInfo = true 
+                                    animateModalEntrance = true
+                                },
+                                onReply = { onReply(it) }                            )
                         }
                     }
                 }
@@ -566,13 +576,17 @@ internal fun HomeScreen(
                                 onMediaClick = { selectedMediaUrl = it },
                                 onAttachFile = onAttachFile,
                                 onRemoveAttachment = onRemoveAttachment,
-                                onOpenProfile = { userId -> profileUserId = userId },
-
-                                onOpenGroupInfo = { showGroupInfo = true },
+                                onOpenProfile = { userId -> 
+                                    profileUserId = userId
+                                    animateModalEntrance = true
+                                },
+                                onOpenGroupInfo = { 
+                                    showGroupInfo = true 
+                                    animateModalEntrance = true
+                                },
                                 onReply = { onReply(it) },
                                 modifier = Modifier.weight(1f)
-                            )
-                        }
+                                )                        }
                     }
                 }
             }
@@ -676,29 +690,42 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
             )
         }
 
-        ModalHost(visible = showGroupInfo && selectedChat != null, onDismiss = { showGroupInfo = false }, fullscreen = true) {
+        ModalHost(visible = showGroupInfo && selectedChat != null, onDismiss = { showGroupInfo = false; animateModalEntrance = false }, fullscreen = true) {
             selectedChat?.let { chat ->
                 GroupInfoModal(
                     chat = chat,
                     strings = strings,
                     usersById = state.usersById,
-                    onClose = { showGroupInfo = false }
+                    onOpenProfile = { userId -> 
+                        profileUserId = userId
+                        animateModalEntrance = false // standard open from list
+                    },
+                    onClose = { 
+                        showGroupInfo = false
+                        animateModalEntrance = false
+                    },
+                    animateEntrance = animateModalEntrance
                 )
             }
         }
 
-        ModalHost(visible = selectedProfile != null, onDismiss = { profileUserId = null }, fullscreen = true) {
+        ModalHost(visible = selectedProfile != null, onDismiss = { profileUserId = null; animateModalEntrance = false }, fullscreen = true) {
             selectedProfile?.let { user ->
                 ProfileModal(
                     strings = strings,
                     user = user,
                     chats = state.chats,
                     selfUserId = state.session?.userId,
-                    onClose = { profileUserId = null },
+                    onClose = { 
+                        profileUserId = null
+                        animateModalEntrance = false
+                    },
                     onMessage = {
                         profileUserId = null
+                        animateModalEntrance = false
                         onStartDirectChat(user.id)
-                    }
+                    },
+                    animateEntrance = animateModalEntrance
                 )
             }
         }
@@ -2202,22 +2229,33 @@ private fun ProfileModal(
     chats: List<ChatSummary>,
     selfUserId: String?,
     onClose: () -> Unit,
-    onMessage: () -> Unit
+    onMessage: () -> Unit,
+    animateEntrance: Boolean = false
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
     
     val expandedHeight = 320.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
     
-    val scrollOffset = remember { derivedStateOf { 
+    // Entrance animation state
+    val entranceAnim = remember { androidx.compose.animation.core.Animatable(if (animateEntrance) 1f else 0f) }
+    LaunchedEffect(animateEntrance) {
+        if (animateEntrance) {
+            entranceAnim.animateTo(0f, tween(durationMillis = 400, easing = FastOutSlowInEasing))
+        }
+    }
+    
+    val scrollFraction = remember { derivedStateOf { 
         if (listState.firstVisibleItemIndex > 0) 1f 
         else (listState.firstVisibleItemScrollOffset.toFloat() / (expandedHeightPx - collapsedHeightPx)).coerceIn(0f, 1f)
     } }
     
-    val fraction = scrollOffset.value
+    // Combine scroll and entrance animation
+    val fraction = maxOf(scrollFraction.value, entranceAnim.value)
     
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -2357,7 +2395,8 @@ private fun GroupInfoModal(
     strings: NoveoStrings, 
     usersById: Map<String, UserSummary>, 
     onOpenProfile: (String) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    animateEntrance: Boolean = false
 ) {
     val chatTitle = remember(chat.title, strings) {
         if (chat.title == "Saved Messages") strings.savedMessages
@@ -2366,18 +2405,28 @@ private fun GroupInfoModal(
     
     val listState = rememberLazyListState()
     val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
     
     val expandedHeight = 320.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
     
-    val scrollOffset = remember { derivedStateOf { 
+    // Entrance animation state
+    val entranceAnim = remember { androidx.compose.animation.core.Animatable(if (animateEntrance) 1f else 0f) }
+    LaunchedEffect(animateEntrance) {
+        if (animateEntrance) {
+            entranceAnim.animateTo(0f, tween(durationMillis = 400, easing = FastOutSlowInEasing))
+        }
+    }
+    
+    val scrollFraction = remember { derivedStateOf { 
         if (listState.firstVisibleItemIndex > 0) 1f 
         else (listState.firstVisibleItemScrollOffset.toFloat() / (expandedHeightPx - collapsedHeightPx)).coerceIn(0f, 1f)
     } }
     
-    val fraction = scrollOffset.value
+    // Combine scroll and entrance animation
+    val fraction = maxOf(scrollFraction.value, entranceAnim.value)
     
     Surface(
         color = MaterialTheme.colorScheme.background,
