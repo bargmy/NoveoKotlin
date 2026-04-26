@@ -676,7 +676,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
             )
         }
 
-        ModalHost(visible = showGroupInfo && selectedChat != null, onDismiss = { showGroupInfo = false }) {
+        ModalHost(visible = showGroupInfo && selectedChat != null, onDismiss = { showGroupInfo = false }, fullscreen = true) {
             selectedChat?.let { chat ->
                 GroupInfoModal(
                     chat = chat,
@@ -687,7 +687,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
             }
         }
 
-        ModalHost(visible = selectedProfile != null, onDismiss = { profileUserId = null }) {
+        ModalHost(visible = selectedProfile != null, onDismiss = { profileUserId = null }, fullscreen = true) {
             selectedProfile?.let { user ->
                 ProfileModal(
                     strings = strings,
@@ -1076,7 +1076,7 @@ private fun ChatPane(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 8.dp, top = 64.dp, end = 8.dp, bottom = 90.dp),
-            verticalArrangement = Arrangement.spacedBy(1.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             itemsIndexed(
                 items = state.messages,
@@ -2208,7 +2208,7 @@ private fun ProfileModal(
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     
-    val expandedHeight = 220.dp
+    val expandedHeight = 320.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
@@ -2221,26 +2221,50 @@ private fun ProfileModal(
     val fraction = scrollOffset.value
     
     Surface(
-        shape = RoundedCornerShape(28.dp),
-        tonalElevation = 4.dp,
-        modifier = Modifier.fillMaxWidth().height(500.dp)
+        color = MaterialTheme.colorScheme.background,
+        modifier = Modifier.fillMaxSize()
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = expandedHeight)
+                contentPadding = PaddingValues(top = expandedHeight, bottom = 24.dp)
             ) {
                 item {
-                    Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Info Section (Telegram Style)
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                InfoItem(label = strings.username, value = user.username)
+                                if (!user.handle.isNullOrBlank()) {
+                                    InfoItem(label = "Handle", value = user.handle)
+                                }
+                                if (user.bio.isNotBlank()) {
+                                    InfoItem(label = "Bio", value = user.bio)
+                                }
+                                InfoItem(label = "Join Date", value = "April 2026") // Placeholder as requested for Telegram style
+                            }
+                        }
+
                         DetailCard(
-                            title = strings.mutualChatState,
-                            body = if (findDirectChatForUser(chats, selfUserId, user.id) != null) strings.chatFound else strings.chatNotFound
+                            title = "Privacy & Support",
+                            body = if (findDirectChatForUser(chats, selfUserId, user.id) != null) "You have an existing chat with this user." else "No previous direct interaction found."
                         )
-                        Button(onClick = onMessage, modifier = Modifier.fillMaxWidth()) { Text(strings.messageButton) }
                         
-                        // Add some spacer to allow scrolling
-                        Spacer(Modifier.height(400.dp))
+                        Button(
+                            onClick = onMessage, 
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) { 
+                            Text("Send Message") 
+                        }
                     }
                 }
             }
@@ -2249,23 +2273,25 @@ private fun ProfileModal(
             Surface(
                 modifier = Modifier.fillMaxWidth().height(lerpDp(expandedHeight, collapsedHeight, fraction)),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = lerpDp(0.dp, 4.dp, fraction)
+                shadowElevation = lerpDp(0.dp, 4.dp, fraction)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     // Close Button
                     HeaderIconButton(
-                        icon = Icons.Outlined.Close,
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
                         onClick = onClose,
-                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                     )
                     
-                    // Avatar and Name
-                    val avatarSize = lerpDp(96.dp, 36.dp, fraction)
-                    val avatarOffsetX = lerpDp(0.dp, (-140).dp, fraction) // Adjust based on screen width roughly
-                    val avatarOffsetY = lerpDp(20.dp, 0.dp, fraction)
+                    // Avatar and Name Logic
+                    val avatarSize = lerpDp(120.dp, 38.dp, fraction)
+                    // Move from center (0) to left (-screenHalf + margin)
+                    val avatarOffsetX = lerpDp(0.dp, (-140).dp, fraction) 
+                    // Move from center vertical to top bar center
+                    val avatarOffsetY = lerpDp(0.dp, 0.dp, fraction) 
                     
                     Column(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().padding(top = lerpDp(0.dp, 0.dp, fraction)),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -2273,37 +2299,56 @@ private fun ProfileModal(
                             ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = avatarSize)
                         }
                         
-                        if (fraction < 0.8f) {
-                            Spacer(Modifier.height(lerpDp(12.dp, 0.dp, fraction)))
+                        // Main info (only visible when expanded)
+                        Spacer(Modifier.height(lerpDp(16.dp, 0.dp, fraction)))
+                        
+                        if (fraction < 0.6f) {
                             Text(
                                 user.username, 
-                                style = lerpTextStyle(MaterialTheme.typography.headlineSmall, MaterialTheme.typography.titleMedium, fraction),
+                                style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.alpha(1f - fraction)
+                                modifier = Modifier.alpha((1f - fraction * 2f).coerceIn(0f, 1f))
                             )
                             Text(
-                                user.handle ?: strings.noHandle, 
+                                if (user.isOnline) "online" else "last seen recently", 
                                 style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.alpha(1f - fraction)
+                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.alpha((1f - fraction * 2.5f).coerceIn(0f, 1f))
                             )
                         }
                     }
                     
-                    // Title in collapsed state
-                    if (fraction > 0.5f) {
-                        Text(
-                            user.username,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
+                    // Title in collapsed state (Title Bar style)
+                    if (fraction > 0.6f) {
+                        Column(
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
                                 .padding(start = 64.dp)
-                                .alpha(lerpFloat(0f, 1f, (fraction - 0.5f) * 2))
-                        )
+                                .alpha(((fraction - 0.6f) * 2.5f).coerceIn(0f, 1f))
+                        ) {
+                            Text(
+                                user.username,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                if (user.isOnline) "online" else "last seen recently",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun InfoItem(label: String, value: String) {
+    Column {
+        Text(value, style = MaterialTheme.typography.bodyLarge)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -2317,7 +2362,7 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     
-    val expandedHeight = 220.dp
+    val expandedHeight = 320.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
@@ -2329,27 +2374,57 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
     
     val fraction = scrollOffset.value
     
-    Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        modifier = Modifier.fillMaxSize()
+    ) {
         Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = expandedHeight)
+                contentPadding = PaddingValues(top = expandedHeight, bottom = 24.dp)
             ) {
                 item {
-                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)) {
-                        DetailRow(strings.members, localizeDigits(chat.memberIds.size.toString(), strings.languageCode))
-                        Spacer(Modifier.height(10.dp))
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Info Section
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                InfoItem(label = "Title", value = chatTitle)
+                                if (!chat.handle.isNullOrBlank()) {
+                                    InfoItem(label = "Link", value = "@${chat.handle}")
+                                }
+                                InfoItem(label = "Type", value = chat.chatType.replaceFirstChar { it.uppercase() })
+                            }
+                        }
+
+                        Text(
+                            "Members", 
+                            style = MaterialTheme.typography.titleMedium, 
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
                 
                 items(chat.memberIds, key = { it }) { memberId ->
                     val user = usersById[memberId]
-                    Box(modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
-                        Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        Card(
+                            shape = RoundedCornerShape(12.dp), 
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            onClick = {}
+                        ) {
                             Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 ProfileCircle(name = user?.username ?: memberId, imageUrl = user?.avatarUrl, size = 40.dp)
-                                Spacer(Modifier.width(10.dp))
+                                Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(user?.username ?: memberId, fontWeight = FontWeight.SemiBold)
@@ -2358,15 +2433,15 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
                                             VerifiedIcon(modifier = Modifier.size(14.dp))
                                         }
                                     }
-                                    Text(user?.handle ?: user?.bio?.ifBlank { memberId } ?: memberId, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        if (user?.isOnline == true) "online" else "last seen recently", 
+                                        style = MaterialTheme.typography.bodySmall, 
+                                        color = if (user?.isOnline == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                         }
                     }
-                }
-                
-                item {
-                    Spacer(Modifier.height(20.dp))
                 }
             }
             
@@ -2374,57 +2449,66 @@ private fun GroupInfoModal(chat: ChatSummary, strings: NoveoStrings, usersById: 
             Surface(
                 modifier = Modifier.fillMaxWidth().height(lerpDp(expandedHeight, collapsedHeight, fraction)),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = lerpDp(0.dp, 4.dp, fraction)
+                shadowElevation = lerpDp(0.dp, 4.dp, fraction)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Close Button
+                    // Back Button
                     HeaderIconButton(
-                        icon = Icons.Outlined.Close,
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
                         onClick = onClose,
-                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                     )
                     
-                    // Avatar and Name
-                    val avatarSize = lerpDp(96.dp, 36.dp, fraction)
-                    val avatarOffsetX = lerpDp(0.dp, (-140).dp, fraction)
-                    val avatarOffsetY = lerpDp(20.dp, 0.dp, fraction)
+                    // Avatar and Name Logic
+                    val avatarSize = lerpDp(120.dp, 38.dp, fraction)
+                    val avatarOffsetX = lerpDp(0.dp, (-140).dp, fraction) 
                     
                     Column(
                         modifier = Modifier.fillMaxSize(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Box(modifier = Modifier.offset(x = avatarOffsetX, y = avatarOffsetY)) {
+                        Box(modifier = Modifier.offset(x = avatarOffsetX)) {
                             ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize)
                         }
                         
-                        if (fraction < 0.8f) {
-                            Spacer(Modifier.height(lerpDp(12.dp, 0.dp, fraction)))
+                        Spacer(Modifier.height(lerpDp(16.dp, 0.dp, fraction)))
+                        
+                        if (fraction < 0.6f) {
                             Text(
                                 chatTitle, 
-                                style = lerpTextStyle(MaterialTheme.typography.headlineSmall, MaterialTheme.typography.titleMedium, fraction),
+                                style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.alpha(1f - fraction)
+                                modifier = Modifier.alpha((1f - fraction * 2f).coerceIn(0f, 1f))
                             )
                             Text(
-                                chat.chatType.replaceFirstChar { it.uppercase() }, 
+                                "${chat.memberIds.size} members", 
                                 style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.alpha(1f - fraction)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.alpha((1f - fraction * 2.5f).coerceIn(0f, 1f))
                             )
                         }
                     }
                     
                     // Title in collapsed state
-                    if (fraction > 0.5f) {
-                        Text(
-                            chatTitle,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
+                    if (fraction > 0.6f) {
+                        Column(
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
                                 .padding(start = 64.dp)
-                                .alpha(lerpFloat(0f, 1f, (fraction - 0.5f) * 2))
-                        )
+                                .alpha(((fraction - 0.6f) * 2.5f).coerceIn(0f, 1f))
+                        ) {
+                            Text(
+                                chatTitle,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "${chat.memberIds.size} members",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -2566,7 +2650,7 @@ private fun WelcomePane(strings: NoveoStrings, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ModalHost(visible: Boolean, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+private fun ModalHost(visible: Boolean, onDismiss: () -> Unit, fullscreen: Boolean = false, content: @Composable () -> Unit) {
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn(animationSpec = tween(180)),
@@ -2575,7 +2659,7 @@ private fun ModalHost(visible: Boolean, onDismiss: () -> Unit, content: @Composa
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
+                .background(if (fullscreen) MaterialTheme.colorScheme.background else Color.Black.copy(alpha = 0.5f))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -2584,7 +2668,7 @@ private fun ModalHost(visible: Boolean, onDismiss: () -> Unit, content: @Composa
             contentAlignment = Alignment.Center
         ) {
             Box(
-                modifier = Modifier
+                modifier = if (fullscreen) Modifier.fillMaxSize() else Modifier
                     .padding(18.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
