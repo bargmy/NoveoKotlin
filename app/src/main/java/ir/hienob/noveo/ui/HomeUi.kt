@@ -50,7 +50,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -1402,7 +1401,7 @@ private fun ChatPane(
         if (contextMenuState != null) {
             Box(
                 modifier = Modifier
-                    .matchParentSize()
+                    .fillMaxSize()
                     .background(tgColors.contextMenuOverlay)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -1609,7 +1608,7 @@ private fun MessageRow(
                         }
                         Box(
                             modifier = Modifier
-                                .matchParentSize()
+                                .fillMaxSize()
                                 .clickable(
                                     interactionSource = bubbleInteractionSource,
                                     indication = null
@@ -1739,7 +1738,7 @@ private fun MessageRow(
                         }
                         Box(
                             modifier = Modifier
-                                .matchParentSize()
+                                .fillMaxSize()
                                 .clickable(
                                     interactionSource = bubbleInteractionSource,
                                     indication = null
