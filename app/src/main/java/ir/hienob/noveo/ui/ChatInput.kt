@@ -1,25 +1,14 @@
 package ir.hienob.noveo.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ExperimentalAnimationApi
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -33,14 +22,12 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
@@ -62,14 +49,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import ir.hienob.noveo.R
 import ir.hienob.noveo.data.ChatMessage
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.slideIn
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.RepeatMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import coil3.compose.SubcomposeAsyncImage
 
 @OptIn(ExperimentalAnimationApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -152,12 +134,6 @@ internal fun ChatInput(
         }
     }
 
-    val recordingAlpha by animateFloatAsState(
-        targetValue = if (isRecording) 1f else 0f,
-        animationSpec = tween(150),
-        label = "recordingAlpha"
-    )
-
     val showSendButton = (draft.isNotBlank() || hasAttachment) || recordingLocked
     val buttonColor = if (!showSendButton) tgColors.composerField else tgColors.composerBlue
     val iconColor = if (!showSendButton) tgColors.composerIcon else Color.White
@@ -169,50 +145,40 @@ internal fun ChatInput(
     )
 
     Box(modifier = modifier.fillMaxWidth().padding(horizontal = 6.dp).padding(bottom = 4.dp)) {
-        // Main Input Layout
+        // Main Row: Bubble + Space for Button
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Bottom
         ) {
-            // Main Input Bubble
+            // Input Bubble
             Surface(
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(24.dp),
                 color = tgColors.composerField,
                 shadowElevation = 1.dp
             ) {
-                Box(contentAlignment = Alignment.CenterStart) {
-                    // Regular Input UI
+                Box(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = Alignment.CenterStart) {
+                    // 1. Normal Input View
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .alpha(1f - recordingAlpha)
+                            .alpha(if (isRecording) 0f else 1f)
                     ) {
-                        // Reply Preview
-                        AnimatedVisibility(
-                            visible = replyingTo != null && !isRecording,
-                            enter = slideInVertically { it },
-                            exit = slideOutVertically { it }
-                        ) {
-                            replyingTo?.let { reply ->
-                                Row(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Box(modifier = Modifier.width(2.dp).height(30.dp).background(tgColors.composerBlue, RoundedCornerShape(1.dp)))
-                                    Spacer(Modifier.width(10.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(reply.senderName, style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp), color = tgColors.composerBlue, fontWeight = FontWeight.Bold, maxLines = 1)
-                                        Text(reply.content.previewText(), style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = tgColors.composerHint, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
-                                    IconButton(onClick = onCancelReply, modifier = Modifier.size(24.dp)) {
-                                        Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(17.dp), tint = tgColors.composerHint)
-                                    }
+                        if (replyingTo != null) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.width(2.dp).height(30.dp).background(tgColors.composerBlue, RoundedCornerShape(1.dp)))
+                                Spacer(Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(replyingTo.senderName, style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp), color = tgColors.composerBlue, fontWeight = FontWeight.Bold, maxLines = 1)
+                                    Text(replyingTo.content.previewText(), style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = tgColors.composerHint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                IconButton(onClick = onCancelReply, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(17.dp), tint = tgColors.composerHint)
                                 }
                             }
                         }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             GlassIconButton(
                                 resId = R.drawable.tg_input_smile,
                                 contentDescription = "Emoji",
@@ -222,10 +188,7 @@ internal fun ChatInput(
                                 modifier = Modifier.padding(start = 4.dp)
                             )
 
-                            Box(
-                                modifier = Modifier.weight(1f).padding(vertical = 10.dp, horizontal = 4.dp),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
+                            Box(modifier = Modifier.weight(1f).padding(vertical = 10.dp, horizontal = 4.dp), contentAlignment = Alignment.CenterStart) {
                                 if (draft.isBlank()) {
                                     Text(placeholder, color = tgColors.composerHint, fontSize = 17.sp)
                                 }
@@ -235,34 +198,7 @@ internal fun ChatInput(
                                     modifier = Modifier.fillMaxWidth().focusRequester(inputFocusRequester),
                                     textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, color = tgColors.composerText),
                                     cursorBrush = SolidColor(tgColors.composerCursor),
-                                    minLines = 1,
                                     maxLines = 6
-                                )
-                                
-                                // Paste URI handler
-                                androidx.compose.ui.viewinterop.AndroidView(
-                                    factory = { context ->
-                                        val view = android.view.View(context)
-                                        androidx.core.view.ViewCompat.setOnReceiveContentListener(
-                                            view,
-                                            arrayOf("image/*", "video/*", "application/*", "text/*"),
-                                            object : androidx.core.view.OnReceiveContentListener {
-                                                override fun onReceiveContent(view: android.view.View, payload: androidx.core.view.ContentInfoCompat): androidx.core.view.ContentInfoCompat? {
-                                                    val split = payload.partition { it.uri != null }
-                                                    val uriPart = split.first
-                                                    if (uriPart != null) {
-                                                        val clip = uriPart.clip
-                                                        for (i in 0 until clip.itemCount) {
-                                                            clip.getItemAt(i).uri?.let { uri -> onPasteUri(uri) }
-                                                        }
-                                                    }
-                                                    return split.second
-                                                }
-                                            }
-                                        )
-                                        view
-                                    },
-                                    modifier = Modifier.matchParentSize()
                                 )
                             }
 
@@ -278,62 +214,30 @@ internal fun ChatInput(
                         }
                     }
 
-                    // Recording Overlay UI
+                    // 2. Recording Overlay
                     if (isRecording) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .padding(horizontal = 12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (recordingLocked) {
-                                IconButton(
-                                    onClick = { finishRecording(send = false) },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(Icons.Outlined.Delete, contentDescription = "Cancel", tint = MaterialTheme.colorScheme.error)
+                                IconButton(onClick = { finishRecording(false) }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                                 }
                             } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(10.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Red.copy(alpha = dotAlpha))
-                                )
+                                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color.Red.copy(alpha = dotAlpha)))
                             }
-                            
                             Spacer(Modifier.width(12.dp))
-                            
                             val seconds = (recordTimeMillis / 1000) % 60
                             val minutes = (recordTimeMillis / 1000) / 60
-                            Text(
-                                String.format("%02d:%02d", minutes, seconds),
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = tgColors.composerText
-                            )
-
+                            Text(String.format("%02d:%02d", minutes, seconds), fontSize = 17.sp, fontWeight = FontWeight.Medium, color = tgColors.composerText)
+                            
                             Spacer(Modifier.weight(1f))
-
+                            
                             if (!recordingLocked) {
-                                val slideOffsetAbs = Math.abs(dragOffset.x)
-                                val slideAlpha = (1f - (slideOffsetAbs / 150f)).coerceIn(0.2f, 1f)
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.graphicsLayer { alpha = slideAlpha }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
-                                        contentDescription = null,
-                                        tint = tgColors.composerHint,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Text(
-                                        "Slide to cancel",
-                                        fontSize = 15.sp,
-                                        color = tgColors.composerHint
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.alpha((1f - (Math.abs(dragOffset.x) / 200f)).coerceIn(0f, 1f))) {
+                                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = null, tint = tgColors.composerHint, modifier = Modifier.size(20.dp))
+                                    Text("Slide to cancel", fontSize = 15.sp, color = tgColors.composerHint)
                                 }
                             }
                         }
@@ -342,128 +246,109 @@ internal fun ChatInput(
             }
 
             Spacer(Modifier.width(8.dp))
+            
+            // Fixed width spacer for button
+            Box(Modifier.size(48.dp))
+        }
 
-            // Mic/Send Button
-            Surface(
-                modifier = Modifier
-                    .size(48.dp)
-                    .scale(micScale)
-                    .offset(x = (dragOffset.x.dp / 2).coerceAtMost(0.dp), y = (dragOffset.y.dp / 2).coerceAtMost(0.dp)),
-                shape = CircleShape,
-                color = buttonColor,
-                shadowElevation = if (isRecording) 4.dp else 1.dp
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape)
-                        .then(
-                            if (!showSendButton) {
-                                Modifier.pointerInput(Unit) {
-                                    androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress(
-                                        onDragStart = {
-                                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                                audioRecorder.start()
-                                                isRecording = true
-                                                recordingLocked = false
-                                                recordTimeMillis = 0L
-                                            } else {
-                                                permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                                            }
-                                        },
-                                        onDragEnd = {
-                                            if (isRecording) finishRecording(send = !recordingLocked)
-                                        },
-                                        onDragCancel = {
-                                            if (isRecording) finishRecording(send = false)
-                                        },
-                                        onDrag = { change: PointerInputChange, dragAmount: Offset ->
-                                            change.consume()
-                                            if (isRecording && !recordingLocked) {
-                                                dragOffset += dragAmount
-                                                if (dragOffset.x < -250f) finishRecording(send = false)
-                                                else if (dragOffset.y < -200f) {
-                                                    recordingLocked = true
-                                                    dragOffset = Offset.Zero
-                                                }
-                                            }
-                                        }
-                                    )
-                                }
-                            } else {
-                                Modifier.clickable(
-                                    interactionSource = buttonInteraction,
-                                    indication = null,
-                                    onClick = {
-                                        if (recordingLocked) finishRecording(send = true)
-                                        else onActionClick()
-                                    }
-                                )
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val density = LocalDensity.current
-                    AnimatedContent(
-                        targetState = !showSendButton,
-                        transitionSpec = {
-                            if (!targetState) {
-                                (fadeIn(tween(200)) + 
-                                 slideIn(tween(250, easing = LinearOutSlowInEasing)) { 
-                                     IntOffset(with(density) { -50.dp.roundToPx() }, with(density) { 50.dp.roundToPx() }) 
-                                 }
-                                ).togetherWith(fadeOut(tween(150)))
-                            } else {
-                                fadeIn(tween(150)).togetherWith(fadeOut(tween(150)))
-                            }
-                        },
-                        label = "send_icon_animation"
-                    ) { targetIsMic ->
-                        val animRotation by transition.animateFloat(
-                            label = "rotation",
-                            transitionSpec = { tween(250) }
-                        ) { enterExitState ->
-                            if (!targetIsMic && enterExitState == androidx.compose.animation.EnterExitState.PreEnter) -25f else 0f
-                        }
-
-                        Image(
-                            painter = painterResource(if (targetIsMic) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp).graphicsLayer {
-                                rotationZ = if (targetIsMic) 0f else animRotation
-                            },
-                            colorFilter = ColorFilter.tint(iconColor)
-                        )
+        // Floating Lock Icon
+        AnimatedVisibility(
+            visible = isRecording && !recordingLocked,
+            enter = fadeIn() + slideInVertically { it },
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 68.dp).width(48.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Surface(modifier = Modifier.size(28.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         }
 
-        // Floating Lock Icon Overlay
-        androidx.compose.animation.AnimatedVisibility(
-            visible = isRecording && !recordingLocked,
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut(),
+        // Floating Mic/Send Button
+        val density = LocalDensity.current
+        Surface(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(bottom = 64.dp)
-                .width(48.dp)
+                .size(48.dp)
+                .scale(micScale)
+                .offset { 
+                    if (isRecording && !recordingLocked) {
+                        IntOffset(dragOffset.x.toInt(), dragOffset.y.toInt())
+                    } else IntOffset.Zero
+                },
+            shape = CircleShape,
+            color = buttonColor,
+            shadowElevation = if (isRecording) 4.dp else 1.dp
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Surface(
-                    modifier = Modifier.size(28.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shadowElevation = 2.dp
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Outlined.Lock,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .then(
+                        if (!showSendButton) {
+                            Modifier.pointerInput(Unit) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                            audioRecorder.start()
+                                            isRecording = true
+                                            recordingLocked = false
+                                            recordTimeMillis = 0L
+                                        } else {
+                                            permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    },
+                                    onDragEnd = { if (isRecording) finishRecording(!recordingLocked) },
+                                    onDragCancel = { if (isRecording) finishRecording(false) },
+                                    onDrag = { change: PointerInputChange, dragAmount: Offset ->
+                                        change.consume()
+                                        if (isRecording && !recordingLocked) {
+                                            dragOffset += dragAmount
+                                            if (dragOffset.x < -200f) finishRecording(false)
+                                            else if (dragOffset.y < -200f) {
+                                                recordingLocked = true
+                                                dragOffset = Offset.Zero
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        } else {
+                            Modifier.clickable(interactionSource = buttonInteraction, indication = null) {
+                                if (recordingLocked) finishRecording(true)
+                                else onActionClick()
+                            }
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                AnimatedContent(
+                    targetState = !showSendButton,
+                    transitionSpec = {
+                        if (!targetState) {
+                            (fadeIn(tween(200)) + slideIn(tween(250, easing = LinearOutSlowInEasing)) { 
+                                IntOffset(with(density) { -50.dp.roundToPx() }, with(density) { 50.dp.roundToPx() }) 
+                            }).togetherWith(fadeOut(tween(150)))
+                        } else {
+                            fadeIn(tween(150)).togetherWith(fadeOut(tween(150)))
+                        }
+                    },
+                    label = "send_icon"
+                ) { targetIsMic ->
+                    val animRotation by transition.animateFloat(
+                        label = "rot",
+                        transitionSpec = { tween(250) }
+                    ) { state -> if (state == EnterExitState.PreEnter && !targetIsMic) -25f else 0f }
+
+                    Image(
+                        painter = painterResource(if (targetIsMic) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = animRotation },
+                        colorFilter = ColorFilter.tint(iconColor)
+                    )
                 }
             }
         }
@@ -476,84 +361,39 @@ internal fun AttachmentPreview(
     onRemove: () -> Unit
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
                 if (attachment.mimeType.startsWith("image/") || attachment.mimeType.startsWith("video/")) {
                     SubcomposeAsyncImage(
                         model = attachment.uri,
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
-                        loading = {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        },
-                        error = {
-                            Icon(Icons.Outlined.Close, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                        }
+                        loading = { CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp) },
+                        error = { Icon(Icons.Outlined.Close, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
                     )
                 } else {
-                    Icon(
-                        imageVector = Icons.Outlined.Close,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    Icon(Icons.Outlined.Close, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 }
                 
                 if (attachment.isUploading) {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        progress = { attachment.progress },
-                        modifier = Modifier.size(32.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 3.dp,
-                    )
+                    CircularProgressIndicator(progress = { attachment.progress }, modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
                 }
             }
             
             Spacer(Modifier.width(12.dp))
             
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = attachment.fileName,
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = if (attachment.isUploading) 
-                        "Uploading ${ (attachment.progress * 100).toInt() }%" 
-                        else "Ready to send",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
+                Text(text = attachment.fileName, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(text = if (attachment.isUploading) "Uploading ${ (attachment.progress * 100).toInt() }%" else "Ready to send", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
             }
             
             IconButton(onClick = onRemove, enabled = !attachment.isUploading) {
-                Icon(
-                    imageVector = Icons.Outlined.Close,
-                    contentDescription = "Remove",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Icon(imageVector = Icons.Outlined.Close, contentDescription = "Remove", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -571,25 +411,7 @@ private fun GlassIconButton(
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-
-    Box(
-        modifier = modifier
-            .size(38.dp)
-            .clip(CircleShape)
-            .background(selectorTint, CircleShape)
-            .combinedClickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
-                onLongClick = onLongClick
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Image(
-            painter = painterResource(resId),
-            contentDescription = contentDescription,
-            modifier = Modifier.size(22.dp),
-            colorFilter = ColorFilter.tint(tint)
-        )
+    Box(modifier = modifier.size(38.dp).clip(CircleShape).background(selectorTint, CircleShape).combinedClickable(interactionSource = interactionSource, indication = null, onClick = onClick, onLongClick = onLongClick), contentAlignment = Alignment.Center) {
+        Image(painter = painterResource(resId), contentDescription = contentDescription, modifier = Modifier.size(22.dp), colorFilter = ColorFilter.tint(tint))
     }
 }
