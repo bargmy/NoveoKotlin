@@ -257,7 +257,7 @@ private fun MessageContextMenu(
                         if (state.ownMessage && state.message.content.text != null) {
                             ContextMenuActionItem(
                                 label = "Edit",
-                                icon = { Icon(androidx.compose.material.icons.outlined.Edit, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                                icon = { Icon(androidx.compose.material.icons.Icons.Outlined.Edit, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                                 textColor = menuText,
                                 onClick = onEdit
                             )

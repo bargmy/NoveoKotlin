@@ -318,6 +318,10 @@ internal fun HomeScreen(
     onUpdateProfile: (String, String) -> Unit,
     onLoadOlder: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
+    onEditMessage: (ChatMessage?) -> Unit,
+    onToggleReaction: (String, String) -> Unit,
+    onDeleteMessage: (String) -> Unit,
+    onPinMessage: (String, Boolean) -> Unit,
     onChangePassword: (String, String) -> Unit,
     onDeleteAccount: (String) -> Unit,
     onSetLanguage: (String) -> Unit,
@@ -550,6 +554,7 @@ internal fun HomeScreen(
                                 compact = true,
                                 strings = strings,
                                 selectedChat = selectedChat,
+                                currentUserId = state.session?.userId,
                                 onBackToChats = onBackToChats,
                                 onSend = onSend,
                                 onTyping = onTyping,
@@ -566,7 +571,11 @@ internal fun HomeScreen(
                                     animateModalEntrance = true
                                 },
                                 onReply = { onReply(it) },
-                                onCancelEdit = { viewModel.setEditingMessage(null) }
+                                onEditMessage = onEditMessage,
+                                onToggleReaction = onToggleReaction,
+                                onDeleteMessage = onDeleteMessage,
+                                onPinMessage = onPinMessage,
+                                onCancelEdit = { onEditMessage(null) }
                             )
                         }
                     }
@@ -621,7 +630,9 @@ internal fun HomeScreen(
                                 state = state,
                                 compact = false,
                                 strings = strings,
-                                selectedChat = selectedChat,                                onBackToChats = onBackToChats,
+                                selectedChat = selectedChat,
+                                currentUserId = state.session?.userId,
+                                onBackToChats = onBackToChats,
                                 onSend = onSend,
                                 onTyping = onTyping,
                                 onLoadOlder = onLoadOlder,
@@ -637,7 +648,11 @@ internal fun HomeScreen(
                                     animateModalEntrance = true
                                 },
                                 onReply = { onReply(it) },
-                                onCancelEdit = { viewModel.setEditingMessage(null) },
+                                onEditMessage = onEditMessage,
+                                onToggleReaction = onToggleReaction,
+                                onDeleteMessage = onDeleteMessage,
+                                onPinMessage = onPinMessage,
+                                onCancelEdit = { onEditMessage(null) },
                                 modifier = Modifier.weight(1f)
                                 )                        }
                     }
@@ -1015,6 +1030,7 @@ private fun ChatPane(
     compact: Boolean,
     strings: NoveoStrings,
     selectedChat: ChatSummary?,
+    currentUserId: String?,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
@@ -1025,6 +1041,10 @@ private fun ChatPane(
     onOpenProfile: (String) -> Unit,
     onOpenGroupInfo: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
+    onEditMessage: (ChatMessage?) -> Unit,
+    onToggleReaction: (String, String) -> Unit,
+    onDeleteMessage: (String) -> Unit,
+    onPinMessage: (String, Boolean) -> Unit,
     onCancelEdit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1189,6 +1209,7 @@ private fun ChatPane(
                     showSenderInfo = isFirstInGroup,
                     hasTail = isLastInGroup,
                     isGroupChat = selectedChat?.chatType != "private",
+                    currentUserId = currentUserId,
                     onMediaClick = onMediaClick,
                     onOpenProfile = onOpenProfile,
                     repliedMessage = repliedMessage,
@@ -1420,22 +1441,22 @@ private fun ChatPane(
                     onReaction = { emoji ->
                         contextMenuState = null
                         contextMenuExpanded = false
-                        viewModel.toggleReaction(menuState.message.id, emoji)
+                        onToggleReaction(menuState.message.id, emoji)
                     },
                     onEdit = {
                         contextMenuState = null
                         contextMenuExpanded = false
-                        viewModel.setEditingMessage(menuState.message)
+                        onEditMessage(menuState.message)
                     },
                     onDelete = {
                         contextMenuState = null
                         contextMenuExpanded = false
-                        viewModel.deleteMessage(menuState.message.id)
+                        onDeleteMessage(menuState.message.id)
                     },
                     onPin = {
                         contextMenuState = null
                         contextMenuExpanded = false
-                        viewModel.pinMessage(menuState.message.id, !menuState.message.isPinned)
+                        onPinMessage(menuState.message.id, !menuState.message.isPinned)
                     },
                     onForward = {
                         contextMenuState = null
@@ -1461,6 +1482,7 @@ private fun MessageRow(
     showSenderInfo: Boolean,
     hasTail: Boolean,
     isGroupChat: Boolean,
+    currentUserId: String?,
     onMediaClick: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
     repliedMessage: ChatMessage? = null,
@@ -1738,7 +1760,7 @@ private fun MessageRow(
                                                     modifier = Modifier.clickable { onReply() }, // Reuse reply or dedicated reaction toggle
                                                     shape = RoundedCornerShape(10.dp),
                                                     color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.1f),
-                                                    border = if (userIds.contains(state.session?.userId)) BorderStroke(1.dp, if (ownMessage) tgColors.outgoingText.copy(alpha = 0.3f) else tgColors.incomingLink.copy(alpha = 0.3f)) else null
+                                                    border = if (userIds.contains(currentUserId)) BorderStroke(1.dp, if (ownMessage) tgColors.outgoingText.copy(alpha = 0.3f) else tgColors.incomingLink.copy(alpha = 0.3f)) else null
                                                 ) {
                                                     Row(
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
