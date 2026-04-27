@@ -66,10 +66,22 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import ir.hienob.noveo.R
 import ir.hienob.noveo.data.ChatMessage
 import androidx.compose.animation.core.animateFloat
@@ -102,10 +114,22 @@ internal fun ChatInput(
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val audioRecorder = remember { AudioRecorder(context) }
-    var isRecording by remember { androidx.compose.runtime.mutableStateOf(false) }
-    var recordingLocked by remember { androidx.compose.runtime.mutableStateOf(false) }
-    var recordTimeMillis by remember { androidx.compose.runtime.mutableStateOf(0L) }
-    var dragOffset by remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var isRecording by remember { mutableStateOf(false) }
+    var recordingLocked by remember { mutableStateOf(false) }
+    var recordTimeMillis by remember { mutableStateOf(0L) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+
+    // Moved from inner scope to fix "@Composable invocations can only happen from the context of a @Composable function"
+    val infiniteTransition = rememberInfiniteTransition(label = "dot")
+    val dotAlpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dotAlpha"
+    )
 
     val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -117,7 +141,7 @@ internal fun ChatInput(
         }
     }
 
-    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    val coroutineScope = rememberCoroutineScope()
     LaunchedEffect(isRecording) {
         if (isRecording) {
             while (isRecording) {
@@ -138,7 +162,7 @@ internal fun ChatInput(
         if (!isRecording) return
         isRecording = false
         recordingLocked = false
-        dragOffset = androidx.compose.ui.geometry.Offset.Zero
+        dragOffset = Offset.Zero
         if (send) {
             audioRecorder.stop()
             audioRecorder.outputFile?.let { file ->
@@ -282,16 +306,6 @@ internal fun ChatInput(
                                     Icon(Icons.Outlined.Delete, contentDescription = "Cancel", tint = MaterialTheme.colorScheme.error)
                                 }
                             } else {
-                                // Blinking red dot
-                                val dotAlpha by androidx.compose.animation.core.rememberInfiniteTransition(label = "dot").animateFloat(
-                                    initialValue = 1f,
-                                    targetValue = 0f,
-                                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                                        animation = tween(500),
-                                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
-                                    ),
-                                    label = "dotAlpha"
-                                )
                                 Box(
                                     modifier = Modifier
                                         .size(8.dp)
@@ -303,8 +317,9 @@ internal fun ChatInput(
                             
                             val seconds = (recordTimeMillis / 1000) % 60
                             val minutes = (recordTimeMillis / 1000) / 60
+                            val timeStr = String.format("%02d:%02d", minutes, seconds)
                             Text(
-                                String.format("%02d:%02d", minutes, seconds),
+                                timeStr,
                                 fontSize = 17.sp,
                                 color = tgColors.composerText
                             )
@@ -320,7 +335,7 @@ internal fun ChatInput(
                                     modifier = Modifier.graphicsLayer { alpha = slideAlpha }
                                 ) {
                                     Icon(
-                                        imageVector = androidx.compose.material.icons.Icons.Outlined.KeyboardArrowLeft,
+                                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
                                         contentDescription = null,
                                         tint = tgColors.composerHint,
                                         modifier = Modifier.size(16.dp)
@@ -360,7 +375,7 @@ internal fun ChatInput(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Outlined.Lock,
+                                imageVector = Icons.Outlined.Lock,
                                 contentDescription = "Lock",
                                 modifier = Modifier.size(18.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -398,7 +413,7 @@ internal fun ChatInput(
                         .then(
                             if (!showSendButton) {
                                 Modifier.pointerInput(Unit) {
-                                    androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress(
+                                    detectDragGesturesAfterLongPress(
                                         onDragStart = {
                                             if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                                                 audioRecorder.start()
@@ -417,7 +432,7 @@ internal fun ChatInput(
                                         onDragCancel = {
                                             if (isRecording) finishRecording(send = false)
                                         },
-                                        onDrag = { change, dragAmount ->
+                                        onDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Offset ->
                                             change.consume()
                                             if (isRecording && !recordingLocked) {
                                                 dragOffset += dragAmount
@@ -427,7 +442,7 @@ internal fun ChatInput(
                                                 } else if (dragOffset.y < -200f) {
                                                     // Lock recording
                                                     recordingLocked = true
-                                                    dragOffset = androidx.compose.ui.geometry.Offset.Zero
+                                                    dragOffset = Offset.Zero
                                                 }
                                             }
                                         }
