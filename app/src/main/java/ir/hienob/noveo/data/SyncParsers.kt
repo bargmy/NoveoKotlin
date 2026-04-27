@@ -72,11 +72,14 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
                 !seenBy.contains(selfUserId)
             }
 
-            val preview = if (messages.length() > 0) {
-                parseMessageContent(messages.optJSONObject(messages.length() - 1)?.opt("content")).previewText()
+            val lastMsg = if (messages.length() > 0) messages.optJSONObject(messages.length() - 1) else null
+            val preview = if (lastMsg != null) {
+                parseMessageContent(lastMsg.opt("content")).previewText()
             } else {
                 ""
             }
+            val lastTimestamp = lastMsg?.optLong("timestamp", 0L) ?: 0L
+
             val chatType = item.optString("chatType", item.optString("type", "private")).sanitizeServerString()
             val ownerId = item.optString("ownerId").sanitizeServerString().takeIf { it.isNotBlank() }
             val permissions = item.optJSONObject("permissions")
@@ -93,6 +96,7 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
                     title = resolveChatTitle(item, usersById, memberIds, selfUserId),
                     avatarUrl = resolveChatAvatar(item, usersById, memberIds, selfUserId),
                     lastMessagePreview = preview,
+                    lastMessageTimestamp = lastTimestamp,
                     unreadCount = unreadCount,
                     memberIds = memberIds,
                     handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },

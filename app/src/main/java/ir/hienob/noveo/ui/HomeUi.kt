@@ -203,8 +203,8 @@ private fun formatLastSeen(lastSeen: Long?, strings: NoveoStrings): String {
     val timeStr = timeFormat.format(date.time)
     
     return when {
-        diffSeconds < 60 -> "just now"
-        diffMinutes < 60 -> "$diffMinutes minutes ago"
+        diffSeconds < 60 -> strings.justNow
+        diffMinutes < 60 -> strings.minutesAgo.format(diffMinutes)
         now.get(Calendar.YEAR) == date.get(Calendar.YEAR) && now.get(Calendar.DAY_OF_YEAR) == date.get(Calendar.DAY_OF_YEAR) -> "${strings.lastSeenAt} $timeStr"
         else -> {
             val yesterday = Calendar.getInstance().apply { 
@@ -212,17 +212,17 @@ private fun formatLastSeen(lastSeen: Long?, strings: NoveoStrings): String {
                 add(Calendar.DAY_OF_YEAR, -1)
             }
             if (yesterday.get(Calendar.YEAR) == date.get(Calendar.YEAR) && yesterday.get(Calendar.DAY_OF_YEAR) == date.get(Calendar.DAY_OF_YEAR)) {
-                "last seen yesterday at $timeStr"
+                "${strings.lastSeenYesterday} $timeStr"
             } else if (diffDays < 7) {
-                "last seen $diffDays days ago"
+                strings.lastSeenDaysAgo.format(diffDays)
             } else if (diffDays < 30) {
                 val weeks = diffDays / 7
-                if (weeks <= 1) "last seen a week ago" else "last seen $weeks weeks ago"
+                if (weeks <= 1) strings.lastSeenWeekAgo else strings.lastSeenWeeksAgo.format(weeks)
             } else if (diffDays < 365) {
                 val months = diffDays / 30
-                if (months <= 1) "last seen a month ago" else "last seen $months months ago"
+                if (months <= 1) strings.lastSeenMonthAgo else strings.lastSeenMonthsAgo.format(months)
             } else {
-                "last seen a long time ago"
+                strings.lastSeenLongTimeAgo
             }
         }
     }
@@ -804,6 +804,7 @@ private fun SidebarPane(
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(modifier = Modifier.fillMaxSize()) {
             SidebarHeader(
+                state = state,
                 strings = strings,
                 showSearch = showSearch,
                 searchQuery = searchQuery,
@@ -922,6 +923,7 @@ private fun ChatListContent(
 
 @Composable
 private fun SidebarHeader(
+    state: AppUiState,
     strings: NoveoStrings,
     showSearch: Boolean,
     searchQuery: String,
@@ -938,7 +940,26 @@ private fun SidebarHeader(
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        HeaderIconButton(icon = Icons.Outlined.Menu, onClick = onMenuClick)
+        Box {
+            HeaderIconButton(icon = Icons.Outlined.Menu, onClick = onMenuClick)
+            if (state.totalUnreadCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-2).dp, y = 2.dp)
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (state.totalUnreadCount > 99) ".." else localizeDigits(state.totalUnreadCount.toString(), strings.languageCode),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp)
+                    )
+                }
+            }
+        }
         Spacer(Modifier.width(8.dp))
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
             AnimatedContent(
@@ -1036,7 +1057,7 @@ private fun ChatPane(
 
     val selectedTitle = remember(selectedChat, strings) {
         if (selectedChat?.title == "Saved Messages") strings.savedMessages
-        else selectedChat?.title?.ifBlank { "Chat" } ?: "Chat"
+        else selectedChat?.title?.ifBlank { strings.chatInfo } ?: strings.chatInfo
     }
     
     val profileUserId = remember(selectedChat, state.session?.userId) {
@@ -1912,20 +1933,20 @@ private fun CreateChannelModal(
             ModalHeader(title = strings.newChat, onClose = onClose)
             Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(strings.newChat) }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = handle, onValueChange = { handle = it }, label = { Text("Handle (optional)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = bio, onValueChange = { bio = it }, label = { Text("Bio (optional)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = handle, onValueChange = { handle = it }, label = { Text(strings.handleOptional) }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = bio, onValueChange = { bio = it }, label = { Text(strings.bioOptional) }, modifier = Modifier.fillMaxWidth())
                 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = { type = "group" },
                         modifier = Modifier.weight(1f),
                         border = if (type == "group") BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else ButtonDefaults.outlinedButtonBorder
-                    ) { Text("Group") }
+                    ) { Text(strings.group) }
                     OutlinedButton(
                         onClick = { type = "channel" },
                         modifier = Modifier.weight(1f),
                         border = if (type == "channel") BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else ButtonDefaults.outlinedButtonBorder
-                    ) { Text("Channel") }
+                    ) { Text(strings.channel) }
                 }
                 
                 Button(
@@ -2066,9 +2087,9 @@ private fun SettingsAccountSection(strings: NoveoStrings, state: AppUiState, onL
     var showDeleteAccount by rememberSaveable { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        DetailRow(strings.userId, state.session?.userId ?: "Unknown")
+        DetailRow(strings.userId, state.session?.userId ?: strings.unknown)
         DetailRow(strings.sessionId, state.session?.sessionId?.ifBlank { "Connected" } ?: "Unavailable")
-        DetailRow(strings.expiry, formatExpiry(state.session, strings.languageCode))
+        DetailRow(strings.expiry, formatExpiry(state.session, strings))
         
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -2390,12 +2411,12 @@ private fun ProfileModal(
                             Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 InfoItem(label = strings.displayName, value = user.username)
                                 if (!user.handle.isNullOrBlank()) {
-                                    InfoItem(label = "Handle", value = user.handle, onClick = {
+                                    InfoItem(label = strings.handle, value = user.handle, onClick = {
                                         clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(user.handle))
                                     })
                                 }
                                 if (user.bio.isNotBlank()) {
-                                    InfoItem(label = "Bio", value = user.bio)
+                                    InfoItem(label = strings.about, value = user.bio)
                                 }
                                 val joinedDateText = remember(user.joinedAt) {
                                     val joinedAt = user.joinedAt
@@ -2406,7 +2427,7 @@ private fun ProfileModal(
                                         "April 2026"
                                     }
                                 }
-                                InfoItem(label = "Join Date", value = joinedDateText)
+                                InfoItem(label = strings.joinDate, value = joinedDateText)
                             }
                         }
 
@@ -2415,7 +2436,7 @@ private fun ProfileModal(
                             modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(12.dp)
                         ) { 
-                            Text("Send Message") 
+                            Text(strings.sendMessage) 
                         }
                         
                         Spacer(Modifier.height(300.dp))
@@ -2474,7 +2495,7 @@ private fun ProfileModal(
                                 }
                             }
                             val lastSeenText = remember(user, strings) {
-                                if (user.isOnline) "online"
+                                if (user.isOnline) strings.online
                                 else formatLastSeen(user.lastSeen, strings)
                             }
                             Text(
@@ -2508,7 +2529,7 @@ private fun ProfileModal(
                                 }
                             }
                             val lastSeenText = remember(user, strings) {
-                                if (user.isOnline) "online"
+                                if (user.isOnline) strings.online
                                 else formatLastSeen(user.lastSeen, strings)
                             }
                             Text(
@@ -2587,18 +2608,18 @@ private fun GroupInfoModal(
                             elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
                         ) {
                             Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                InfoItem(label = "Title", value = chatTitle)
+                                InfoItem(label = strings.title, value = chatTitle)
                                 if (!chat.handle.isNullOrBlank()) {
-                                    InfoItem(label = "Link", value = "@${chat.handle}", onClick = {
+                                    InfoItem(label = strings.link, value = "@${chat.handle}", onClick = {
                                         clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("@${chat.handle}"))
                                     })
                                 }
-                                InfoItem(label = "Type", value = chat.chatType.replaceFirstChar { it.uppercase() })
+                                InfoItem(label = strings.type, value = chat.chatType.replaceFirstChar { it.uppercase() })
                             }
                         }
 
                         Text(
-                            "Members", 
+                            strings.members, 
                             style = MaterialTheme.typography.titleMedium, 
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 8.dp),
@@ -2627,7 +2648,7 @@ private fun GroupInfoModal(
                                         }
                                     }
                                     val lastSeenText = remember(user, strings) {
-                                        if (user?.isOnline == true) "online"
+                                        if (user?.isOnline == true) strings.online
                                         else formatLastSeen(user?.lastSeen, strings)
                                     }
                                     Text(
@@ -2826,7 +2847,7 @@ private fun ChatRow(
 ) {
     val chatTitle = remember(chat.title, strings) {
         if (chat.title == "Saved Messages") strings.savedMessages
-        else chat.title.ifBlank { "Chat" }
+        else chat.title.ifBlank { strings.chatInfo }
     }
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
@@ -3031,13 +3052,13 @@ private fun findDirectChatForUser(chats: List<ChatSummary>, selfUserId: String?,
     }
 }
 
-private fun formatExpiry(session: Session?, languageCode: String): String {
+private fun formatExpiry(session: Session?, strings: NoveoStrings): String {
     val value = session?.expiresAt ?: 0L
-    if (value <= 0L) return "Unknown"
+    if (value <= 0L) return strings.unknown
     return runCatching {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-        localizeDigits(sdf.format(Date(value)), languageCode)
-    }.getOrElse { "Unknown" }
+        localizeDigits(sdf.format(Date(value)), strings.languageCode)
+    }.getOrElse { strings.unknown }
 }
 
 private fun MessageFileAttachment.isImage(): Boolean {

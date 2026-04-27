@@ -54,6 +54,7 @@ data class AppUiState(
     val usersById: Map<String, UserSummary> = emptyMap(),
     val onlineUserIds: Set<String> = emptySet(),
     val chats: List<ChatSummary> = emptyList(),
+    val totalUnreadCount: Int = 0,
     val selectedChatId: String? = null,
     val messages: List<ChatMessage> = emptyList(),
     val authModeSignup: Boolean = false,
@@ -480,6 +481,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(
                 selectedChatId = chatId,
                 chats = updatedChats,
+                totalUnreadCount = sumUnread(updatedChats),
                 messages = cachedMessages,
                 loading = cachedMessages.isEmpty(),
                 replyingToMessage = null
@@ -701,8 +703,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val lang = self?.languageCode ?: _uiState.value.languageCode
                 val strings = getStrings(lang)
                 
+                val sortedChats = event.chats.sortedByDescending { it.lastMessageTimestamp }
                 _uiState.value = _uiState.value.copy(
-                    chats = event.chats,
+                    chats = sortedChats,
+                    totalUnreadCount = sumUnread(sortedChats),
                     usersById = _uiState.value.usersById + event.users,
                     messages = selectedChatMessages,
                     loading = false,
@@ -777,6 +781,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // If a specific refresh is needed, we could send a targeted message sync request via socket.
     }
 
+    private fun sumUnread(chats: List<ChatSummary>) = chats.sumOf { it.unreadCount }
+
     private fun handleIncomingMessage(msg: ChatMessage) {
         val latestState = _uiState.value
         val session = latestState.session ?: return
@@ -795,6 +801,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val chat = currentChats.removeAt(chatIndex)
             val updatedChat = chat.copy(
                 lastMessagePreview = msg.content.previewText(),
+                lastMessageTimestamp = msg.timestamp,
                 unreadCount = when {
                     msg.chatId == latestState.selectedChatId -> 0
                     msg.senderId == session.userId -> chat.unreadCount
@@ -807,9 +814,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val isSelectedChat = msg.chatId == latestState.selectedChatId
+        val sortedChats = currentChats.sortedByDescending { it.lastMessageTimestamp }
         _uiState.value = latestState.copy(
             messages = if (isSelectedChat) cachedMessages else latestState.messages,
-            chats = currentChats
+            chats = sortedChats,
+            totalUnreadCount = sumUnread(sortedChats)
         )
         persistCachedHomeState()
 
@@ -833,18 +842,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleSeenUpdate(chatId: String, messageId: String, userId: String) {
+        val session = _uiState.value.session
         messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().map {
             if (it.id == messageId) {
                 it.copy(seenBy = (it.seenBy + userId).distinct())
             } else it
         }
-        if (chatId != _uiState.value.selectedChatId) return
+        
+        val updatedChats = if (userId == session?.userId) {
+            _uiState.value.chats.map {
+                if (it.id == chatId) it.copy(unreadCount = (it.unreadCount - 1).coerceAtLeast(0))
+                else it
+            }
+        } else null
+
+        if (chatId != _uiState.value.selectedChatId) {
+            if (updatedChats != null) {
+                _uiState.value = _uiState.value.copy(
+                    chats = updatedChats,
+                    totalUnreadCount = sumUnread(updatedChats)
+                )
+            }
+            return
+        }
         val messages = _uiState.value.messages.map {
             if (it.id == messageId) {
                 it.copy(seenBy = (it.seenBy + userId).distinct())
             } else it
         }
-        _uiState.value = _uiState.value.copy(messages = messages)
+        _uiState.value = _uiState.value.copy(
+            messages = messages,
+            chats = updatedChats ?: _uiState.value.chats,
+            totalUnreadCount = updatedChats?.let { sumUnread(it) } ?: _uiState.value.totalUnreadCount
+        )
         persistCachedHomeState()
     }
     

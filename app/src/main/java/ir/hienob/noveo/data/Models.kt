@@ -84,6 +84,7 @@ data class ChatSummary(
     val title: String,
     val avatarUrl: String? = null,
     val lastMessagePreview: String = "",
+    val lastMessageTimestamp: Long = 0L,
     val unreadCount: Int = 0,
     val memberIds: List<String> = emptyList(),
     val handle: String? = null,
