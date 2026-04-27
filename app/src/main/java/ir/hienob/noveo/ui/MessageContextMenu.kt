@@ -40,11 +40,15 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,13 +73,6 @@ private val CONTEXT_MENU_REACTIONS = listOf(
 )
 private val CONTEXT_MENU_QUICK_REACTIONS = CONTEXT_MENU_REACTIONS.take(6)
 
-private val MenuOverlay = Color.Black.copy(alpha = 0.42f)
-private val MenuSurface = Color(0xFF242428)
-private val MenuSecondary = Color(0xFF3A3A40)
-private val MenuMuted = Color(0xFFB8B8C0)
-private val MenuIcon = Color(0xFFEDEDF2)
-private val MenuText = Color.White
-
 internal data class MessageContextMenuState(
     val message: ChatMessage,
     val ownMessage: Boolean,
@@ -93,11 +90,13 @@ internal fun MessageContextMenuOverlay(
     onCopyText: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val overlayColor = Color.Black.copy(alpha = 0.42f)
+    
     Box(modifier = modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MenuOverlay)
+                .background(overlayColor)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -124,23 +123,39 @@ private fun MessageContextMenu(
     onReply: () -> Unit,
     onCopyText: () -> Unit
 ) {
+    val colorScheme = androidx.compose.material3.MaterialTheme.colorScheme
+    val menuSurface = colorScheme.surfaceContainerHigh
+    val menuSecondary = colorScheme.surfaceContainerHighest
+    val menuMuted = colorScheme.onSurfaceVariant
+    val menuIcon = colorScheme.onSurface
+    val menuText = colorScheme.onSurface
+
+    var animateIn by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { animateIn = true }
+
     val wrapperScale by animateFloatAsState(
-        targetValue = 1f,
+        targetValue = if (animateIn) 1f else 0.85f,
         animationSpec = tween(250, easing = FastOutSlowInEasing),
         label = "contextMenuScale"
     )
+    val wrapperAlpha by animateFloatAsState(
+        targetValue = if (animateIn) 1f else 0f,
+        animationSpec = tween(200),
+        label = "contextMenuAlpha"
+    )
+
     val reactionsWidth by animateDpAsState(
-        targetValue = if (expanded) 250.dp else 220.dp,
+        targetValue = if (expanded) 320.dp else 290.dp,
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "reactionsWidth"
     )
     val reactionsHeight by animateDpAsState(
-        targetValue = if (expanded) 240.dp else 36.dp,
+        targetValue = if (expanded) 280.dp else 52.dp,
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "reactionsHeight"
     )
     val reactionsRadius by animateDpAsState(
-        targetValue = if (expanded) 16.dp else 20.dp,
+        targetValue = if (expanded) 18.dp else 26.dp,
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "reactionsRadius"
     )
@@ -150,8 +165,8 @@ private fun MessageContextMenu(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenWidthPx = with(density) { maxWidth.toPx() }
         val screenHeightPx = with(density) { maxHeight.toPx() }
-        val targetWidthPx = with(density) { (if (expanded) 250.dp else 220.dp).toPx() }
-        val targetHeightPx = with(density) { (if (expanded) 240.dp else 222.dp).toPx() }
+        val targetWidthPx = with(density) { (if (expanded) 320.dp else 290.dp).toPx() }
+        val targetHeightPx = with(density) { (if (expanded) 280.dp else 240.dp).toPx() }
 
         val minLeft = with(density) { 8.dp.toPx() }
         val maxLeft = (screenWidthPx - targetWidthPx - with(density) { 12.dp.toPx() }).coerceAtLeast(minLeft)
@@ -171,15 +186,15 @@ private fun MessageContextMenu(
                 .wrapContentWidth()
                 .wrapContentHeight()
                 .graphicsLayer {
-                    alpha = 1f
+                    alpha = wrapperAlpha
                     scaleX = wrapperScale
                     scaleY = wrapperScale
-                    transformOrigin = TransformOrigin(0f, 1f)
+                    transformOrigin = TransformOrigin(0.5f, 0.5f)
                 },
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Surface(
-                color = MenuSurface,
+                color = menuSurface,
                 shape = RoundedCornerShape(reactionsRadius),
                 shadowElevation = 8.dp
             ) {
@@ -190,9 +205,19 @@ private fun MessageContextMenu(
                         .animateContentSize(animationSpec = tween(220, easing = FastOutSlowInEasing))
                 ) {
                     if (expanded) {
-                        ExpandedReactions(onExpandedChange = onExpandedChange, onDismiss = onDismiss)
+                        ExpandedReactions(
+                            menuSecondary = menuSecondary,
+                            menuMuted = menuMuted,
+                            onExpandedChange = onExpandedChange,
+                            onDismiss = onDismiss
+                        )
                     } else {
-                        CompactReactions(onExpandedChange = onExpandedChange, onDismiss = onDismiss)
+                        CompactReactions(
+                            menuSecondary = menuSecondary,
+                            menuMuted = menuMuted,
+                            onExpandedChange = onExpandedChange,
+                            onDismiss = onDismiss
+                        )
                     }
                 }
             }
@@ -203,34 +228,39 @@ private fun MessageContextMenu(
                 exit = fadeOut() + slideOutVertically { -it / 8 }
             ) {
                 Surface(
-                    color = MenuSurface,
+                    color = menuSurface,
                     shape = RoundedCornerShape(12.dp),
                     shadowElevation = 8.dp
                 ) {
-                    Column(modifier = Modifier.width(200.dp).padding(vertical = 4.dp)) {
+                    Column(modifier = Modifier.width(220.dp).padding(vertical = 4.dp)) {
                         ContextMenuActionItem(
                             label = "Reply",
-                            icon = { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = MenuIcon, modifier = Modifier.size(18.dp)) },
+                            icon = { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                            textColor = menuText,
                             onClick = onReply
                         )
                         ContextMenuActionItem(
                             label = "Pin",
-                            icon = { Icon(Icons.Outlined.Bookmark, contentDescription = null, tint = MenuIcon, modifier = Modifier.size(18.dp)) },
+                            icon = { Icon(Icons.Outlined.Bookmark, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                            textColor = menuText,
                             onClick = onDismiss
                         )
                         ContextMenuActionItem(
                             label = "Copy Text",
-                            icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = MenuIcon, modifier = Modifier.size(18.dp)) },
+                            icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                            textColor = menuText,
                             onClick = onCopyText
                         )
                         ContextMenuActionItem(
                             label = "Forward",
-                            icon = { Icon(Icons.Outlined.ArrowForward, contentDescription = null, tint = MenuIcon, modifier = Modifier.size(18.dp)) },
+                            icon = { Icon(Icons.Outlined.ArrowForward, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                            textColor = menuText,
                             onClick = onDismiss
                         )
                         ContextMenuActionItem(
                             label = "Delete",
-                            icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MenuIcon, modifier = Modifier.size(18.dp)) },
+                            icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = colorScheme.error, modifier = Modifier.size(18.dp)) },
+                            textColor = colorScheme.error,
                             onClick = onDismiss
                         )
                     }
@@ -242,6 +272,8 @@ private fun MessageContextMenu(
 
 @Composable
 private fun ExpandedReactions(
+    menuSecondary: Color,
+    menuMuted: Color,
     onExpandedChange: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -253,16 +285,16 @@ private fun ExpandedReactions(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Reactions", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MenuMuted)
+            Text("Reactions", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = menuMuted)
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(28.dp)
                     .clip(CircleShape)
-                    .background(MenuSecondary)
+                    .background(menuSecondary)
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onExpandedChange(false) },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Collapse reactions", tint = MenuMuted, modifier = Modifier.size(16.dp))
+                Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Collapse reactions", tint = menuMuted, modifier = Modifier.size(18.dp))
             }
         }
         Column(
@@ -274,9 +306,9 @@ private fun ExpandedReactions(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             CONTEXT_MENU_REACTIONS.chunked(6).forEach { row ->
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                     row.forEach { emoji ->
-                        ReactionButton(emoji = emoji, expanded = true, onClick = onDismiss)
+                        ReactionButton(emoji = emoji, expanded = true, menuSecondary = menuSecondary, onClick = onDismiss)
                     }
                 }
             }
@@ -286,6 +318,8 @@ private fun ExpandedReactions(
 
 @Composable
 private fun CompactReactions(
+    menuSecondary: Color,
+    menuMuted: Color,
     onExpandedChange: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -297,17 +331,17 @@ private fun CompactReactions(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         CONTEXT_MENU_QUICK_REACTIONS.forEach { emoji ->
-            ReactionButton(emoji = emoji, expanded = false, onClick = onDismiss)
+            ReactionButton(emoji = emoji, expanded = false, menuSecondary = menuSecondary, onClick = onDismiss)
         }
         Box(
             modifier = Modifier
-                .size(22.dp)
+                .size(32.dp)
                 .clip(CircleShape)
-                .background(MenuSecondary)
+                .background(menuSecondary)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onExpandedChange(true) },
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "More reactions", tint = MenuMuted, modifier = Modifier.size(14.dp))
+            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "More reactions", tint = menuMuted, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -316,17 +350,18 @@ private fun CompactReactions(
 private fun ReactionButton(
     emoji: String,
     expanded: Boolean,
+    menuSecondary: Color,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
-            .size(28.dp)
+            .size(40.dp)
             .clip(CircleShape)
-            .background(if (expanded) MenuSecondary else Color.Transparent)
+            .background(if (expanded) menuSecondary else Color.Transparent)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text(text = emoji, fontSize = 16.sp)
+        Text(text = emoji, fontSize = 24.sp)
     }
 }
 
@@ -334,17 +369,19 @@ private fun ReactionButton(
 private fun ContextMenuActionItem(
     label: String,
     icon: @Composable () -> Unit,
+    textColor: Color,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         icon()
-        Spacer(Modifier.width(12.dp))
-        Text(text = label, fontSize = 14.sp, color = MenuText)
+        Spacer(Modifier.width(14.dp))
+        Text(text = label, fontSize = 15.sp, color = textColor)
     }
 }
+

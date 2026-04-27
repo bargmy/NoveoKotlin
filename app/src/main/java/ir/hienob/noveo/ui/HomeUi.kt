@@ -1372,28 +1372,47 @@ private fun ChatPane(
             }
         }
 
-        contextMenuState?.let { menuState ->
-            MessageContextMenuOverlay(
-                state = menuState,
-                expanded = contextMenuExpanded,
-                tgColors = tgColors,
-                onDismiss = {
-                    contextMenuState = null
-                    contextMenuExpanded = false
-                },
-                onExpandedChange = { contextMenuExpanded = it },
-                onReply = {
-                    contextMenuState = null
-                    contextMenuExpanded = false
-                    onReply(menuState.message)
-                },
-                onCopyText = {
-                    menuState.message.content.text?.let { clipboard.setText(AnnotatedString(it)) }
-                    contextMenuState = null
-                    contextMenuExpanded = false
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+        // Context Menu Layer
+        val currentContextMenuState = contextMenuState
+        val displayedContextMenuState = remember(currentContextMenuState) {
+            if (currentContextMenuState != null) currentContextMenuState else null
+        }
+        // Use a derived state or a separate remember to hold the state during exit animation
+        var lastNonNullContextMenuState by remember { mutableStateOf<MessageContextMenuState?>(null) }
+        LaunchedEffect(currentContextMenuState) {
+            if (currentContextMenuState != null) {
+                lastNonNullContextMenuState = currentContextMenuState
+            }
+        }
+
+        AnimatedVisibility(
+            visible = currentContextMenuState != null,
+            enter = fadeIn(animationSpec = tween(200)),
+            exit = fadeOut(animationSpec = tween(200))
+        ) {
+            lastNonNullContextMenuState?.let { menuState ->
+                MessageContextMenuOverlay(
+                    state = menuState,
+                    expanded = contextMenuExpanded,
+                    tgColors = tgColors,
+                    onDismiss = {
+                        contextMenuState = null
+                        contextMenuExpanded = false
+                    },
+                    onExpandedChange = { contextMenuExpanded = it },
+                    onReply = {
+                        contextMenuState = null
+                        contextMenuExpanded = false
+                        onReply(menuState.message)
+                    },
+                    onCopyText = {
+                        menuState.message.content.text?.let { clipboard.setText(AnnotatedString(it)) }
+                        contextMenuState = null
+                        contextMenuExpanded = false
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
 }
