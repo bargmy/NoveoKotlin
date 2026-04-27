@@ -1066,8 +1066,8 @@ private fun ChatPane(
             val names = typingUsers.mapNotNull { state.usersById[it]?.username?.split(" ")?.firstOrNull() }
             when {
                 names.isEmpty() -> strings.typingSomeone
-                names.size == 1 -> "${names[0]} ${strings.typingSingle}"
-                names.size == 2 -> "${names[0]} ${strings.typingDouble} ${names[1]}"
+                names.size == 1 -> "${names} ${strings.typingSingle}"
+                names.size == 2 -> "${names} ${strings.typingDouble} ${names}"
                 else -> "${localizeDigits(names.size.toString(), strings.languageCode)} ${strings.typingMulti}"
             }
         }
@@ -1184,23 +1184,6 @@ private fun ChatPane(
             }
         }
 
-        // Gradient overlay under text input for fade-out effect
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(140.dp) // Increased height to cover under the input
-                .offset(y = 45.dp) // Offset so top is roughly at center of chat input
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, tgColors.chatSurface.copy(alpha = 0.8f), tgColors.chatSurface),
-                        startY = 0f,
-                        endY = Float.POSITIVE_INFINITY
-                    )
-                )
-                .pointerInput(Unit) {} 
-        )
-
         // 2. Headbar Layer (ActionBar)
         Surface(
             modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -1272,7 +1255,7 @@ private fun ChatPane(
             visible = showScrollToBottom,
             enter = fadeIn() + slideInVertically { it / 2 },
             exit = fadeOut() + slideOutVertically { it / 2 },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 100.dp)
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 76.dp)
         ) {
             Surface(
                 modifier = Modifier
