@@ -131,6 +131,7 @@ data class NoveoStrings(
     val lastSeenLongTimeAgo: String = "last seen a long time ago",
     val justNow: String = "just now",
     val minutesAgo: String = "%d minutes ago",
+    val dropToAttach: String = "Drop to attach",
     val onboardingPages: List<String> = listOf(
         "Chat with your contacts in one place.",
         "Jump into conversations quickly with the Noveo mobile shell.",
@@ -271,6 +272,7 @@ private val translations = mapOf(
         lastSeenLongTimeAgo = "zuletzt vor langer Zeit",
         justNow = "gerade eben",
         minutesAgo = "vor %d Minuten",
+        dropToAttach = "Zum Anhängen loslassen",
         onboardingPages = listOf(
             "Chatten Sie mit Ihren Kontakten an einem Ort.",
             "Springen Sie mit der Noveo-Mobilschale schnell in Gespräche.",
@@ -408,6 +410,7 @@ private val translations = mapOf(
         lastSeenLongTimeAgo = "был(а) очень давно",
         justNow = "только что",
         minutesAgo = "%d мин. назад",
+        dropToAttach = "Отпустите, чтобы прикрепить",
         onboardingPages = listOf(
             "Общайтесь со всеми контактами в одном месте.",
             "Быстро переходите к разговорам с мобильной оболочкой Новео.",
@@ -545,6 +548,7 @@ private val translations = mapOf(
         lastSeenLongTimeAgo = "最后上线于很久以前",
         justNow = "刚刚",
         minutesAgo = "%d 分钟前",
+        dropToAttach = "释放以附加",
         onboardingPages = listOf(
             "在一个地方与您的联系人聊天。",
             "使用 诺欧 移动外壳快速进入对话。",
@@ -682,6 +686,7 @@ private val translations = mapOf(
         lastSeenLongTimeAgo = "آخرین بازدید خیلی وقت پیش",
         justNow = "همین الان",
         minutesAgo = "%d دقیقه پیش",
+        dropToAttach = "برای ضمیمه کردن رها کنید",
         onboardingPages = listOf(
             "با مخاطبین خود در یک جا گفتگو کنید.",
             "با پوسته موبایل نوئو به سرعت وارد گفتگوها شوید.",
@@ -819,6 +824,7 @@ private val translations = mapOf(
         lastSeenLongTimeAgo = "última vez hace mucho tiempo",
         justNow = "hace un momento",
         minutesAgo = "hace %d minutos",
+        dropToAttach = "Suelta para adjuntar",
         onboardingPages = listOf(
             "Chatea con tus contactos en un solo lugar.",
             "Entra rápidamente en conversaciones con la shell móvil de Noveo.",
@@ -956,6 +962,7 @@ private val translations = mapOf(
         lastSeenLongTimeAgo = "vu il y a longtemps",
         justNow = "à l'instant",
         minutesAgo = "il y a %d minutes",
+        dropToAttach = "Relâchez pour joindre",
         onboardingPages = listOf(
             "Discutez avec vos contacts en un seul endroit.",
             "Plongez rapidement dans les conversations avec la shell mobile Noveo.",
@@ -1093,6 +1100,7 @@ private val translations = mapOf(
         lastSeenLongTimeAgo = "آخر ظهور منذ زمن طويل",
         justNow = "الآن",
         minutesAgo = "منذ %d دقيقة",
+        dropToAttach = "اتركه للإرفاق",
         onboardingPages = listOf(
             "دردش مع جهات اتصالك في مكان واحد.",
             "ادخل في المحادثات بسرعة مع نوفيو.",
@@ -1230,6 +1238,7 @@ private val translations = mapOf(
         lastSeenLongTimeAgo = "çok uzun zaman önce görüldü",
         justNow = "az önce",
         minutesAgo = "%d dakika önce",
+        dropToAttach = "Eklemek için bırakın",
         onboardingPages = listOf(
             "Tüm kişilerinizle tek bir yerden sohbet edin.",
             "Noveo mobil arayüzü ile konuşmalara hızlıca dalın.",

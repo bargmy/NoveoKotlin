@@ -487,6 +487,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 replyingToMessage = null
             )
             persistCachedHomeState()
+            
+            // Mark last message as seen to sync unread status with server
+            cachedMessages.lastOrNull { it.senderId != session.userId }?.let { lastMsg ->
+                markAsSeen(lastMsg.id)
+            }
+            
             refreshHomeSilently()
         }
     }
