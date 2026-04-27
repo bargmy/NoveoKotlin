@@ -1754,6 +1754,7 @@ private fun MessageRow(
     }
 }
 
+}
 @Composable
 private fun MessageContextMenu(
     state: MessageContextMenuState,
