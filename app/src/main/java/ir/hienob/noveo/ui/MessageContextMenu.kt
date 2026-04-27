@@ -61,11 +61,20 @@ import ir.hienob.noveo.data.ChatMessage
 import kotlin.math.roundToInt
 
 private val CONTEXT_MENU_REACTIONS = listOf(
-    "🙏", "🥰", "👍", "😭", "😍", "🙈", "🤣", "🔥", "❤️", "🤯",
-    "🤬", "😢", "🎉", "🤩", "🤮", "💩", "👌", "🕊", "🤡", "🥱",
-    "🥴", "🐳", "❤️‍🔥", "🌚", "🌭", "💯", "⚡️", "🏆", "💔", "🤨"
+    "\uD83D\uDE4F", "\uD83E\uDD70", "\uD83D\uDC4D", "\uD83D\uDE2D", "\uD83D\uDE0D", "\uD83D\uDE48",
+    "\uD83E\uDD23", "\uD83D\uDD25", "\u2764\uFE0F", "\uD83E\uDD2F", "\uD83E\uDD2C", "\uD83D\uDE22",
+    "\uD83C\uDF89", "\uD83E\uDD29", "\uD83E\uDD2E", "\uD83D\uDCA9", "\uD83D\uDC4C", "\uD83D\uDD4A\uFE0F",
+    "\uD83E\uDD21", "\uD83E\uDD71", "\uD83E\uDD74", "\uD83D\uDC33", "\u2764\uFE0F\u200D\uD83D\uDD25", "\uD83C\uDF1A",
+    "\uD83C\uDF2D", "\uD83D\uDCAF", "\u26A1\uFE0F", "\uD83C\uDFC6", "\uD83D\uDC94", "\uD83E\uDD28"
 )
 private val CONTEXT_MENU_QUICK_REACTIONS = CONTEXT_MENU_REACTIONS.take(6)
+
+private val MenuOverlay = Color.Black.copy(alpha = 0.42f)
+private val MenuSurface = Color(0xFF242428)
+private val MenuSecondary = Color(0xFF3A3A40)
+private val MenuMuted = Color(0xFFB8B8C0)
+private val MenuIcon = Color(0xFFEDEDF2)
+private val MenuText = Color.White
 
 internal data class MessageContextMenuState(
     val message: ChatMessage,
@@ -88,7 +97,7 @@ internal fun MessageContextMenuOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(tgColors.contextMenuOverlay)
+                .background(MenuOverlay)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -98,7 +107,6 @@ internal fun MessageContextMenuOverlay(
         MessageContextMenu(
             state = state,
             expanded = expanded,
-            tgColors = tgColors,
             onDismiss = onDismiss,
             onExpandedChange = onExpandedChange,
             onReply = onReply,
@@ -108,10 +116,9 @@ internal fun MessageContextMenuOverlay(
 }
 
 @Composable
-internal fun MessageContextMenu(
+private fun MessageContextMenu(
     state: MessageContextMenuState,
     expanded: Boolean,
-    tgColors: TelegramThemeColors,
     onDismiss: () -> Unit,
     onExpandedChange: (Boolean) -> Unit,
     onReply: () -> Unit,
@@ -146,10 +153,9 @@ internal fun MessageContextMenu(
         val targetWidthPx = with(density) { (if (expanded) 250.dp else 220.dp).toPx() }
         val targetHeightPx = with(density) { (if (expanded) 240.dp else 222.dp).toPx() }
 
-        var left = state.bubbleBounds.left
         val minLeft = with(density) { 8.dp.toPx() }
         val maxLeft = (screenWidthPx - targetWidthPx - with(density) { 12.dp.toPx() }).coerceAtLeast(minLeft)
-        left = left.coerceIn(minLeft, maxLeft)
+        val left = state.bubbleBounds.left.coerceIn(minLeft, maxLeft)
 
         var top = state.bubbleBounds.top - targetHeightPx - with(density) { 10.dp.toPx() }
         if (top < with(density) { 16.dp.toPx() }) {
@@ -173,7 +179,7 @@ internal fun MessageContextMenu(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Surface(
-                color = tgColors.contextMenuReactionSurface,
+                color = MenuSurface,
                 shape = RoundedCornerShape(reactionsRadius),
                 shadowElevation = 8.dp
             ) {
@@ -184,99 +190,9 @@ internal fun MessageContextMenu(
                         .animateContentSize(animationSpec = tween(220, easing = FastOutSlowInEasing))
                 ) {
                     if (expanded) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Reactions",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = tgColors.contextMenuReactionMuted
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clip(CircleShape)
-                                        .background(tgColors.contextMenuReactionSecondary)
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null
-                                        ) { onExpandedChange(false) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.KeyboardArrowDown,
-                                        contentDescription = "Collapse reactions",
-                                        tint = tgColors.contextMenuReactionMuted,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f)
-                                    .padding(horizontal = 8.dp)
-                                    .verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                CONTEXT_MENU_REACTIONS.chunked(6).forEach { row ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        row.forEach { emoji ->
-                                            ReactionButton(
-                                                emoji = emoji,
-                                                expanded = true,
-                                                tgColors = tgColors,
-                                                onClick = onDismiss
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        ExpandedReactions(onExpandedChange = onExpandedChange, onDismiss = onDismiss)
                     } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            CONTEXT_MENU_QUICK_REACTIONS.forEach { emoji ->
-                                ReactionButton(
-                                    emoji = emoji,
-                                    expanded = false,
-                                    tgColors = tgColors,
-                                    onClick = onDismiss
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(22.dp)
-                                    .clip(CircleShape)
-                                    .background(tgColors.contextMenuReactionSecondary)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { onExpandedChange(true) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.KeyboardArrowDown,
-                                    contentDescription = "More reactions",
-                                    tint = tgColors.contextMenuReactionMuted,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
+                        CompactReactions(onExpandedChange = onExpandedChange, onDismiss = onDismiss)
                     }
                 }
             }
@@ -287,74 +203,34 @@ internal fun MessageContextMenu(
                 exit = fadeOut() + slideOutVertically { -it / 8 }
             ) {
                 Surface(
-                    color = tgColors.contextMenuBackground,
+                    color = MenuSurface,
                     shape = RoundedCornerShape(12.dp),
                     shadowElevation = 8.dp
                 ) {
                     Column(modifier = Modifier.width(200.dp).padding(vertical = 4.dp)) {
                         ContextMenuActionItem(
                             label = "Reply",
-                            icon = {
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.ArrowBack,
-                                    contentDescription = null,
-                                    tint = tgColors.contextMenuIcon,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            tgColors = tgColors,
+                            icon = { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = MenuIcon, modifier = Modifier.size(18.dp)) },
                             onClick = onReply
                         )
                         ContextMenuActionItem(
                             label = "Pin",
-                            icon = {
-                                Icon(
-                                    Icons.Outlined.Bookmark,
-                                    contentDescription = null,
-                                    tint = tgColors.contextMenuIcon,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            tgColors = tgColors,
+                            icon = { Icon(Icons.Outlined.Bookmark, contentDescription = null, tint = MenuIcon, modifier = Modifier.size(18.dp)) },
                             onClick = onDismiss
                         )
                         ContextMenuActionItem(
                             label = "Copy Text",
-                            icon = {
-                                Icon(
-                                    Icons.Outlined.Description,
-                                    contentDescription = null,
-                                    tint = tgColors.contextMenuIcon,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            tgColors = tgColors,
+                            icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = MenuIcon, modifier = Modifier.size(18.dp)) },
                             onClick = onCopyText
                         )
                         ContextMenuActionItem(
                             label = "Forward",
-                            icon = {
-                                Icon(
-                                    Icons.Outlined.ArrowForward,
-                                    contentDescription = null,
-                                    tint = tgColors.contextMenuIcon,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            tgColors = tgColors,
+                            icon = { Icon(Icons.Outlined.ArrowForward, contentDescription = null, tint = MenuIcon, modifier = Modifier.size(18.dp)) },
                             onClick = onDismiss
                         )
                         ContextMenuActionItem(
                             label = "Delete",
-                            icon = {
-                                Icon(
-                                    Icons.Outlined.Delete,
-                                    contentDescription = null,
-                                    tint = tgColors.contextMenuIcon,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            tgColors = tgColors,
+                            icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MenuIcon, modifier = Modifier.size(18.dp)) },
                             onClick = onDismiss
                         )
                     }
@@ -365,21 +241,89 @@ internal fun MessageContextMenu(
 }
 
 @Composable
+private fun ExpandedReactions(
+    onExpandedChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Reactions", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MenuMuted)
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(MenuSecondary)
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onExpandedChange(false) },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Collapse reactions", tint = MenuMuted, modifier = Modifier.size(16.dp))
+            }
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 8.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CONTEXT_MENU_REACTIONS.chunked(6).forEach { row ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { emoji ->
+                        ReactionButton(emoji = emoji, expanded = true, onClick = onDismiss)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactReactions(
+    onExpandedChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        CONTEXT_MENU_QUICK_REACTIONS.forEach { emoji ->
+            ReactionButton(emoji = emoji, expanded = false, onClick = onDismiss)
+        }
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(MenuSecondary)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onExpandedChange(true) },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "More reactions", tint = MenuMuted, modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+@Composable
 private fun ReactionButton(
     emoji: String,
     expanded: Boolean,
-    tgColors: TelegramThemeColors,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .size(28.dp)
             .clip(CircleShape)
-            .background(if (expanded) tgColors.contextMenuReactionSecondary else Color.Transparent)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { onClick() },
+            .background(if (expanded) MenuSecondary else Color.Transparent)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Text(text = emoji, fontSize = 16.sp)
@@ -390,26 +334,17 @@ private fun ReactionButton(
 private fun ContextMenuActionItem(
     label: String,
     icon: @Composable () -> Unit,
-    tgColors: TelegramThemeColors,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         icon()
         Spacer(Modifier.width(12.dp))
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            color = tgColors.contextMenuText
-        )
+        Text(text = label, fontSize = 14.sp, color = MenuText)
     }
 }
