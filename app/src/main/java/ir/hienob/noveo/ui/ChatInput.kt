@@ -253,6 +253,7 @@ internal fun ChatInput(
                                 }
                             ) {
                                 Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = null, tint = tgColors.composerHint, modifier = Modifier.size(20.dp))
+                                Text("drop to cancel", fontSize = 15.sp, color = tgColors.composerHint)
                             }
                         }
                     }

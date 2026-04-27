@@ -940,26 +940,7 @@ private fun SidebarHeader(
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box {
-            HeaderIconButton(icon = Icons.Outlined.Menu, onClick = onMenuClick)
-            if (state.totalUnreadCount > 0) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = (-2).dp, y = 2.dp)
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (state.totalUnreadCount > 99) ".." else localizeDigits(state.totalUnreadCount.toString(), strings.languageCode),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp)
-                    )
-                }
-            }
-        }
+        HeaderIconButton(icon = Icons.Outlined.Menu, onClick = onMenuClick)
         Spacer(Modifier.width(8.dp))
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
             AnimatedContent(
