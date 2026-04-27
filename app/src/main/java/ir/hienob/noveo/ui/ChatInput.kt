@@ -21,75 +21,55 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import coil3.compose.AsyncImage
-import coil3.compose.SubcomposeAsyncImage
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import ir.hienob.noveo.R
 import ir.hienob.noveo.data.ChatMessage
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.slideIn
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalAnimationApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -112,14 +92,13 @@ internal fun ChatInput(
     val inputFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val audioRecorder = remember { AudioRecorder(context) }
     var isRecording by remember { mutableStateOf(false) }
     var recordingLocked by remember { mutableStateOf(false) }
     var recordTimeMillis by remember { mutableStateOf(0L) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
 
-    // Moved from inner scope to fix "@Composable invocations can only happen from the context of a @Composable function"
     val infiniteTransition = rememberInfiniteTransition(label = "dot")
     val dotAlpha by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -141,11 +120,10 @@ internal fun ChatInput(
         }
     }
 
-    val coroutineScope = rememberCoroutineScope()
     LaunchedEffect(isRecording) {
         if (isRecording) {
             while (isRecording) {
-                kotlinx.coroutines.delay(100)
+                delay(100)
                 recordTimeMillis += 100
             }
         }
@@ -180,7 +158,18 @@ internal fun ChatInput(
         label = "recordingAlpha"
     )
 
+    val showSendButton = (draft.isNotBlank() || hasAttachment) || recordingLocked
+    val buttonColor = if (!showSendButton) tgColors.composerField else tgColors.composerBlue
+    val iconColor = if (!showSendButton) tgColors.composerIcon else Color.White
+
+    val micScale by animateFloatAsState(
+        targetValue = if (isRecording && !recordingLocked) 1.4f else 1f,
+        animationSpec = tween(150),
+        label = "micScale"
+    )
+
     Box(modifier = modifier.fillMaxWidth().padding(horizontal = 6.dp).padding(bottom = 4.dp)) {
+        // Main Input Layout
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Bottom
@@ -197,7 +186,7 @@ internal fun ChatInput(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .graphicsLayer { alpha = 1f - recordingAlpha }
+                            .alpha(1f - recordingAlpha)
                     ) {
                         // Reply Preview
                         AnimatedVisibility(
@@ -250,7 +239,7 @@ internal fun ChatInput(
                                     maxLines = 6
                                 )
                                 
-                                // Content Receiver for pasting files
+                                // Paste URI handler
                                 androidx.compose.ui.viewinterop.AndroidView(
                                     factory = { context ->
                                         val view = android.view.View(context)
@@ -261,15 +250,13 @@ internal fun ChatInput(
                                                 override fun onReceiveContent(view: android.view.View, payload: androidx.core.view.ContentInfoCompat): androidx.core.view.ContentInfoCompat? {
                                                     val split = payload.partition { it.uri != null }
                                                     val uriPart = split.first
-                                                    val remaining = split.second
-                                                    
                                                     if (uriPart != null) {
                                                         val clip = uriPart.clip
                                                         for (i in 0 until clip.itemCount) {
                                                             clip.getItemAt(i).uri?.let { uri -> onPasteUri(uri) }
                                                         }
                                                     }
-                                                    return remaining
+                                                    return split.second
                                                 }
                                             }
                                         )
@@ -291,45 +278,47 @@ internal fun ChatInput(
                         }
                     }
 
-                    // Recording UI
-                    if (recordingAlpha > 0f) {
+                    // Recording Overlay UI
+                    if (isRecording) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .padding(horizontal = 16.dp)
-                                .graphicsLayer { alpha = recordingAlpha },
+                                .height(48.dp)
+                                .padding(horizontal = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (recordingLocked) {
-                                IconButton(onClick = { finishRecording(send = false) }) {
+                                IconButton(
+                                    onClick = { finishRecording(send = false) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
                                     Icon(Icons.Outlined.Delete, contentDescription = "Cancel", tint = MaterialTheme.colorScheme.error)
                                 }
                             } else {
                                 Box(
                                     modifier = Modifier
-                                        .size(8.dp)
+                                        .size(10.dp)
                                         .clip(CircleShape)
                                         .background(Color.Red.copy(alpha = dotAlpha))
                                 )
                             }
-                            Spacer(Modifier.width(8.dp))
+                            
+                            Spacer(Modifier.width(12.dp))
                             
                             val seconds = (recordTimeMillis / 1000) % 60
                             val minutes = (recordTimeMillis / 1000) / 60
-                            val timeStr = String.format("%02d:%02d", minutes, seconds)
                             Text(
-                                timeStr,
+                                String.format("%02d:%02d", minutes, seconds),
                                 fontSize = 17.sp,
+                                fontWeight = FontWeight.Medium,
                                 color = tgColors.composerText
                             )
 
                             Spacer(Modifier.weight(1f))
 
                             if (!recordingLocked) {
-                                // Slide to cancel text + chevron
                                 val slideOffsetAbs = Math.abs(dragOffset.x)
-                                val slideAlpha = (1f - (slideOffsetAbs / 300f)).coerceIn(0f, 1f)
+                                val slideAlpha = (1f - (slideOffsetAbs / 150f)).coerceIn(0.2f, 1f)
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.graphicsLayer { alpha = slideAlpha }
@@ -338,9 +327,8 @@ internal fun ChatInput(
                                         imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
                                         contentDescription = null,
                                         tint = tgColors.composerHint,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(20.dp)
                                     )
-                                    Spacer(Modifier.width(4.dp))
                                     Text(
                                         "Slide to cancel",
                                         fontSize = 15.sp,
@@ -355,56 +343,15 @@ internal fun ChatInput(
 
             Spacer(Modifier.width(8.dp))
 
-            // Lock Icon when recording
-            Box(
-                modifier = Modifier
-                    .padding(bottom = 60.dp)
-                    .width(48.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = isRecording && !recordingLocked,
-                    enter = slideInVertically { it } + fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    Surface(
-                        modifier = Modifier.size(36.dp),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shadowElevation = 2.dp
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Outlined.Lock,
-                                contentDescription = "Lock",
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Separate Circular Send/Mic Button
-            val isBlank = draft.isBlank() && !hasAttachment
-            val showSendButton = !isBlank || recordingLocked
-            val buttonColor = if (!showSendButton) tgColors.composerField else tgColors.composerBlue
-            val iconColor = if (!showSendButton) tgColors.composerIcon else Color.White
-            
-            val micScale by animateFloatAsState(
-                targetValue = if (isRecording && !recordingLocked) 1.5f else sendScale,
-                animationSpec = tween(150),
-                label = "micScale"
-            )
-
+            // Mic/Send Button
             Surface(
                 modifier = Modifier
                     .size(48.dp)
                     .scale(micScale)
-                    .offset(x = dragOffset.x.dp / 2f, y = dragOffset.y.dp / 2f),
+                    .offset(x = (dragOffset.x.dp / 2).coerceAtMost(0.dp), y = (dragOffset.y.dp / 2).coerceAtMost(0.dp)),
                 shape = CircleShape,
                 color = buttonColor,
-                shadowElevation = if (isRecording && !recordingLocked) 4.dp else 2.dp
+                shadowElevation = if (isRecording) 4.dp else 1.dp
             ) {
                 Box(
                     modifier = Modifier
@@ -413,7 +360,7 @@ internal fun ChatInput(
                         .then(
                             if (!showSendButton) {
                                 Modifier.pointerInput(Unit) {
-                                    detectDragGesturesAfterLongPress(
+                                    androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress(
                                         onDragStart = {
                                             if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                                                 audioRecorder.start()
@@ -425,56 +372,48 @@ internal fun ChatInput(
                                             }
                                         },
                                         onDragEnd = {
-                                            if (isRecording) {
-                                                finishRecording(send = !recordingLocked)
-                                            }
+                                            if (isRecording) finishRecording(send = !recordingLocked)
                                         },
                                         onDragCancel = {
                                             if (isRecording) finishRecording(send = false)
                                         },
-                                        onDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Offset ->
+                                        onDrag = { change: PointerInputChange, dragAmount: Offset ->
                                             change.consume()
                                             if (isRecording && !recordingLocked) {
                                                 dragOffset += dragAmount
-                                                if (dragOffset.x < -200f) {
-                                                    // Cancel recording
-                                                    finishRecording(send = false)
-                                                } else if (dragOffset.y < -200f) {
-                                                    // Lock recording
+                                                if (dragOffset.x < -250f) finishRecording(send = false)
+                                                else if (dragOffset.y < -200f) {
                                                     recordingLocked = true
                                                     dragOffset = Offset.Zero
                                                 }
                                             }
                                         }
                                     )
-                                }.clickable(onClick = { /* Mic tap: do nothing or show toast */ })
+                                }
                             } else {
                                 Modifier.clickable(
-                                    interactionSource = buttonInteraction, 
-                                    indication = null, 
+                                    interactionSource = buttonInteraction,
+                                    indication = null,
                                     onClick = {
-                                        if (recordingLocked) {
-                                            finishRecording(send = true)
-                                        } else {
-                                            onActionClick()
-                                        }
+                                        if (recordingLocked) finishRecording(send = true)
+                                        else onActionClick()
                                     }
                                 )
                             }
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    val density = androidx.compose.ui.platform.LocalDensity.current
+                    val density = LocalDensity.current
                     AnimatedContent(
                         targetState = !showSendButton,
-                        transitionSpec = { 
-                            if (!targetState) { // Mic -> Send
+                        transitionSpec = {
+                            if (!targetState) {
                                 (fadeIn(tween(200)) + 
                                  slideIn(tween(250, easing = LinearOutSlowInEasing)) { 
                                      IntOffset(with(density) { -50.dp.roundToPx() }, with(density) { 50.dp.roundToPx() }) 
                                  }
                                 ).togetherWith(fadeOut(tween(150)))
-                            } else { // Send -> Mic
+                            } else {
                                 fadeIn(tween(150)).togetherWith(fadeOut(tween(150)))
                             }
                         },
@@ -494,6 +433,35 @@ internal fun ChatInput(
                                 rotationZ = if (targetIsMic) 0f else animRotation
                             },
                             colorFilter = ColorFilter.tint(iconColor)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Floating Lock Icon Overlay
+        androidx.compose.animation.AnimatedVisibility(
+            visible = isRecording && !recordingLocked,
+            enter = fadeIn() + slideInVertically { it },
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 64.dp)
+                .width(48.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Surface(
+                    modifier = Modifier.size(28.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shadowElevation = 2.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -546,7 +514,7 @@ internal fun AttachmentPreview(
                     )
                 } else {
                     Icon(
-                        imageVector = Icons.Outlined.Close, // Using Close as a generic file icon placeholder
+                        imageVector = Icons.Outlined.Close,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )
