@@ -8,7 +8,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,15 +35,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -79,7 +82,10 @@ internal fun ChatInput(
     var isRecording by remember { mutableStateOf(false) }
     var recordingLocked by remember { mutableStateOf(false) }
     var recordTimeMillis by remember { mutableStateOf(0L) }
-    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    
+    var dragOffsetX by remember { mutableStateOf(0f) }
+    var dragOffsetY by remember { mutableStateOf(0f) }
+    var amplitude by remember { mutableIntStateOf(0) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "dot")
     val dotAlpha by infiniteTransition.animateFloat(
@@ -98,6 +104,7 @@ internal fun ChatInput(
         if (isGranted) {
             audioRecorder.start()
             isRecording = true
+            recordingLocked = false
             recordTimeMillis = 0L
         }
     }
@@ -105,9 +112,14 @@ internal fun ChatInput(
     LaunchedEffect(isRecording) {
         if (isRecording) {
             while (isRecording) {
-                delay(100)
-                recordTimeMillis += 100
+                delay(50)
+                recordTimeMillis += 50
+                amplitude = audioRecorder.getMaxAmplitude()
             }
+        } else {
+            amplitude = 0
+            dragOffsetX = 0f
+            dragOffsetY = 0f
         }
     }
 
@@ -122,7 +134,9 @@ internal fun ChatInput(
         if (!isRecording) return
         isRecording = false
         recordingLocked = false
-        dragOffset = Offset.Zero
+        dragOffsetX = 0f
+        dragOffsetY = 0f
+        amplitude = 0
         if (send) {
             audioRecorder.stop()
             audioRecorder.outputFile?.let { file ->
@@ -138,19 +152,33 @@ internal fun ChatInput(
     val buttonColor = if (!showSendButton) tgColors.composerField else tgColors.composerBlue
     val iconColor = if (!showSendButton) tgColors.composerIcon else Color.White
 
+    val baseTargetScale = if (isRecording && !recordingLocked) {
+        val normalizedAmp = (amplitude / 32767f).coerceIn(0f, 1f)
+        val ampScale = normalizedAmp * 0.4f
+        val swipeProgress = (Math.abs(dragOffsetX) / 150f).coerceIn(0f, 1f)
+        val scaleReduction = swipeProgress * 1f
+        (2.0f + ampScale - scaleReduction).coerceAtLeast(1f)
+    } else {
+        sendScale
+    }
+
     val micScale by animateFloatAsState(
-        targetValue = if (isRecording && !recordingLocked) 1.4f else 1f,
-        animationSpec = tween(150),
+        targetValue = baseTargetScale,
+        animationSpec = tween(if (isRecording && !recordingLocked) 50 else 150),
         label = "micScale"
     )
 
+    val animDragOffsetX by animateFloatAsState(
+        targetValue = dragOffsetX,
+        animationSpec = tween(150),
+        label = "animDragOffsetX"
+    )
+
     Box(modifier = modifier.fillMaxWidth().padding(horizontal = 6.dp).padding(bottom = 4.dp)) {
-        // Main Row: Bubble + Space for Button
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Bottom
         ) {
-            // Input Bubble
             Surface(
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(24.dp),
@@ -158,7 +186,6 @@ internal fun ChatInput(
                 shadowElevation = 1.dp
             ) {
                 Box(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = Alignment.CenterStart) {
-                    // 1. Normal Input View
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -214,7 +241,6 @@ internal fun ChatInput(
                         }
                     }
 
-                    // 2. Recording Overlay
                     if (isRecording) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -235,7 +261,15 @@ internal fun ChatInput(
                             Spacer(Modifier.weight(1f))
                             
                             if (!recordingLocked) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.alpha((1f - (Math.abs(dragOffset.x) / 200f)).coerceIn(0f, 1f))) {
+                                val slideOffsetAbs = Math.abs(dragOffsetX)
+                                val slideAlpha = (1f - (slideOffsetAbs / 150f)).coerceIn(0.2f, 1f)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.graphicsLayer { 
+                                        alpha = slideAlpha 
+                                        translationX = dragOffsetX / 2f
+                                    }
+                                ) {
                                     Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = null, tint = tgColors.composerHint, modifier = Modifier.size(20.dp))
                                     Text("Slide to cancel", fontSize = 15.sp, color = tgColors.composerHint)
                                 }
@@ -246,39 +280,32 @@ internal fun ChatInput(
             }
 
             Spacer(Modifier.width(8.dp))
-            
-            // Fixed width spacer for button
             Box(Modifier.size(48.dp))
         }
 
-        // Floating Lock Icon
-        AnimatedVisibility(
+        androidx.compose.animation.AnimatedVisibility(
             visible = isRecording && !recordingLocked,
             enter = fadeIn() + slideInVertically { it },
             exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 68.dp).width(48.dp)
+            modifier = Modifier.align(Alignment.BottomEnd).offset(y = (-68).dp).width(48.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Surface(modifier = Modifier.size(28.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val lockVector = if (dragOffsetY < -100f) Icons.Outlined.LockOpen else Icons.Outlined.Lock
+                        Icon(lockVector, contentDescription = "Lock", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         }
 
-        // Floating Mic/Send Button
         val density = LocalDensity.current
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .size(48.dp)
                 .scale(micScale)
-                .offset { 
-                    if (isRecording && !recordingLocked) {
-                        IntOffset(dragOffset.x.toInt(), dragOffset.y.toInt())
-                    } else IntOffset.Zero
-                },
+                .offset(x = animDragOffsetX.dp / 2f, y = 0.dp),
             shape = CircleShape,
             color = buttonColor,
             shadowElevation = if (isRecording) 4.dp else 1.dp
@@ -290,39 +317,84 @@ internal fun ChatInput(
                     .then(
                         if (!showSendButton) {
                             Modifier.pointerInput(Unit) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    var isLocalRecording = false
+                                    
+                                    try {
+                                        withTimeout(200L) {
+                                            waitForUpOrCancellation()
+                                        }
+                                        down.consume()
+                                        if (recordingLocked) finishRecording(true) else onActionClick()
+                                    } catch (e: PointerEventTimeoutCancellationException) {
+                                        down.consume()
                                         if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                                             audioRecorder.start()
                                             isRecording = true
                                             recordingLocked = false
                                             recordTimeMillis = 0L
+                                            isLocalRecording = true
                                         } else {
                                             permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
                                         }
-                                    },
-                                    onDragEnd = { if (isRecording) finishRecording(!recordingLocked) },
-                                    onDragCancel = { if (isRecording) finishRecording(false) },
-                                    onDrag = { change: PointerInputChange, dragAmount: Offset ->
-                                        change.consume()
-                                        if (isRecording && !recordingLocked) {
-                                            dragOffset += dragAmount
-                                            if (dragOffset.x < -200f) finishRecording(false)
-                                            else if (dragOffset.y < -200f) {
-                                                recordingLocked = true
-                                                dragOffset = Offset.Zero
+                                        
+                                        dragOffsetX = 0f
+                                        dragOffsetY = 0f
+                                        var lockAxis = 0 
+                                        
+                                        while (isLocalRecording) {
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.firstOrNull()
+                                            
+                                            if (change == null || !change.pressed) {
+                                                if (!recordingLocked && isRecording) {
+                                                    if (dragOffsetX <= -150f) finishRecording(false)
+                                                    else finishRecording(true)
+                                                }
+                                                dragOffsetX = 0f
+                                                dragOffsetY = 0f
+                                                break
+                                            }
+                                            
+                                            change.consume()
+                                            val posChange = change.positionChange()
+                                            
+                                            if (lockAxis == 0 && (Math.abs(posChange.x) > 2f || Math.abs(posChange.y) > 2f)) {
+                                                if (Math.abs(posChange.x) > Math.abs(posChange.y) && posChange.x < 0) {
+                                                    lockAxis = 1 
+                                                } else if (Math.abs(posChange.y) > Math.abs(posChange.x) && posChange.y < 0) {
+                                                    lockAxis = 2 
+                                                }
+                                            }
+                                            
+                                            if (lockAxis == 1) {
+                                                dragOffsetX = (dragOffsetX + posChange.x).coerceAtMost(0f)
+                                                if (dragOffsetX <= -150f) {
+                                                    finishRecording(false)
+                                                    dragOffsetX = 0f
+                                                    dragOffsetY = 0f
+                                                    break
+                                                }
+                                            } else if (lockAxis == 2) {
+                                                dragOffsetY = (dragOffsetY + posChange.y).coerceAtMost(0f)
+                                                if (dragOffsetY <= -150f) {
+                                                    recordingLocked = true
+                                                    dragOffsetX = 0f
+                                                    dragOffsetY = 0f
+                                                    break
+                                                }
                                             }
                                         }
                                     }
-                                )
+                                }
+                            } else {
+                                Modifier.clickable(interactionSource = buttonInteraction, indication = null) {
+                                    if (recordingLocked) finishRecording(true)
+                                    else onActionClick()
+                                }
                             }
-                        } else {
-                            Modifier.clickable(interactionSource = buttonInteraction, indication = null) {
-                                if (recordingLocked) finishRecording(true)
-                                else onActionClick()
-                            }
-                        }
-                    ),
+                        ),
                 contentAlignment = Alignment.Center
             ) {
                 AnimatedContent(

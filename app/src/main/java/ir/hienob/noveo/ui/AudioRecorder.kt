@@ -51,4 +51,12 @@ class AudioRecorder(private val context: Context) {
         outputFile?.delete()
         outputFile = null
     }
+
+    fun getMaxAmplitude(): Int {
+        return try {
+            recorder?.maxAmplitude ?: 0
+        } catch (e: Exception) {
+            0
+        }
+    }
 }
