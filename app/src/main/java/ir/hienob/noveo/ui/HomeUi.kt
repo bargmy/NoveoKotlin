@@ -128,6 +128,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -138,6 +139,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -1090,6 +1093,9 @@ private fun ChatPane(
     }
 
     var highlightedMessageId by remember { mutableStateOf<String?>(null) }
+    var contextMenuState by remember { mutableStateOf<MessageContextMenuState?>(null) }
+    var contextMenuExpanded by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
 
     val canLoadOlder = selectedChat?.hasMoreHistory == true && !state.loading
     val firstVisibleItemIndex by remember { derivedStateOf { listState.firstVisibleItemIndex } }
@@ -1168,10 +1174,12 @@ private fun ChatPane(
                     message.replyToId?.let { rid -> messagesMap[rid] }
                 }
 
+                val ownMessage = message.senderId == state.session?.userId
+
                 MessageRow(
                     strings = strings,
                     message = message,
-                    ownMessage = message.senderId == state.session?.userId,
+                    ownMessage = ownMessage,
                     senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl,
                     showSenderInfo = isFirstInGroup,
                     hasTail = isLastInGroup,
@@ -1180,6 +1188,14 @@ private fun ChatPane(
                     onOpenProfile = onOpenProfile,
                     repliedMessage = repliedMessage,
                     onReply = { onReply(message) },
+                    onOpenContextMenu = { bubbleBounds ->
+                        contextMenuState = MessageContextMenuState(
+                            message = message,
+                            ownMessage = ownMessage,
+                            bubbleBounds = bubbleBounds
+                        )
+                        contextMenuExpanded = false
+                    },
                     onScrollToMessage = onScrollToMessage,
                     isHighlighted = highlightedMessageId == message.id,
                     tgColors = tgColors
@@ -1355,6 +1371,30 @@ private fun ChatPane(
                 }
             }
         }
+
+        contextMenuState?.let { menuState ->
+            MessageContextMenuOverlay(
+                state = menuState,
+                expanded = contextMenuExpanded,
+                tgColors = tgColors,
+                onDismiss = {
+                    contextMenuState = null
+                    contextMenuExpanded = false
+                },
+                onExpandedChange = { contextMenuExpanded = it },
+                onReply = {
+                    contextMenuState = null
+                    contextMenuExpanded = false
+                    onReply(menuState.message)
+                },
+                onCopyText = {
+                    menuState.message.content.text?.let { clipboard.setText(AnnotatedString(it)) }
+                    contextMenuState = null
+                    contextMenuExpanded = false
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }
 
@@ -1371,6 +1411,7 @@ private fun MessageRow(
     onOpenProfile: (String) -> Unit,
     repliedMessage: ChatMessage? = null,
     onReply: () -> Unit,
+    onOpenContextMenu: (Rect) -> Unit = {},
     onScrollToMessage: (String) -> Unit,
     isHighlighted: Boolean = false,
     tgColors: TelegramThemeColors = telegramColors()
@@ -1398,6 +1439,8 @@ private fun MessageRow(
         val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
         localizeDigits(sdf.format(Date(message.timestamp * 1000)), strings.languageCode)
     }
+    var bubbleBounds by remember(message.id) { mutableStateOf<Rect?>(null) }
+    val bubbleClickSource = remember { MutableInteractionSource() }
 
     val animOffsetY = remember(message.id) { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 18f else 0f) }
     val animOffsetX = remember(message.id) { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 26f else 0f) }
@@ -1491,7 +1534,15 @@ private fun MessageRow(
                 if (isSticker) {
                     val file = message.content.file!!
                     val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
-                    Box(modifier = Modifier.padding(vertical = 4.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .padding(vertical = 4.dp)
+                            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
+                            .clickable(
+                                interactionSource = bubbleClickSource,
+                                indication = null
+                            ) { bubbleBounds?.let(onOpenContextMenu) }
+                    ) {
                         Column(horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start) {
                             SubcomposeAsyncImage(
                                 model = normalizedUrl,
@@ -1528,7 +1579,13 @@ private fun MessageRow(
                     }
                 } else {
                     Surface(
-                        modifier = Modifier.widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f),
+                        modifier = Modifier
+                            .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f)
+                            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
+                            .clickable(
+                                interactionSource = bubbleClickSource,
+                                indication = null
+                            ) { bubbleBounds?.let(onOpenContextMenu) },
                         shape = TelegramBubbleShape(
                             isOutgoing = ownMessage,
                             hasTail = hasTail,
