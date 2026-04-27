@@ -1334,6 +1334,7 @@ private fun ChatPane(
                         replyingTo = state.replyingToMessage,
                         onCancelReply = { onReply(null) },
                         placeholder = strings.messagePlaceholder,
+                        strings = strings,
                         onAttachClick = { 
                             photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
                         },

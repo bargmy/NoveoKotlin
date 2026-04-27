@@ -71,7 +71,8 @@ internal fun ChatInput(
     onLongAttachClick: () -> Unit = {},
     onPasteUri: (android.net.Uri) -> Unit = {},
     hasAttachment: Boolean = false,
-    tgColors: TelegramThemeColors = telegramColors()
+    tgColors: TelegramThemeColors = telegramColors(),
+    strings: NoveoStrings
 ) {
     val buttonInteraction = remember { MutableInteractionSource() }
     val inputFocusRequester = remember { FocusRequester() }
