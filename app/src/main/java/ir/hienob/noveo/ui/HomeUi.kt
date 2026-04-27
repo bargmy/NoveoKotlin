@@ -1134,6 +1134,7 @@ private fun ChatPane(
 
     // Optimization: build a map of messages for fast reply lookup
     val messagesMap = remember(state.messages) { state.messages.associateBy { it.id } }
+    val density = LocalDensity.current
 
     Box(modifier = modifier.fillMaxSize().background(tgColors.chatSurface)) {
         // 1. Messages Layer
@@ -1182,6 +1183,24 @@ private fun ChatPane(
                     tgColors = tgColors
                 )
             }
+        }
+
+        // 1.5 Chat Input Gradient Layer
+        if (selectedChat?.canChat != false) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+                    .align(Alignment.BottomCenter)
+                    .offset(y = 42.dp) // Centered on typical input height + padding
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, tgColors.chatSurface),
+                            startY = 0f,
+                            endY = with(density) { 110.dp.toPx() }
+                        )
+                    )
+            )
         }
 
         // 2. Headbar Layer (ActionBar)

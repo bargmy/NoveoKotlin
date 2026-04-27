@@ -80,12 +80,9 @@ internal fun ChatInput(
     val context = LocalContext.current
     val audioRecorder = remember { AudioRecorder(context) }
     var isRecording by remember { mutableStateOf(false) }
-    var recordingLocked by remember { mutableStateOf(false) }
     var recordTimeMillis by remember { mutableStateOf(0L) }
     
     var dragOffsetX by remember { mutableStateOf(0f) }
-    var dragOffsetY by remember { mutableStateOf(0f) }
-    var amplitude by remember { mutableIntStateOf(0) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "dot")
     val dotAlpha by infiniteTransition.animateFloat(
@@ -104,7 +101,6 @@ internal fun ChatInput(
         if (isGranted) {
             audioRecorder.start()
             isRecording = true
-            recordingLocked = false
             recordTimeMillis = 0L
         }
     }
@@ -114,12 +110,9 @@ internal fun ChatInput(
             while (isRecording) {
                 delay(50)
                 recordTimeMillis += 50
-                amplitude = audioRecorder.getMaxAmplitude()
             }
         } else {
-            amplitude = 0
             dragOffsetX = 0f
-            dragOffsetY = 0f
         }
     }
 
@@ -133,10 +126,7 @@ internal fun ChatInput(
     fun finishRecording(send: Boolean) {
         if (!isRecording) return
         isRecording = false
-        recordingLocked = false
         dragOffsetX = 0f
-        dragOffsetY = 0f
-        amplitude = 0
         if (send) {
             audioRecorder.stop()
             audioRecorder.outputFile?.let { file ->
@@ -148,23 +138,22 @@ internal fun ChatInput(
         }
     }
 
-    val showSendButton = (draft.isNotBlank() || hasAttachment) || recordingLocked
-    val buttonColor = if (!showSendButton) tgColors.composerField else tgColors.composerBlue
-    val iconColor = if (!showSendButton) tgColors.composerIcon else Color.White
+    val showSendButton = (draft.isNotBlank() || hasAttachment)
+    val targetButtonColor = if (isRecording) Color.Red else if (!showSendButton) tgColors.composerField else tgColors.composerBlue
+    val buttonColor by animateColorAsState(targetValue = targetButtonColor, label = "buttonColor")
+    val iconColor = if (!showSendButton && !isRecording) tgColors.composerIcon else Color.White
 
-    val baseTargetScale = if (isRecording && !recordingLocked) {
-        val normalizedAmp = (amplitude / 32767f).coerceIn(0f, 1f)
-        val ampScale = normalizedAmp * 0.4f
+    val baseTargetScale = if (isRecording) {
         val swipeProgress = (Math.abs(dragOffsetX) / 150f).coerceIn(0f, 1f)
-        val scaleReduction = swipeProgress * 1f
-        (2.0f + ampScale - scaleReduction).coerceAtLeast(1f)
+        val scaleReduction = swipeProgress * 0.5f
+        (1.0f - scaleReduction).coerceAtLeast(0.5f)
     } else {
         sendScale
     }
 
     val micScale by animateFloatAsState(
         targetValue = baseTargetScale,
-        animationSpec = tween(if (isRecording && !recordingLocked) 50 else 150),
+        animationSpec = tween(if (isRecording) 50 else 150),
         label = "micScale"
     )
 
@@ -246,13 +235,7 @@ internal fun ChatInput(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (recordingLocked) {
-                                IconButton(onClick = { finishRecording(false) }, modifier = Modifier.size(32.dp)) {
-                                    Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                                }
-                            } else {
-                                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color.Red.copy(alpha = dotAlpha)))
-                            }
+                            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color.Red.copy(alpha = dotAlpha)))
                             Spacer(Modifier.width(12.dp))
                             val seconds = (recordTimeMillis / 1000) % 60
                             val minutes = (recordTimeMillis / 1000) / 60
@@ -260,19 +243,17 @@ internal fun ChatInput(
                             
                             Spacer(Modifier.weight(1f))
                             
-                            if (!recordingLocked) {
-                                val slideOffsetAbs = Math.abs(dragOffsetX)
-                                val slideAlpha = (1f - (slideOffsetAbs / 150f)).coerceIn(0.2f, 1f)
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.graphicsLayer { 
-                                        alpha = slideAlpha 
-                                        translationX = dragOffsetX / 2f
-                                    }
-                                ) {
-                                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = null, tint = tgColors.composerHint, modifier = Modifier.size(20.dp))
-                                    Text("Slide to cancel", fontSize = 15.sp, color = tgColors.composerHint)
+                            val slideOffsetAbs = Math.abs(dragOffsetX)
+                            val slideAlpha = (1f - (slideOffsetAbs / 150f)).coerceIn(0.2f, 1f)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.graphicsLayer { 
+                                    alpha = slideAlpha 
+                                    translationX = dragOffsetX / 2f
                                 }
+                            ) {
+                                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = null, tint = tgColors.composerHint, modifier = Modifier.size(20.dp))
+                                Text("Slide to cancel", fontSize = 15.sp, color = tgColors.composerHint)
                             }
                         }
                     }
@@ -281,22 +262,6 @@ internal fun ChatInput(
 
             Spacer(Modifier.width(8.dp))
             Box(Modifier.size(48.dp))
-        }
-
-        androidx.compose.animation.AnimatedVisibility(
-            visible = isRecording && !recordingLocked,
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomEnd).offset(y = (-68).dp).width(48.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Surface(modifier = Modifier.size(28.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
-                    Box(contentAlignment = Alignment.Center) {
-                        val lockVector = if (dragOffsetY < -100f) Icons.Outlined.LockOpen else Icons.Outlined.Lock
-                        Icon(lockVector, contentDescription = "Lock", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
         }
 
         val density = LocalDensity.current
@@ -312,13 +277,12 @@ internal fun ChatInput(
                             waitForUpOrCancellation()
                         }
                         down.consume()
-                        if (recordingLocked) finishRecording(true) else onActionClick()
+                        onActionClick()
                     } catch (e: PointerEventTimeoutCancellationException) {
                         down.consume()
                         if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                             audioRecorder.start()
                             isRecording = true
-                            recordingLocked = false
                             recordTimeMillis = 0L
                             isLocalRecording = true
                         } else {
@@ -326,7 +290,6 @@ internal fun ChatInput(
                         }
                         
                         dragOffsetX = 0f
-                        dragOffsetY = 0f
                         var lockAxis = 0 
                         
                         while (isLocalRecording) {
@@ -334,23 +297,20 @@ internal fun ChatInput(
                             val change = event.changes.firstOrNull()
                             
                             if (change == null || !change.pressed) {
-                                if (!recordingLocked && isRecording) {
+                                if (isRecording) {
                                     if (dragOffsetX <= -150f) finishRecording(false)
                                     else finishRecording(true)
                                 }
                                 dragOffsetX = 0f
-                                dragOffsetY = 0f
                                 break
                             }
                             
                             change.consume()
                             val posChange = change.positionChange()
                             
-                            if (lockAxis == 0 && (Math.abs(posChange.x) > 2f || Math.abs(posChange.y) > 2f)) {
-                                if (Math.abs(posChange.x) > Math.abs(posChange.y) && posChange.x < 0) {
+                            if (lockAxis == 0 && Math.abs(posChange.x) > 2f) {
+                                if (posChange.x < 0) {
                                     lockAxis = 1 
-                                } else if (Math.abs(posChange.y) > Math.abs(posChange.x) && posChange.y < 0) {
-                                    lockAxis = 2 
                                 }
                             }
                             
@@ -359,15 +319,6 @@ internal fun ChatInput(
                                 if (dragOffsetX <= -150f) {
                                     finishRecording(false)
                                     dragOffsetX = 0f
-                                    dragOffsetY = 0f
-                                    break
-                                }
-                            } else if (lockAxis == 2) {
-                                dragOffsetY = (dragOffsetY + posChange.y).coerceAtMost(0f)
-                                if (dragOffsetY <= -150f) {
-                                    recordingLocked = true
-                                    dragOffsetX = 0f
-                                    dragOffsetY = 0f
                                     break
                                 }
                             }
@@ -377,8 +328,7 @@ internal fun ChatInput(
             }
         } else {
             Modifier.clickable(interactionSource = buttonInteraction, indication = null) {
-                if (recordingLocked) finishRecording(true)
-                else onActionClick()
+                onActionClick()
             }
         }
 
