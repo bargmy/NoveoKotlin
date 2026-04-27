@@ -100,12 +100,61 @@ internal fun ChatInput(
     val inputFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val audioRecorder = remember { AudioRecorder(context) }
+    var isRecording by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var recordingLocked by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var recordTimeMillis by remember { androidx.compose.runtime.mutableStateOf(0L) }
+    var dragOffset by remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            audioRecorder.start()
+            isRecording = true
+            recordTimeMillis = 0L
+        }
+    }
+
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    LaunchedEffect(isRecording) {
+        if (isRecording) {
+            while (isRecording) {
+                kotlinx.coroutines.delay(100)
+                recordTimeMillis += 100
+            }
+        }
+    }
+
     LaunchedEffect(replyingTo?.id) {
-        if (replyingTo != null) {
+        if (replyingTo != null && !isRecording) {
             inputFocusRequester.requestFocus()
             keyboardController?.show()
         }
     }
+
+    fun finishRecording(send: Boolean) {
+        if (!isRecording) return
+        isRecording = false
+        recordingLocked = false
+        dragOffset = androidx.compose.ui.geometry.Offset.Zero
+        if (send) {
+            audioRecorder.stop()
+            audioRecorder.outputFile?.let { file ->
+                val uri = android.net.Uri.fromFile(file)
+                onPasteUri(uri)
+            }
+        } else {
+            audioRecorder.cancel()
+        }
+    }
+
+    val recordingAlpha by animateFloatAsState(
+        targetValue = if (isRecording) 1f else 0f,
+        animationSpec = tween(150),
+        label = "recordingAlpha"
+    )
 
     Box(modifier = modifier.fillMaxWidth().padding(horizontal = 6.dp).padding(bottom = 4.dp)) {
         Row(
@@ -119,124 +168,290 @@ internal fun ChatInput(
                 color = tgColors.composerField,
                 shadowElevation = 1.dp
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    // Reply Preview
-                    AnimatedVisibility(
-                        visible = replyingTo != null,
-                        enter = slideInVertically { it },
-                        exit = slideOutVertically { it }
+                Box(contentAlignment = Alignment.CenterStart) {
+                    // Regular Input UI
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer { alpha = 1f - recordingAlpha }
                     ) {
-                        replyingTo?.let { reply ->
-                            Row(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.width(2.dp).height(30.dp).background(tgColors.composerBlue, RoundedCornerShape(1.dp)))
-                                Spacer(Modifier.width(10.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(reply.senderName, style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp), color = tgColors.composerBlue, fontWeight = FontWeight.Bold, maxLines = 1)
-                                    Text(reply.content.previewText(), style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = tgColors.composerHint, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                IconButton(onClick = onCancelReply, modifier = Modifier.size(24.dp)) {
-                                    Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(17.dp), tint = tgColors.composerHint)
+                        // Reply Preview
+                        AnimatedVisibility(
+                            visible = replyingTo != null && !isRecording,
+                            enter = slideInVertically { it },
+                            exit = slideOutVertically { it }
+                        ) {
+                            replyingTo?.let { reply ->
+                                Row(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.width(2.dp).height(30.dp).background(tgColors.composerBlue, RoundedCornerShape(1.dp)))
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(reply.senderName, style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp), color = tgColors.composerBlue, fontWeight = FontWeight.Bold, maxLines = 1)
+                                        Text(reply.content.previewText(), style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = tgColors.composerHint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    IconButton(onClick = onCancelReply, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(17.dp), tint = tgColors.composerHint)
+                                    }
                                 }
                             }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            GlassIconButton(
+                                resId = R.drawable.tg_input_smile,
+                                contentDescription = "Emoji",
+                                tint = tgColors.composerIcon,
+                                selectorTint = Color.Transparent,
+                                onClick = {},
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+
+                            Box(
+                                modifier = Modifier.weight(1f).padding(vertical = 10.dp, horizontal = 4.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (draft.isBlank()) {
+                                    Text(placeholder, color = tgColors.composerHint, fontSize = 17.sp)
+                                }
+                                BasicTextField(
+                                    value = draft,
+                                    onValueChange = onDraftChange,
+                                    modifier = Modifier.fillMaxWidth().focusRequester(inputFocusRequester),
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, color = tgColors.composerText),
+                                    cursorBrush = SolidColor(tgColors.composerCursor),
+                                    minLines = 1,
+                                    maxLines = 6
+                                )
+                                
+                                // Content Receiver for pasting files
+                                androidx.compose.ui.viewinterop.AndroidView(
+                                    factory = { context ->
+                                        val view = android.view.View(context)
+                                        androidx.core.view.ViewCompat.setOnReceiveContentListener(
+                                            view,
+                                            arrayOf("image/*", "video/*", "application/*", "text/*"),
+                                            object : androidx.core.view.OnReceiveContentListener {
+                                                override fun onReceiveContent(view: android.view.View, payload: androidx.core.view.ContentInfoCompat): androidx.core.view.ContentInfoCompat? {
+                                                    val split = payload.partition { it.uri != null }
+                                                    val uriPart = split.first
+                                                    val remaining = split.second
+                                                    
+                                                    if (uriPart != null) {
+                                                        val clip = uriPart.clip
+                                                        for (i in 0 until clip.itemCount) {
+                                                            clip.getItemAt(i).uri?.let { uri -> onPasteUri(uri) }
+                                                        }
+                                                    }
+                                                    return remaining
+                                                }
+                                            }
+                                        )
+                                        view
+                                    },
+                                    modifier = Modifier.matchParentSize()
+                                )
+                            }
+
+                            GlassIconButton(
+                                resId = R.drawable.tg_msg_input_attach2,
+                                contentDescription = "Attach",
+                                tint = tgColors.composerIcon,
+                                selectorTint = Color.Transparent,
+                                onClick = onAttachClick,
+                                onLongClick = onLongAttachClick,
+                                modifier = Modifier.padding(end = 4.dp)
+                            )
                         }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        GlassIconButton(
-                            resId = R.drawable.tg_input_smile,
-                            contentDescription = "Emoji",
-                            tint = tgColors.composerIcon,
-                            selectorTint = Color.Transparent,
-                            onClick = {},
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
-
-                        Box(
-                            modifier = Modifier.weight(1f).padding(vertical = 10.dp, horizontal = 4.dp),
-                            contentAlignment = Alignment.CenterStart
+                    // Recording UI
+                    if (recordingAlpha > 0f) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .padding(horizontal = 16.dp)
+                                .graphicsLayer { alpha = recordingAlpha },
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (draft.isBlank()) {
-                                Text(placeholder, color = tgColors.composerHint, fontSize = 17.sp)
+                            if (recordingLocked) {
+                                IconButton(onClick = { finishRecording(send = false) }) {
+                                    Icon(Icons.Outlined.Delete, contentDescription = "Cancel", tint = MaterialTheme.colorScheme.error)
+                                }
+                            } else {
+                                // Blinking red dot
+                                val dotAlpha by androidx.compose.animation.core.rememberInfiniteTransition(label = "dot").animateFloat(
+                                    initialValue = 1f,
+                                    targetValue = 0f,
+                                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                                        animation = tween(500),
+                                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+                                    ),
+                                    label = "dotAlpha"
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Red.copy(alpha = dotAlpha))
+                                )
                             }
-                            BasicTextField(
-                                value = draft,
-                                onValueChange = onDraftChange,
-                                modifier = Modifier.fillMaxWidth().focusRequester(inputFocusRequester),
-                                textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, color = tgColors.composerText),
-                                cursorBrush = SolidColor(tgColors.composerCursor),
-                                minLines = 1,
-                                maxLines = 6
-                            )
+                            Spacer(Modifier.width(8.dp))
                             
-                            // Content Receiver for pasting files
-                            androidx.compose.ui.viewinterop.AndroidView(
-                                factory = { context ->
-                                    val view = android.view.View(context)
-                                    androidx.core.view.ViewCompat.setOnReceiveContentListener(
-                                        view,
-                                        arrayOf("image/*", "video/*", "application/*", "text/*"),
-                                        object : androidx.core.view.OnReceiveContentListener {
-                                            override fun onReceiveContent(view: android.view.View, payload: androidx.core.view.ContentInfoCompat): androidx.core.view.ContentInfoCompat? {
-                                                val split = payload.partition { it.uri != null }
-                                                val uriPart = split.first
-                                                val remaining = split.second
-                                                
-                                                if (uriPart != null) {
-                                                    val clip = uriPart.clip
-                                                    for (i in 0 until clip.itemCount) {
-                                                        clip.getItemAt(i).uri?.let { uri -> onPasteUri(uri) }
-                                                    }
-                                                }
-                                                return remaining
-                                            }
-                                        }
-                                    )
-                                    view
-                                },
-                                modifier = Modifier.matchParentSize()
+                            val seconds = (recordTimeMillis / 1000) % 60
+                            val minutes = (recordTimeMillis / 1000) / 60
+                            Text(
+                                String.format("%02d:%02d", minutes, seconds),
+                                fontSize = 17.sp,
+                                color = tgColors.composerText
                             )
-                        }
 
-                        GlassIconButton(
-                            resId = R.drawable.tg_msg_input_attach2,
-                            contentDescription = "Attach",
-                            tint = tgColors.composerIcon,
-                            selectorTint = Color.Transparent,
-                            onClick = onAttachClick,
-                            onLongClick = onLongAttachClick,
-                            modifier = Modifier.padding(end = 4.dp)
-                        )
+                            Spacer(Modifier.weight(1f))
+
+                            if (!recordingLocked) {
+                                // Slide to cancel text + chevron
+                                val slideOffsetAbs = Math.abs(dragOffset.x)
+                                val slideAlpha = (1f - (slideOffsetAbs / 300f)).coerceIn(0f, 1f)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.graphicsLayer { alpha = slideAlpha }
+                                ) {
+                                    Icon(
+                                        imageVector = androidx.compose.material.icons.Icons.Outlined.KeyboardArrowLeft,
+                                        contentDescription = null,
+                                        tint = tgColors.composerHint,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "Slide to cancel",
+                                        fontSize = 15.sp,
+                                        color = tgColors.composerHint
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
 
             Spacer(Modifier.width(8.dp))
 
+            // Lock Icon when recording
+            Box(
+                modifier = Modifier
+                    .padding(bottom = 60.dp)
+                    .width(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                AnimatedVisibility(
+                    visible = isRecording && !recordingLocked,
+                    enter = slideInVertically { it } + fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    Surface(
+                        modifier = Modifier.size(36.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shadowElevation = 2.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Outlined.Lock,
+                                contentDescription = "Lock",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
             // Separate Circular Send/Mic Button
-            val buttonColor = if (draft.isBlank() && !hasAttachment) tgColors.composerField else tgColors.composerBlue
-            val iconColor = if (draft.isBlank() && !hasAttachment) tgColors.composerIcon else Color.White
+            val isBlank = draft.isBlank() && !hasAttachment
+            val showSendButton = !isBlank || recordingLocked
+            val buttonColor = if (!showSendButton) tgColors.composerField else tgColors.composerBlue
+            val iconColor = if (!showSendButton) tgColors.composerIcon else Color.White
             
+            val micScale by animateFloatAsState(
+                targetValue = if (isRecording && !recordingLocked) 1.5f else sendScale,
+                animationSpec = tween(150),
+                label = "micScale"
+            )
+
             Surface(
                 modifier = Modifier
                     .size(48.dp)
-                    .scale(sendScale),
+                    .scale(micScale)
+                    .offset(x = dragOffset.x.dp / 2f, y = dragOffset.y.dp / 2f),
                 shape = CircleShape,
                 color = buttonColor,
-                shadowElevation = 2.dp
+                shadowElevation = if (isRecording && !recordingLocked) 4.dp else 2.dp
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(CircleShape)
-                        .clickable(interactionSource = buttonInteraction, indication = null, onClick = onActionClick),
+                        .then(
+                            if (!showSendButton) {
+                                Modifier.pointerInput(Unit) {
+                                    androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                                audioRecorder.start()
+                                                isRecording = true
+                                                recordingLocked = false
+                                                recordTimeMillis = 0L
+                                            } else {
+                                                permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                            }
+                                        },
+                                        onDragEnd = {
+                                            if (isRecording) {
+                                                finishRecording(send = !recordingLocked)
+                                            }
+                                        },
+                                        onDragCancel = {
+                                            if (isRecording) finishRecording(send = false)
+                                        },
+                                        onDrag = { change, dragAmount ->
+                                            change.consume()
+                                            if (isRecording && !recordingLocked) {
+                                                dragOffset += dragAmount
+                                                if (dragOffset.x < -200f) {
+                                                    // Cancel recording
+                                                    finishRecording(send = false)
+                                                } else if (dragOffset.y < -200f) {
+                                                    // Lock recording
+                                                    recordingLocked = true
+                                                    dragOffset = androidx.compose.ui.geometry.Offset.Zero
+                                                }
+                                            }
+                                        }
+                                    )
+                                }.clickable(onClick = { /* Mic tap: do nothing or show toast */ })
+                            } else {
+                                Modifier.clickable(
+                                    interactionSource = buttonInteraction, 
+                                    indication = null, 
+                                    onClick = {
+                                        if (recordingLocked) {
+                                            finishRecording(send = true)
+                                        } else {
+                                            onActionClick()
+                                        }
+                                    }
+                                )
+                            }
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     val density = androidx.compose.ui.platform.LocalDensity.current
                     AnimatedContent(
-                        targetState = draft.isBlank() && !hasAttachment,
+                        targetState = !showSendButton,
                         transitionSpec = { 
                             if (!targetState) { // Mic -> Send
                                 (fadeIn(tween(200)) + 
@@ -249,19 +464,19 @@ internal fun ChatInput(
                             }
                         },
                         label = "send_icon_animation"
-                    ) { isBlank ->
+                    ) { targetIsMic ->
                         val animRotation by transition.animateFloat(
                             label = "rotation",
                             transitionSpec = { tween(250) }
                         ) { enterExitState ->
-                            if (!isBlank && enterExitState == androidx.compose.animation.EnterExitState.PreEnter) -25f else 0f
+                            if (!targetIsMic && enterExitState == androidx.compose.animation.EnterExitState.PreEnter) -25f else 0f
                         }
 
                         Image(
-                            painter = painterResource(if (isBlank) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
+                            painter = painterResource(if (targetIsMic) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
                             contentDescription = null,
                             modifier = Modifier.size(24.dp).graphicsLayer {
-                                rotationZ = if (isBlank) 0f else animRotation
+                                rotationZ = if (targetIsMic) 0f else animRotation
                             },
                             colorFilter = ColorFilter.tint(iconColor)
                         )
