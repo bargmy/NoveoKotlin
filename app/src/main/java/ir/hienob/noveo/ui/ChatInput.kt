@@ -362,7 +362,7 @@ internal fun ChatInput(
                     .width(48.dp),
                 contentAlignment = Alignment.Center
             ) {
-                AnimatedVisibility(
+                androidx.compose.animation.AnimatedVisibility(
                     visible = isRecording && !recordingLocked,
                     enter = slideInVertically { it } + fadeIn(),
                     exit = fadeOut()
