@@ -9,9 +9,7 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.RepeatMode
@@ -71,7 +69,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Bookmark
@@ -168,7 +165,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.offset
@@ -191,23 +187,9 @@ import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.UserSummary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
 private const val CLIENT_VERSION = "v0.4.5 Kotlin"
-private val CONTEXT_MENU_REACTIONS = listOf(
-    "🙏", "🥰", "👍", "😭", "😍", "🙈", "🤣", "🔥", "❤️", "🤯",
-    "🤬", "😢", "🎉", "🤩", "🤮", "💩", "👌", "🕊", "🤡", "🥱",
-    "🥴", "🐳", "❤️‍🔥", "🌚", "🌭", "💯", "⚡️", "🏆", "💔", "🤨"
-)
-private val CONTEXT_MENU_QUICK_REACTIONS = CONTEXT_MENU_REACTIONS.take(6)
-
-private data class MessageContextMenuState(
-    val message: ChatMessage,
-    val ownMessage: Boolean,
-    val bubbleBounds: Rect
-)
-
 private fun formatLastSeen(lastSeen: Long?, strings: NoveoStrings): String {
     if (lastSeen == null || lastSeen <= 0) return strings.lastSeenRecently
     
@@ -1750,275 +1732,6 @@ private fun MessageRow(
                 }
             }
         }
-    }
-}
-
-}
-@Composable
-private fun MessageContextMenu(
-    state: MessageContextMenuState,
-    expanded: Boolean,
-    tgColors: TelegramThemeColors,
-    onDismiss: () -> Unit,
-    onExpandedChange: (Boolean) -> Unit,
-    onReply: () -> Unit,
-    onCopyText: () -> Unit
-) {
-    val density = LocalDensity.current
-    val wrapperScale by animateFloatAsState(
-        targetValue = 1f,
-        animationSpec = tween(250, easing = FastOutSlowInEasing),
-        label = "contextMenuScale"
-    )
-    val reactionsWidth by animateDpAsState(
-        targetValue = if (expanded) 250.dp else 220.dp,
-        animationSpec = tween(300, easing = FastOutSlowInEasing),
-        label = "reactionsWidth"
-    )
-    val reactionsHeight by animateDpAsState(
-        targetValue = if (expanded) 240.dp else 36.dp,
-        animationSpec = tween(300, easing = FastOutSlowInEasing),
-        label = "reactionsHeight"
-    )
-    val reactionsRadius by animateDpAsState(
-        targetValue = if (expanded) 16.dp else 20.dp,
-        animationSpec = tween(300, easing = FastOutSlowInEasing),
-        label = "reactionsRadius"
-    )
-
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val screenWidthPx = with(density) { maxWidth.toPx() }
-        val screenHeightPx = with(density) { maxHeight.toPx() }
-        val targetWidthPx = with(density) { (if (expanded) 250.dp else 220.dp).toPx() }
-        val targetHeightPx = with(density) { (if (expanded) 240.dp else 222.dp).toPx() }
-
-        var left = state.bubbleBounds.left
-        val maxLeft = (screenWidthPx - targetWidthPx - with(density) { 12.dp.toPx() }).coerceAtLeast(with(density) { 8.dp.toPx() })
-        left = left.coerceIn(with(density) { 8.dp.toPx() }, maxLeft)
-
-        var top = state.bubbleBounds.top - targetHeightPx - with(density) { 10.dp.toPx() }
-        if (top < with(density) { 16.dp.toPx() }) {
-            top = state.bubbleBounds.bottom + with(density) { 10.dp.toPx() }
-        }
-        val maxTop = (screenHeightPx - targetHeightPx - with(density) { 8.dp.toPx() }).coerceAtLeast(with(density) { 8.dp.toPx() })
-        top = top.coerceIn(with(density) { 8.dp.toPx() }, maxTop)
-
-        Column(
-            modifier = Modifier
-                .offset { IntOffset(left.roundToInt(), top.roundToInt()) }
-                .wrapContentWidth()
-                .wrapContentHeight()
-                .graphicsLayer {
-                    alpha = 1f
-                    scaleX = wrapperScale
-                    scaleY = wrapperScale
-                    transformOrigin = TransformOrigin(0f, 1f)
-                },
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Surface(
-                color = tgColors.contextMenuReactionSurface,
-                shape = RoundedCornerShape(reactionsRadius),
-                shadowElevation = 8.dp
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(reactionsWidth)
-                        .height(reactionsHeight)
-                ) {
-                    if (expanded) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Reactions",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = tgColors.contextMenuReactionMuted
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clip(CircleShape)
-                                        .background(tgColors.contextMenuReactionSecondary)
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null
-                                        ) { onExpandedChange(false) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.KeyboardArrowDown,
-                                        contentDescription = "Collapse reactions",
-                                        tint = tgColors.contextMenuReactionMuted,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f)
-                                    .padding(horizontal = 8.dp)
-                                    .verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                CONTEXT_MENU_REACTIONS.chunked(6).forEach { row ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        row.forEach { emoji ->
-                                            ReactionButton(
-                                                emoji = emoji,
-                                                expanded = true,
-                                                tgColors = tgColors,
-                                                onClick = onDismiss
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            CONTEXT_MENU_QUICK_REACTIONS.forEach { emoji ->
-                                ReactionButton(
-                                    emoji = emoji,
-                                    expanded = false,
-                                    tgColors = tgColors,
-                                    onClick = onDismiss
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(22.dp)
-                                    .clip(CircleShape)
-                                    .background(tgColors.contextMenuReactionSecondary)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { onExpandedChange(true) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.KeyboardArrowDown,
-                                    contentDescription = "More reactions",
-                                    tint = tgColors.contextMenuReactionMuted,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            AnimatedVisibility(
-                visible = !expanded,
-                enter = fadeIn() + slideInVertically { -it / 8 },
-                exit = fadeOut() + slideOutVertically { -it / 8 }
-            ) {
-                Surface(
-                    color = tgColors.contextMenuBackground,
-                    shape = RoundedCornerShape(12.dp),
-                    shadowElevation = 8.dp
-                ) {
-                    Column(modifier = Modifier.width(200.dp).padding(vertical = 4.dp)) {
-                        ContextMenuActionItem(
-                            label = "Reply",
-                            icon = { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = tgColors.contextMenuIcon, modifier = Modifier.size(18.dp)) },
-                            tgColors = tgColors,
-                            onClick = onReply
-                        )
-                        ContextMenuActionItem(
-                            label = "Pin",
-                            icon = { Icon(Icons.Outlined.Bookmark, contentDescription = null, tint = tgColors.contextMenuIcon, modifier = Modifier.size(18.dp)) },
-                            tgColors = tgColors,
-                            onClick = onDismiss
-                        )
-                        ContextMenuActionItem(
-                            label = "Copy Text",
-                            icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = tgColors.contextMenuIcon, modifier = Modifier.size(18.dp)) },
-                            tgColors = tgColors,
-                            onClick = onCopyText
-                        )
-                        ContextMenuActionItem(
-                            label = "Forward",
-                            icon = { Icon(Icons.Outlined.ArrowForward, contentDescription = null, tint = tgColors.contextMenuIcon, modifier = Modifier.size(18.dp)) },
-                            tgColors = tgColors,
-                            onClick = onDismiss
-                        )
-                        ContextMenuActionItem(
-                            label = "Delete",
-                            icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = tgColors.contextMenuIcon, modifier = Modifier.size(18.dp)) },
-                            tgColors = tgColors,
-                            onClick = onDismiss
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReactionButton(
-    emoji: String,
-    expanded: Boolean,
-    tgColors: TelegramThemeColors,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .size(28.dp)
-            .clip(CircleShape)
-            .background(if (expanded) tgColors.contextMenuReactionSecondary else Color.Transparent)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = emoji, fontSize = 16.sp)
-    }
-}
-
-@Composable
-private fun ContextMenuActionItem(
-    label: String,
-    icon: @Composable () -> Unit,
-    tgColors: TelegramThemeColors,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        icon()
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            color = tgColors.contextMenuText
-        )
     }
 }
 
