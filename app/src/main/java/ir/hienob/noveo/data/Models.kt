@@ -103,6 +103,8 @@ data class ChatMessage(
     val content: MessageContent,
     val timestamp: Long = 0L,
     val seenBy: List<String> = emptyList(),
+    val reactions: Map<String, List<String>> = emptyMap(), // emoji -> list of userIds
+    val isPinned: Boolean = false,
     val pending: Boolean = false,
     val clientTempId: String? = null,
     val replyToId: String? = null,

@@ -71,7 +71,8 @@ data class AppUiState(
     val isBatteryOptimized: Boolean = true,
     val captchaInfo: CaptchaInfo? = null,
     val pendingAttachment: PendingAttachment? = null,
-    val directRecipientId: String? = null
+    val directRecipientId: String? = null,
+    val editingMessage: ChatMessage? = null
 )
 
 data class PendingAttachment(
@@ -501,6 +502,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(replyingToMessage = message)
     }
 
+    fun setEditingMessage(message: ChatMessage?) {
+        _uiState.value = _uiState.value.copy(editingMessage = message)
+    }
+
     fun attachFile(uri: android.net.Uri) {
         viewModelScope.launch {
             runCatching {
@@ -532,8 +537,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
         val replyingTo = _uiState.value.replyingToMessage
+        val editingMessage = _uiState.value.editingMessage
         val attachment = _uiState.value.pendingAttachment
         if (text.isBlank() && attachment == null) return
+
+        if (editingMessage != null) {
+            editMessage(editingMessage.id, text)
+            setEditingMessage(null)
+            return
+        }
 
         val tempId = "temp-${System.currentTimeMillis()}"
         
@@ -686,6 +698,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             is SocketEvent.MessageSent -> handleIncomingMessage(event.message)
             is SocketEvent.Typing -> handleTyping(event.chatId, event.senderId)
             is SocketEvent.MessageSeenUpdate -> handleSeenUpdate(event.chatId, event.messageId, event.userId)
+            is SocketEvent.MessageReactionUpdate -> handleReactionUpdate(event.chatId, event.messageId, event.reactions)
+            is SocketEvent.MessageEditUpdate -> handleIncomingMessage(event.message) // mergeMessages handles updates
+            is SocketEvent.MessageDeleteUpdate -> handleMessageDelete(event.chatId, event.messageId)
+            is SocketEvent.MessagePinUpdate -> handlePinUpdate(event.chatId, event.messageId, event.isPinned)
             is SocketEvent.UserListUpdate -> {
                 _uiState.value = _uiState.value.copy(
                     usersById = _uiState.value.usersById + event.usersById,
@@ -831,6 +847,93 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (isSelectedChat && msg.senderId != session.userId) {
             markAsSeen(msg.id)
         }
+    }
+
+    private fun handleReactionUpdate(chatId: String, messageId: String, reactions: Map<String, List<String>>) {
+        messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().map {
+            if (it.id == messageId) it.copy(reactions = reactions) else it
+        }
+        if (chatId == _uiState.value.selectedChatId) {
+            _uiState.value = _uiState.value.copy(
+                messages = _uiState.value.messages.map {
+                    if (it.id == messageId) it.copy(reactions = reactions) else it
+                }
+            )
+        }
+        persistCachedHomeState()
+    }
+
+    private fun handleMessageDelete(chatId: String, messageId: String) {
+        messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().filter { it.id != messageId }
+        if (chatId == _uiState.value.selectedChatId) {
+            _uiState.value = _uiState.value.copy(
+                messages = _uiState.value.messages.filter { it.id != messageId }
+            )
+        }
+        persistCachedHomeState()
+    }
+
+    private fun handlePinUpdate(chatId: String, messageId: String, isPinned: Boolean) {
+        messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().map {
+            if (it.id == messageId) it.copy(isPinned = isPinned) else it
+        }
+        if (chatId == _uiState.value.selectedChatId) {
+            _uiState.value = _uiState.value.copy(
+                messages = _uiState.value.messages.map {
+                    if (it.id == messageId) it.copy(isPinned = isPinned) else it
+                }
+            )
+        }
+        persistCachedHomeState()
+    }
+
+    fun toggleReaction(messageId: String, emoji: String) {
+        val chatId = _uiState.value.selectedChatId ?: return
+        val payload = org.json.JSONObject()
+            .put("type", "message_reaction")
+            .put("chatId", chatId)
+            .put("messageId", messageId)
+            .put("reaction", emoji)
+        NoveoNotificationService.send(payload)
+    }
+
+    fun editMessage(messageId: String, newText: String) {
+        val chatId = _uiState.value.selectedChatId ?: return
+        val payload = org.json.JSONObject()
+            .put("type", "edit_message")
+            .put("chatId", chatId)
+            .put("messageId", messageId)
+            .put("text", newText)
+        NoveoNotificationService.send(payload)
+    }
+
+    fun deleteMessage(messageId: String) {
+        val chatId = _uiState.value.selectedChatId ?: return
+        val payload = org.json.JSONObject()
+            .put("type", "delete_message")
+            .put("chatId", chatId)
+            .put("messageId", messageId)
+        NoveoNotificationService.send(payload)
+    }
+
+    fun pinMessage(messageId: String, isPinned: Boolean) {
+        val chatId = _uiState.value.selectedChatId ?: return
+        val payload = org.json.JSONObject()
+            .put("type", "pin_message")
+            .put("chatId", chatId)
+            .put("messageId", messageId)
+            .put("isPinned", isPinned)
+        NoveoNotificationService.send(payload)
+    }
+
+    fun forwardMessage(message: ChatMessage, targetChatId: String) {
+        val session = _uiState.value.session ?: return
+        val payload = org.json.JSONObject()
+            .put("type", "forward_message")
+            .put("fromChatId", message.chatId)
+            .put("messageId", message.id)
+            .put("toChatId", targetChatId)
+        NoveoNotificationService.send(payload)
     }
 
     private fun handleTyping(chatId: String, userId: String) {

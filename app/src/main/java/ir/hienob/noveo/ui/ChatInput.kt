@@ -65,7 +65,9 @@ internal fun ChatInput(
     modifier: Modifier = Modifier,
     sendScale: Float = 1f,
     replyingTo: ChatMessage? = null,
+    editingMessage: ChatMessage? = null,
     onCancelReply: () -> Unit = {},
+    onCancelEdit: () -> Unit = {},
     placeholder: String = "Message",
     onAttachClick: () -> Unit = {},
     onLongAttachClick: () -> Unit = {},
@@ -117,10 +119,13 @@ internal fun ChatInput(
         }
     }
 
-    LaunchedEffect(replyingTo?.id) {
-        if (replyingTo != null && !isRecording) {
+    LaunchedEffect(replyingTo?.id, editingMessage?.id) {
+        if ((replyingTo != null || editingMessage != null) && !isRecording) {
             inputFocusRequester.requestFocus()
             keyboardController?.show()
+        }
+        if (editingMessage != null) {
+            onDraftChange(editingMessage.content.text ?: "")
         }
     }
 
@@ -190,6 +195,20 @@ internal fun ChatInput(
                                     Text(replyingTo.content.previewText(), style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = tgColors.composerHint, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                                 IconButton(onClick = onCancelReply, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(17.dp), tint = tgColors.composerHint)
+                                }
+                            }
+                        }
+
+                        if (editingMessage != null) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.width(2.dp).height(30.dp).background(tgColors.composerBlue, RoundedCornerShape(1.dp)))
+                                Spacer(Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Edit Message", style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp), color = tgColors.composerBlue, fontWeight = FontWeight.Bold, maxLines = 1)
+                                    Text(editingMessage.content.text ?: "", style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = tgColors.composerHint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                IconButton(onClick = onCancelEdit, modifier = Modifier.size(24.dp)) {
                                     Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(17.dp), tint = tgColors.composerHint)
                                 }
                             }

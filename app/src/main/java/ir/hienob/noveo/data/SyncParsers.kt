@@ -174,6 +174,16 @@ private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map
     val seenByArray = message.optJSONArray("seenBy") ?: JSONArray()
     val seenBy = (0 until seenByArray.length()).map { seenByArray.optString(it) }
 
+    val reactionsObj = message.optJSONObject("reactions")
+    val reactions = mutableMapOf<String, List<String>>()
+    if (reactionsObj != null) {
+        val keys = reactionsObj.keys()
+        while (keys.hasNext()) {
+            val emoji = keys.next()
+            reactions[emoji] = parseStringList(reactionsObj.optJSONArray(emoji))
+        }
+    }
+
     return ChatMessage(
         id = messageId,
         chatId = message.optString("chatId").sanitizeServerString()
@@ -185,6 +195,8 @@ private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map
         content = parseMessageContent(message.opt("content")),
         timestamp = timestamp,
         seenBy = seenBy,
+        reactions = reactions,
+        isPinned = message.optBoolean("isPinned", message.optBoolean("pinned", false)),
         pending = message.optBoolean("pending", false),
         clientTempId = message.optString("clientTempId").takeIf { it.isNotBlank() },
         replyToId = message.optString("replyToId").sanitizeServerString().takeIf { it.isNotBlank() },

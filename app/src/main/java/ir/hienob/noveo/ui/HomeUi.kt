@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -564,7 +565,9 @@ internal fun HomeScreen(
                                     showGroupInfo = true 
                                     animateModalEntrance = true
                                 },
-                                onReply = { onReply(it) }                            )
+                                onReply = { onReply(it) },
+                                onCancelEdit = { viewModel.setEditingMessage(null) }
+                            )
                         }
                     }
                 }
@@ -634,6 +637,7 @@ internal fun HomeScreen(
                                     animateModalEntrance = true
                                 },
                                 onReply = { onReply(it) },
+                                onCancelEdit = { viewModel.setEditingMessage(null) },
                                 modifier = Modifier.weight(1f)
                                 )                        }
                     }
@@ -1021,6 +1025,7 @@ private fun ChatPane(
     onOpenProfile: (String) -> Unit,
     onOpenGroupInfo: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
+    onCancelEdit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
@@ -1348,7 +1353,9 @@ private fun ChatPane(
                         },
                         sendScale = 1f,
                         replyingTo = state.replyingToMessage,
+                        editingMessage = state.editingMessage,
                         onCancelReply = { onReply(null) },
+                        onCancelEdit = onCancelEdit,
                         placeholder = strings.messagePlaceholder,
                         strings = strings,
                         onAttachClick = { 
@@ -1410,6 +1417,33 @@ private fun ChatPane(
                         contextMenuState = null
                         contextMenuExpanded = false
                     },
+                    onReaction = { emoji ->
+                        contextMenuState = null
+                        contextMenuExpanded = false
+                        viewModel.toggleReaction(menuState.message.id, emoji)
+                    },
+                    onEdit = {
+                        contextMenuState = null
+                        contextMenuExpanded = false
+                        viewModel.setEditingMessage(menuState.message)
+                    },
+                    onDelete = {
+                        contextMenuState = null
+                        contextMenuExpanded = false
+                        viewModel.deleteMessage(menuState.message.id)
+                    },
+                    onPin = {
+                        contextMenuState = null
+                        contextMenuExpanded = false
+                        viewModel.pinMessage(menuState.message.id, !menuState.message.isPinned)
+                    },
+                    onForward = {
+                        contextMenuState = null
+                        contextMenuExpanded = false
+                        // Simplified forward for now: just set it as a "reply" but without the reply UI
+                        // Or better, we could show a chat picker. 
+                        // For now, let's just show a toast or do nothing to keep it simple as requested
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -1417,6 +1451,7 @@ private fun ChatPane(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MessageRow(
     strings: NoveoStrings,
@@ -1683,6 +1718,45 @@ private fun MessageRow(
                                         text = caption,
                                         color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText
                                     )
+                                }
+                            }
+
+                            if (message.reactions.isNotEmpty()) {
+                                Spacer(Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = if (ownMessage) Arrangement.End else Arrangement.Start
+                                ) {
+                                    FlowRow(
+                                        modifier = Modifier.padding(horizontal = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        message.reactions.forEach { (emoji, userIds) ->
+                                            if (userIds.isNotEmpty()) {
+                                                Surface(
+                                                    modifier = Modifier.clickable { onReply() }, // Reuse reply or dedicated reaction toggle
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.1f),
+                                                    border = if (userIds.contains(state.session?.userId)) BorderStroke(1.dp, if (ownMessage) tgColors.outgoingText.copy(alpha = 0.3f) else tgColors.incomingLink.copy(alpha = 0.3f)) else null
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(emoji, fontSize = 12.sp)
+                                                        Spacer(Modifier.width(2.dp))
+                                                        Text(
+                                                            localizeDigits(userIds.size.toString(), strings.languageCode),
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             

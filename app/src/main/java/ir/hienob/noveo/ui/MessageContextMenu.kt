@@ -88,6 +88,11 @@ internal fun MessageContextMenuOverlay(
     onExpandedChange: (Boolean) -> Unit,
     onReply: () -> Unit,
     onCopyText: () -> Unit,
+    onReaction: (String) -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onPin: () -> Unit,
+    onForward: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val overlayColor = Color.Black.copy(alpha = 0.42f)
@@ -109,7 +114,12 @@ internal fun MessageContextMenuOverlay(
             onDismiss = onDismiss,
             onExpandedChange = onExpandedChange,
             onReply = onReply,
-            onCopyText = onCopyText
+            onCopyText = onCopyText,
+            onReaction = onReaction,
+            onEdit = onEdit,
+            onDelete = onDelete,
+            onPin = onPin,
+            onForward = onForward
         )
     }
 }
@@ -121,7 +131,12 @@ private fun MessageContextMenu(
     onDismiss: () -> Unit,
     onExpandedChange: (Boolean) -> Unit,
     onReply: () -> Unit,
-    onCopyText: () -> Unit
+    onCopyText: () -> Unit,
+    onReaction: (String) -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onPin: () -> Unit,
+    onForward: () -> Unit
 ) {
     val colorScheme = androidx.compose.material3.MaterialTheme.colorScheme
     val menuSurface = colorScheme.surfaceContainerHigh
@@ -209,14 +224,14 @@ private fun MessageContextMenu(
                             menuSecondary = menuSecondary,
                             menuMuted = menuMuted,
                             onExpandedChange = onExpandedChange,
-                            onDismiss = onDismiss
+                            onReaction = onReaction
                         )
                     } else {
                         CompactReactions(
                             menuSecondary = menuSecondary,
                             menuMuted = menuMuted,
                             onExpandedChange = onExpandedChange,
-                            onDismiss = onDismiss
+                            onReaction = onReaction
                         )
                     }
                 }
@@ -239,11 +254,19 @@ private fun MessageContextMenu(
                             textColor = menuText,
                             onClick = onReply
                         )
+                        if (state.ownMessage && state.message.content.text != null) {
+                            ContextMenuActionItem(
+                                label = "Edit",
+                                icon = { Icon(androidx.compose.material.icons.outlined.Edit, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                                textColor = menuText,
+                                onClick = onEdit
+                            )
+                        }
                         ContextMenuActionItem(
-                            label = "Pin",
+                            label = if (state.message.isPinned) "Unpin" else "Pin",
                             icon = { Icon(Icons.Outlined.Bookmark, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                             textColor = menuText,
-                            onClick = onDismiss
+                            onClick = onPin
                         )
                         ContextMenuActionItem(
                             label = "Copy Text",
@@ -255,13 +278,13 @@ private fun MessageContextMenu(
                             label = "Forward",
                             icon = { Icon(Icons.Outlined.ArrowForward, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                             textColor = menuText,
-                            onClick = onDismiss
+                            onClick = onForward
                         )
                         ContextMenuActionItem(
                             label = "Delete",
                             icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = colorScheme.error, modifier = Modifier.size(18.dp)) },
                             textColor = colorScheme.error,
-                            onClick = onDismiss
+                            onClick = onDelete
                         )
                     }
                 }
@@ -275,7 +298,7 @@ private fun ExpandedReactions(
     menuSecondary: Color,
     menuMuted: Color,
     onExpandedChange: (Boolean) -> Unit,
-    onDismiss: () -> Unit
+    onReaction: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -308,7 +331,7 @@ private fun ExpandedReactions(
             CONTEXT_MENU_REACTIONS.chunked(6).forEach { row ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                     row.forEach { emoji ->
-                        ReactionButton(emoji = emoji, expanded = true, menuSecondary = menuSecondary, onClick = onDismiss)
+                        ReactionButton(emoji = emoji, expanded = true, menuSecondary = menuSecondary, onClick = { onReaction(emoji) })
                     }
                 }
             }
@@ -321,7 +344,7 @@ private fun CompactReactions(
     menuSecondary: Color,
     menuMuted: Color,
     onExpandedChange: (Boolean) -> Unit,
-    onDismiss: () -> Unit
+    onReaction: (String) -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -331,7 +354,7 @@ private fun CompactReactions(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         CONTEXT_MENU_QUICK_REACTIONS.forEach { emoji ->
-            ReactionButton(emoji = emoji, expanded = false, menuSecondary = menuSecondary, onClick = onDismiss)
+            ReactionButton(emoji = emoji, expanded = false, menuSecondary = menuSecondary, onClick = { onReaction(emoji) })
         }
         Box(
             modifier = Modifier
@@ -355,13 +378,13 @@ private fun ReactionButton(
 ) {
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(36.dp)
             .clip(CircleShape)
             .background(if (expanded) menuSecondary else Color.Transparent)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text(text = emoji, fontSize = 24.sp)
+        Text(text = emoji, fontSize = 20.sp)
     }
 }
 

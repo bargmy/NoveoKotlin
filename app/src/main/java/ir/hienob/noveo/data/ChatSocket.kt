@@ -16,6 +16,10 @@ sealed class SocketEvent {
     data class MessageSent(val message: ChatMessage) : SocketEvent()
     data class Typing(val chatId: String, val senderId: String) : SocketEvent()
     data class MessageSeenUpdate(val chatId: String, val messageId: String, val userId: String) : SocketEvent()
+    data class MessageReactionUpdate(val chatId: String, val messageId: String, val reactions: Map<String, List<String>>) : SocketEvent()
+    data class MessageEditUpdate(val chatId: String, val message: ChatMessage) : SocketEvent()
+    data class MessageDeleteUpdate(val chatId: String, val messageId: String) : SocketEvent()
+    data class MessagePinUpdate(val chatId: String, val messageId: String, val isPinned: Boolean) : SocketEvent()
     data class UserListUpdate(val usersById: Map<String, UserSummary>, val onlineIds: Set<String>) : SocketEvent()
     data class ChatUpdated(val chatId: String) : SocketEvent()
     data class HistoryUpdate(
@@ -99,6 +103,48 @@ class ChatSocket(
                                 ?: json.optString("userId").sanitizeRealtimeField()
                             if (chatId != null && messageId != null && userId != null) {
                                 trySend(SocketEvent.MessageSeenUpdate(chatId, messageId, userId))
+                            }
+                        }
+                        "message_reaction", "reaction_update" -> {
+                            val chatId = payload.optString("chatId").sanitizeRealtimeField()
+                            val messageId = payload.optString("messageId").sanitizeRealtimeField()
+                            val reactionsObj = payload.optJSONObject("reactions")
+                            if (chatId != null && messageId != null && reactionsObj != null) {
+                                val reactions = mutableMapOf<String, List<String>>()
+                                val keys = reactionsObj.keys()
+                                while (keys.hasNext()) {
+                                    val emoji = keys.next()
+                                    val users = mutableListOf<String>()
+                                    val usersArray = reactionsObj.optJSONArray(emoji)
+                                    if (usersArray != null) {
+                                        for (i in 0 until usersArray.length()) {
+                                            usersArray.optString(i).sanitizeRealtimeField()?.let(users::add)
+                                        }
+                                    }
+                                    reactions[emoji] = users
+                                }
+                                trySend(SocketEvent.MessageReactionUpdate(chatId, messageId, reactions))
+                            }
+                        }
+                        "message_edit", "message_edited" -> {
+                            val chatId = payload.optString("chatId").sanitizeRealtimeField()
+                            if (chatId != null) {
+                                trySend(SocketEvent.MessageEditUpdate(chatId, parseRealtimeMessage(json, knownUsers)))
+                            }
+                        }
+                        "message_delete", "message_deleted" -> {
+                            val chatId = payload.optString("chatId").sanitizeRealtimeField()
+                            val messageId = payload.optString("messageId").sanitizeRealtimeField()
+                            if (chatId != null && messageId != null) {
+                                trySend(SocketEvent.MessageDeleteUpdate(chatId, messageId))
+                            }
+                        }
+                        "message_pin", "pin_update" -> {
+                            val chatId = payload.optString("chatId").sanitizeRealtimeField()
+                            val messageId = payload.optString("messageId").sanitizeRealtimeField()
+                            val isPinned = payload.optBoolean("isPinned", payload.optBoolean("pinned", false))
+                            if (chatId != null && messageId != null) {
+                                trySend(SocketEvent.MessagePinUpdate(chatId, messageId, isPinned))
                             }
                         }
                         "user_list_update" -> {
