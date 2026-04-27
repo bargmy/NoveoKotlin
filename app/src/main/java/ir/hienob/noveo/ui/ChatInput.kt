@@ -300,6 +300,88 @@ internal fun ChatInput(
         }
 
         val density = LocalDensity.current
+        
+        val buttonModifier = if (!showSendButton) {
+            Modifier.pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    var isLocalRecording = false
+                    
+                    try {
+                        withTimeout(200L) {
+                            waitForUpOrCancellation()
+                        }
+                        down.consume()
+                        if (recordingLocked) finishRecording(true) else onActionClick()
+                    } catch (e: PointerEventTimeoutCancellationException) {
+                        down.consume()
+                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            audioRecorder.start()
+                            isRecording = true
+                            recordingLocked = false
+                            recordTimeMillis = 0L
+                            isLocalRecording = true
+                        } else {
+                            permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                        }
+                        
+                        dragOffsetX = 0f
+                        dragOffsetY = 0f
+                        var lockAxis = 0 
+                        
+                        while (isLocalRecording) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull()
+                            
+                            if (change == null || !change.pressed) {
+                                if (!recordingLocked && isRecording) {
+                                    if (dragOffsetX <= -150f) finishRecording(false)
+                                    else finishRecording(true)
+                                }
+                                dragOffsetX = 0f
+                                dragOffsetY = 0f
+                                break
+                            }
+                            
+                            change.consume()
+                            val posChange = change.positionChange()
+                            
+                            if (lockAxis == 0 && (Math.abs(posChange.x) > 2f || Math.abs(posChange.y) > 2f)) {
+                                if (Math.abs(posChange.x) > Math.abs(posChange.y) && posChange.x < 0) {
+                                    lockAxis = 1 
+                                } else if (Math.abs(posChange.y) > Math.abs(posChange.x) && posChange.y < 0) {
+                                    lockAxis = 2 
+                                }
+                            }
+                            
+                            if (lockAxis == 1) {
+                                dragOffsetX = (dragOffsetX + posChange.x).coerceAtMost(0f)
+                                if (dragOffsetX <= -150f) {
+                                    finishRecording(false)
+                                    dragOffsetX = 0f
+                                    dragOffsetY = 0f
+                                    break
+                                }
+                            } else if (lockAxis == 2) {
+                                dragOffsetY = (dragOffsetY + posChange.y).coerceAtMost(0f)
+                                if (dragOffsetY <= -150f) {
+                                    recordingLocked = true
+                                    dragOffsetX = 0f
+                                    dragOffsetY = 0f
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            Modifier.clickable(interactionSource = buttonInteraction, indication = null) {
+                if (recordingLocked) finishRecording(true)
+                else onActionClick()
+            }
+        }
+
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -314,96 +396,17 @@ internal fun ChatInput(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(CircleShape)
-                    .then(
-                        if (!showSendButton) {
-                            Modifier.pointerInput(Unit) {
-                                awaitEachGesture {
-                                    val down = awaitFirstDown()
-                                    var isLocalRecording = false
-                                    
-                                    try {
-                                        withTimeout(200L) {
-                                            waitForUpOrCancellation()
-                                        }
-                                        down.consume()
-                                        if (recordingLocked) finishRecording(true) else onActionClick()
-                                    } catch (e: PointerEventTimeoutCancellationException) {
-                                        down.consume()
-                                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                            audioRecorder.start()
-                                            isRecording = true
-                                            recordingLocked = false
-                                            recordTimeMillis = 0L
-                                            isLocalRecording = true
-                                        } else {
-                                            permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                                        }
-                                        
-                                        dragOffsetX = 0f
-                                        dragOffsetY = 0f
-                                        var lockAxis = 0 
-                                        
-                                        while (isLocalRecording) {
-                                            val event = awaitPointerEvent()
-                                            val change = event.changes.firstOrNull()
-                                            
-                                            if (change == null || !change.pressed) {
-                                                if (!recordingLocked && isRecording) {
-                                                    if (dragOffsetX <= -150f) finishRecording(false)
-                                                    else finishRecording(true)
-                                                }
-                                                dragOffsetX = 0f
-                                                dragOffsetY = 0f
-                                                break
-                                            }
-                                            
-                                            change.consume()
-                                            val posChange = change.positionChange()
-                                            
-                                            if (lockAxis == 0 && (Math.abs(posChange.x) > 2f || Math.abs(posChange.y) > 2f)) {
-                                                if (Math.abs(posChange.x) > Math.abs(posChange.y) && posChange.x < 0) {
-                                                    lockAxis = 1 
-                                                } else if (Math.abs(posChange.y) > Math.abs(posChange.x) && posChange.y < 0) {
-                                                    lockAxis = 2 
-                                                }
-                                            }
-                                            
-                                            if (lockAxis == 1) {
-                                                dragOffsetX = (dragOffsetX + posChange.x).coerceAtMost(0f)
-                                                if (dragOffsetX <= -150f) {
-                                                    finishRecording(false)
-                                                    dragOffsetX = 0f
-                                                    dragOffsetY = 0f
-                                                    break
-                                                }
-                                            } else if (lockAxis == 2) {
-                                                dragOffsetY = (dragOffsetY + posChange.y).coerceAtMost(0f)
-                                                if (dragOffsetY <= -150f) {
-                                                    recordingLocked = true
-                                                    dragOffsetX = 0f
-                                                    dragOffsetY = 0f
-                                                    break
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                Modifier.clickable(interactionSource = buttonInteraction, indication = null) {
-                                    if (recordingLocked) finishRecording(true)
-                                    else onActionClick()
-                                }
-                            }
-                        ),
+                    .then(buttonModifier),
                 contentAlignment = Alignment.Center
             ) {
                 AnimatedContent(
                     targetState = !showSendButton,
                     transitionSpec = {
                         if (!targetState) {
-                            (fadeIn(tween(200)) + slideIn(tween(250, easing = LinearOutSlowInEasing)) { 
-                                IntOffset(with(density) { -50.dp.roundToPx() }, with(density) { 50.dp.roundToPx() }) 
-                            }).togetherWith(fadeOut(tween(150)))
+                            (fadeIn(tween(200)) + slideIn(
+                                animationSpec = tween(250, easing = LinearOutSlowInEasing),
+                                initialOffset = { IntOffset(with(density) { -50.dp.roundToPx() }, with(density) { 50.dp.roundToPx() }) }
+                            )).togetherWith(fadeOut(tween(150)))
                         } else {
                             fadeIn(tween(150)).togetherWith(fadeOut(tween(150)))
                         }
