@@ -9,6 +9,7 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -49,6 +50,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -56,6 +58,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -125,9 +129,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -138,6 +144,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -161,6 +169,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.offset
@@ -183,9 +192,22 @@ import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.UserSummary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
 private const val CLIENT_VERSION = "v0.4.5 Kotlin"
+private val CONTEXT_MENU_REACTIONS = listOf(
+    "🙏", "🥰", "👍", "😭", "😍", "🙈", "🤣", "🔥", "❤️", "🤯",
+    "🤬", "😢", "🎉", "🤩", "🤮", "💩", "👌", "🕊", "🤡", "🥱",
+    "🥴", "🐳", "❤️‍🔥", "🌚", "🌭", "💯", "⚡️", "🏆", "💔", "🤨"
+)
+private val CONTEXT_MENU_QUICK_REACTIONS = CONTEXT_MENU_REACTIONS.take(6)
+
+private data class MessageContextMenuState(
+    val message: ChatMessage,
+    val ownMessage: Boolean,
+    val bubbleBounds: Rect
+)
 
 private fun formatLastSeen(lastSeen: Long?, strings: NoveoStrings): String {
     if (lastSeen == null || lastSeen <= 0) return strings.lastSeenRecently
@@ -1137,8 +1159,20 @@ private fun ChatPane(
     // Optimization: build a map of messages for fast reply lookup
     val messagesMap = remember(state.messages) { state.messages.associateBy { it.id } }
     val density = LocalDensity.current
+    val clipboard = LocalClipboardManager.current
+    var contextMenuState by remember { mutableStateOf<MessageContextMenuState?>(null) }
+    var contextMenuExpanded by remember { mutableStateOf(false) }
+    val closeContextMenu = {
+        contextMenuExpanded = false
+        contextMenuState = null
+    }
 
     Box(modifier = modifier.fillMaxSize().background(tgColors.chatSurface)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (contextMenuState != null) Modifier.blur(2.dp) else Modifier)
+        ) {
         // 1. Messages Layer
         LazyColumn(
             state = listState,
@@ -1180,6 +1214,14 @@ private fun ChatPane(
                     onOpenProfile = onOpenProfile,
                     repliedMessage = repliedMessage,
                     onReply = { onReply(message) },
+                    onOpenContextMenu = { bubbleBounds ->
+                        contextMenuExpanded = false
+                        contextMenuState = MessageContextMenuState(
+                            message = message,
+                            ownMessage = message.senderId == state.session?.userId,
+                            bubbleBounds = bubbleBounds
+                        )
+                    },
                     onScrollToMessage = onScrollToMessage,
                     isHighlighted = highlightedMessageId == message.id,
                     tgColors = tgColors
@@ -1355,6 +1397,39 @@ private fun ChatPane(
                 }
             }
         }
+        }
+
+        if (contextMenuState != null) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(tgColors.contextMenuOverlay)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = closeContextMenu
+                    )
+            )
+            MessageContextMenu(
+                state = contextMenuState!!,
+                expanded = contextMenuExpanded,
+                tgColors = tgColors,
+                onDismiss = closeContextMenu,
+                onExpandedChange = { contextMenuExpanded = it },
+                onReply = {
+                    val targetMessage = contextMenuState!!.message
+                    closeContextMenu()
+                    onReply(targetMessage)
+                },
+                onCopyText = {
+                    val messageText = contextMenuState!!.message.content.text
+                        ?.takeIf { it.isNotBlank() }
+                        ?: contextMenuState!!.message.content.previewText()
+                    clipboard.setText(AnnotatedString(messageText))
+                    closeContextMenu()
+                }
+            )
+        }
     }
 }
 
@@ -1371,6 +1446,7 @@ private fun MessageRow(
     onOpenProfile: (String) -> Unit,
     repliedMessage: ChatMessage? = null,
     onReply: () -> Unit,
+    onOpenContextMenu: (Rect) -> Unit,
     onScrollToMessage: (String) -> Unit,
     isHighlighted: Boolean = false,
     tgColors: TelegramThemeColors = telegramColors()
@@ -1407,6 +1483,8 @@ private fun MessageRow(
     // Swipe state
     val swipeOffset = remember { androidx.compose.animation.core.Animatable(0f) }
     val scope = rememberCoroutineScope()
+    var bubbleBounds by remember(message.id) { mutableStateOf<Rect?>(null) }
+    val bubbleInteractionSource = remember { MutableInteractionSource() }
 
     LaunchedEffect(message.id) {
         if (ownMessage && message.pending) {
@@ -1491,7 +1569,11 @@ private fun MessageRow(
                 if (isSticker) {
                     val file = message.content.file!!
                     val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
-                    Box(modifier = Modifier.padding(vertical = 4.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .padding(vertical = 4.dp)
+                            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
+                    ) {
                         Column(horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start) {
                             SubcomposeAsyncImage(
                                 model = normalizedUrl,
@@ -1525,127 +1607,419 @@ private fun MessageRow(
                                 }
                             }
                         }
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable(
+                                    interactionSource = bubbleInteractionSource,
+                                    indication = null
+                                ) {
+                                    bubbleBounds?.let(onOpenContextMenu)
+                                }
+                        )
                     }
                 } else {
-                    Surface(
-                        modifier = Modifier.widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f),
-                        shape = TelegramBubbleShape(
-                            isOutgoing = ownMessage,
-                            hasTail = hasTail,
-                            cornerRadius = with(LocalDensity.current) { 16.dp.toPx() }
-                        ),
-                        color = when {
-                            ownMessage && isHighlighted -> tgColors.outgoingBubbleSelected
-                            ownMessage -> tgColors.outgoingBubble
-                            isHighlighted -> tgColors.incomingBubbleSelected
-                            else -> tgColors.incomingBubble
-                        },
-                        shadowElevation = 0.5.dp
+                    Box(
+                        modifier = Modifier
+                            .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f)
+                            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
                     ) {
-                        val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
-                        Column(modifier = Modifier.padding(if (hasVisualMedia) 3.dp else 6.dp).padding(horizontal = 4.dp)) {
-                            if (!ownMessage && isGroupChat && showSenderInfo) {
-                                Text(
-                                    message.senderName,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                                    color = tgColors.incomingLink,
-                                    modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-                                )
-                            }
-                            if (repliedMessage != null) {
-                                Surface(
-                                    modifier = Modifier
-                                        .padding(bottom = 4.dp)
-                                        .clickable { onScrollToMessage(repliedMessage.id) },
-                                    color = if (ownMessage) tgColors.replyOutgoing else tgColors.replyIncoming,
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .width(2.dp)
-                                                .height(28.dp)
-                                                .background(if (ownMessage) tgColors.outgoingText.copy(alpha = 0.6f) else tgColors.incomingLink, RoundedCornerShape(1.dp))
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Column {
-                                            Text(
-                                                text = repliedMessage.senderName,
-                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
+                        Surface(
+                            shape = TelegramBubbleShape(
+                                isOutgoing = ownMessage,
+                                hasTail = hasTail,
+                                cornerRadius = with(LocalDensity.current) { 16.dp.toPx() }
+                            ),
+                            color = when {
+                                ownMessage && isHighlighted -> tgColors.outgoingBubbleSelected
+                                ownMessage -> tgColors.outgoingBubble
+                                isHighlighted -> tgColors.incomingBubbleSelected
+                                else -> tgColors.incomingBubble
+                            },
+                            shadowElevation = 0.5.dp
+                        ) {
+                            val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
+                            Column(modifier = Modifier.padding(if (hasVisualMedia) 3.dp else 6.dp).padding(horizontal = 4.dp)) {
+                                if (!ownMessage && isGroupChat && showSenderInfo) {
+                                    Text(
+                                        message.senderName,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                                        color = tgColors.incomingLink,
+                                        modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                                    )
+                                }
+                                if (repliedMessage != null) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .padding(bottom = 4.dp)
+                                            .clickable { onScrollToMessage(repliedMessage.id) },
+                                        color = if (ownMessage) tgColors.replyOutgoing else tgColors.replyIncoming,
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(2.dp)
+                                                    .height(28.dp)
+                                                    .background(if (ownMessage) tgColors.outgoingText.copy(alpha = 0.6f) else tgColors.incomingLink, RoundedCornerShape(1.dp))
                                             )
-                                            Text(
-                                                text = repliedMessage.content.previewText(),
-                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
+                                            Spacer(Modifier.width(8.dp))
+                                            Column {
+                                                Text(
+                                                    text = repliedMessage.senderName,
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = repliedMessage.content.previewText(),
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                val file = message.content.file
+                                if (file != null) {
+                                    MessageAttachment(
+                                        file = file,
+                                        ownMessage = ownMessage,
+                                        onClick = { onMediaClick(file.url) },
+                                        tgColors = tgColors
+                                    )
+                                }
+                                val caption = message.content.text
+
+                                if (!caption.isNullOrBlank()) {
+                                    if (message.content.file != null) Spacer(Modifier.height(4.dp))
+                                    Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 4.dp)) {
+                                        MarkdownText(
+                                            text = caption,
+                                            color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.align(Alignment.End).padding(top = 1.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        timeStr,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                        color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
+                                    )
+                                    if (ownMessage) {
+                                        Spacer(Modifier.width(4.dp))
+                                        if (message.pending) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Schedule,
+                                                contentDescription = strings.sending,
+                                                modifier = Modifier.size(13.dp),
+                                                tint = tgColors.outgoingTime
+                                            )
+                                        } else {
+                                            val seen = message.seenBy.isNotEmpty()
+                                            Icon(
+                                                imageVector = if (seen) Icons.Outlined.DoneAll else Icons.Outlined.Check,
+                                                contentDescription = if (seen) "Seen" else "Sent",
+                                                modifier = Modifier.size(15.dp),
+                                                tint = tgColors.outgoingTime
                                             )
                                         }
                                     }
                                 }
                             }
-
-                            val file = message.content.file
-                            if (file != null) {
-                                MessageAttachment(
-                                    file = file,
-                                    ownMessage = ownMessage,
-                                    onClick = { onMediaClick(file.url) },
-                                    tgColors = tgColors
-                                )
-                            }
-                            val caption = message.content.text
-
-                            if (!caption.isNullOrBlank()) {
-                                if (message.content.file != null) Spacer(Modifier.height(4.dp))
-                                Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 4.dp)) {
-                                    MarkdownText(
-                                        text = caption,
-                                        color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText
-                                    )
-                                }
-                            }
-                            
-                            Row(
-                                modifier = Modifier.align(Alignment.End).padding(top = 1.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    timeStr,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                    color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
-                                )
-                                if (ownMessage) {
-                                    Spacer(Modifier.width(4.dp))
-                                    if (message.pending) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Schedule,
-                                            contentDescription = strings.sending,
-                                            modifier = Modifier.size(13.dp),
-                                            tint = tgColors.outgoingTime
-                                        )
-                                    } else {
-                                        val seen = message.seenBy.isNotEmpty()
-                                        Icon(
-                                            imageVector = if (seen) Icons.Outlined.DoneAll else Icons.Outlined.Check,
-                                            contentDescription = if (seen) "Seen" else "Sent",
-                                            modifier = Modifier.size(15.dp),
-                                            tint = tgColors.outgoingTime
-                                        )
-                                    }
-                                }
-                            }
                         }
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable(
+                                    interactionSource = bubbleInteractionSource,
+                                    indication = null
+                                ) {
+                                    bubbleBounds?.let(onOpenContextMenu)
+                                }
+                        )
                     }
                 }
             }
         }
     }
 }
+
+@Composable
+private fun MessageContextMenu(
+    state: MessageContextMenuState,
+    expanded: Boolean,
+    tgColors: TelegramThemeColors,
+    onDismiss: () -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    onReply: () -> Unit,
+    onCopyText: () -> Unit
+) {
+    val density = LocalDensity.current
+    val wrapperScale by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = tween(250, easing = FastOutSlowInEasing),
+        label = "contextMenuScale"
+    )
+    val reactionsWidth by animateDpAsState(
+        targetValue = if (expanded) 250.dp else 220.dp,
+        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        label = "reactionsWidth"
+    )
+    val reactionsHeight by animateDpAsState(
+        targetValue = if (expanded) 240.dp else 36.dp,
+        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        label = "reactionsHeight"
+    )
+    val reactionsRadius by animateDpAsState(
+        targetValue = if (expanded) 16.dp else 20.dp,
+        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        label = "reactionsRadius"
+    )
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val screenWidthPx = with(density) { maxWidth.toPx() }
+        val screenHeightPx = with(density) { maxHeight.toPx() }
+        val targetWidthPx = with(density) { (if (expanded) 250.dp else 220.dp).toPx() }
+        val targetHeightPx = with(density) { (if (expanded) 240.dp else 222.dp).toPx() }
+
+        var left = state.bubbleBounds.left
+        val maxLeft = (screenWidthPx - targetWidthPx - with(density) { 12.dp.toPx() }).coerceAtLeast(with(density) { 8.dp.toPx() })
+        left = left.coerceIn(with(density) { 8.dp.toPx() }, maxLeft)
+
+        var top = state.bubbleBounds.top - targetHeightPx - with(density) { 10.dp.toPx() }
+        if (top < with(density) { 16.dp.toPx() }) {
+            top = state.bubbleBounds.bottom + with(density) { 10.dp.toPx() }
+        }
+        val maxTop = (screenHeightPx - targetHeightPx - with(density) { 8.dp.toPx() }).coerceAtLeast(with(density) { 8.dp.toPx() })
+        top = top.coerceIn(with(density) { 8.dp.toPx() }, maxTop)
+
+        Column(
+            modifier = Modifier
+                .offset { IntOffset(left.roundToInt(), top.roundToInt()) }
+                .wrapContentWidth()
+                .wrapContentHeight()
+                .graphicsLayer {
+                    alpha = 1f
+                    scaleX = wrapperScale
+                    scaleY = wrapperScale
+                    transformOrigin = TransformOrigin(0f, 1f)
+                },
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                color = tgColors.contextMenuReactionSurface,
+                shape = RoundedCornerShape(reactionsRadius),
+                shadowElevation = 8.dp
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(reactionsWidth)
+                        .height(reactionsHeight)
+                ) {
+                    if (expanded) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Reactions",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = tgColors.contextMenuReactionMuted
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(tgColors.contextMenuReactionSecondary)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { onExpandedChange(false) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.KeyboardArrowDown,
+                                        contentDescription = "Collapse reactions",
+                                        tint = tgColors.contextMenuReactionMuted,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .padding(horizontal = 8.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CONTEXT_MENU_REACTIONS.chunked(6).forEach { row ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        row.forEach { emoji ->
+                                            ReactionButton(
+                                                emoji = emoji,
+                                                expanded = true,
+                                                tgColors = tgColors,
+                                                onClick = onDismiss
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            CONTEXT_MENU_QUICK_REACTIONS.forEach { emoji ->
+                                ReactionButton(
+                                    emoji = emoji,
+                                    expanded = false,
+                                    tgColors = tgColors,
+                                    onClick = onDismiss
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .clip(CircleShape)
+                                    .background(tgColors.contextMenuReactionSecondary)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { onExpandedChange(true) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.KeyboardArrowDown,
+                                    contentDescription = "More reactions",
+                                    tint = tgColors.contextMenuReactionMuted,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = !expanded,
+                enter = fadeIn() + slideInVertically { -it / 8 },
+                exit = fadeOut() + slideOutVertically { -it / 8 }
+            ) {
+                Surface(
+                    color = tgColors.contextMenuBackground,
+                    shape = RoundedCornerShape(12.dp),
+                    shadowElevation = 8.dp
+                ) {
+                    Column(modifier = Modifier.width(200.dp).padding(vertical = 4.dp)) {
+                        ContextMenuActionItem(
+                            label = "Reply",
+                            icon = { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = tgColors.contextMenuIcon, modifier = Modifier.size(18.dp)) },
+                            tgColors = tgColors,
+                            onClick = onReply
+                        )
+                        ContextMenuActionItem(
+                            label = "Pin",
+                            icon = { Icon(Icons.Outlined.Bookmark, contentDescription = null, tint = tgColors.contextMenuIcon, modifier = Modifier.size(18.dp)) },
+                            tgColors = tgColors,
+                            onClick = onDismiss
+                        )
+                        ContextMenuActionItem(
+                            label = "Copy Text",
+                            icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = tgColors.contextMenuIcon, modifier = Modifier.size(18.dp)) },
+                            tgColors = tgColors,
+                            onClick = onCopyText
+                        )
+                        ContextMenuActionItem(
+                            label = "Forward",
+                            icon = { Icon(Icons.Outlined.ArrowForward, contentDescription = null, tint = tgColors.contextMenuIcon, modifier = Modifier.size(18.dp)) },
+                            tgColors = tgColors,
+                            onClick = onDismiss
+                        )
+                        ContextMenuActionItem(
+                            label = "Delete",
+                            icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = tgColors.contextMenuIcon, modifier = Modifier.size(18.dp)) },
+                            tgColors = tgColors,
+                            onClick = onDismiss
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReactionButton(
+    emoji: String,
+    expanded: Boolean,
+    tgColors: TelegramThemeColors,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(if (expanded) tgColors.contextMenuReactionSecondary else Color.Transparent)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = emoji, fontSize = 16.sp)
+    }
+}
+
+@Composable
+private fun ContextMenuActionItem(
+    label: String,
+    icon: @Composable () -> Unit,
+    tgColors: TelegramThemeColors,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        icon()
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            color = tgColors.contextMenuText
+        )
+    }
 }
 
 @Composable
@@ -3173,4 +3547,3 @@ private fun UpdateBubble(
         }
     }
 }
-

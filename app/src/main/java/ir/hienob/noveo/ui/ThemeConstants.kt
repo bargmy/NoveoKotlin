@@ -35,7 +35,16 @@ fun telegramColors(): TelegramThemeColors {
             outgoingText = Color(0xFF222222),
             outgoingTime = Color(0xFF66A060),
             replyIncoming = colorScheme.surfaceVariant,
-            replyOutgoing = colorScheme.primary.copy(alpha = 0.1f)
+            replyOutgoing = colorScheme.primary.copy(alpha = 0.1f),
+            contextMenuBackground = Color(0xFFF7F8FA),
+            contextMenuHover = Color(0x14000000),
+            contextMenuText = Color(0xFF111827),
+            contextMenuIcon = Color(0xFF111827),
+            contextMenuOverlay = Color(0x66000000),
+            contextMenuReactionChip = Color(0xFFF7F8FA),
+            contextMenuReactionSurface = Color(0xFFF7F8FA),
+            contextMenuReactionSecondary = Color(0x0F000000),
+            contextMenuReactionMuted = Color(0xFF6B7280)
         )
     } else {
         // Dark Theme (using colorScheme to sync with user theme)
@@ -62,7 +71,16 @@ fun telegramColors(): TelegramThemeColors {
             outgoingText = colorScheme.onPrimary,
             outgoingTime = colorScheme.onPrimary.copy(alpha = 0.7f),
             replyIncoming = colorScheme.surface,
-            replyOutgoing = colorScheme.onPrimary.copy(alpha = 0.1f)
+            replyOutgoing = colorScheme.onPrimary.copy(alpha = 0.1f),
+            contextMenuBackground = Color(0xFF21212B),
+            contextMenuHover = Color(0x14FFFFFF),
+            contextMenuText = Color.White,
+            contextMenuIcon = Color.White,
+            contextMenuOverlay = Color(0x66000000),
+            contextMenuReactionChip = Color(0xFF21212B),
+            contextMenuReactionSurface = Color(0xFF21212B),
+            contextMenuReactionSecondary = Color(0x14FFFFFF),
+            contextMenuReactionMuted = Color(0xFFA5A5B0)
         )
     }
 }
@@ -90,7 +108,16 @@ data class TelegramThemeColors(
     val outgoingText: Color,
     val outgoingTime: Color,
     val replyIncoming: Color,
-    val replyOutgoing: Color
+    val replyOutgoing: Color,
+    val contextMenuBackground: Color,
+    val contextMenuHover: Color,
+    val contextMenuText: Color,
+    val contextMenuIcon: Color,
+    val contextMenuOverlay: Color,
+    val contextMenuReactionChip: Color,
+    val contextMenuReactionSurface: Color,
+    val contextMenuReactionSecondary: Color,
+    val contextMenuReactionMuted: Color
 )
 
 // Legacy constants for backward compatibility if needed during refactoring
