@@ -300,48 +300,52 @@ internal fun ChatInput(
                         onActionClick()
                     } catch (e: PointerEventTimeoutCancellationException) {
                         down.consume()
-                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        
+                        if (hasPermission) {
                             audioRecorder.start()
                             isRecording = true
                             recordTimeMillis = 0L
                             isLocalRecording = true
-                        } else {
-                            permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                        }
-                        
-                        dragOffsetX = 0f
-                        var lockAxis = 0 
-                        
-                        while (isLocalRecording) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull()
                             
-                            if (change == null || !change.pressed) {
-                                if (isRecording) {
-                                    if (dragOffsetX <= -150f) finishRecording(false)
-                                    else finishRecording(true)
-                                }
-                                dragOffsetX = 0f
-                                break
-                            }
+                            dragOffsetX = 0f
+                            var lockAxis = 0 
                             
-                            change.consume()
-                            val posChange = change.positionChange()
-                            
-                            if (lockAxis == 0 && Math.abs(posChange.x) > 2f) {
-                                if (posChange.x < 0) {
-                                    lockAxis = 1 
-                                }
-                            }
-                            
-                            if (lockAxis == 1) {
-                                dragOffsetX = (dragOffsetX + posChange.x).coerceAtMost(0f)
-                                if (dragOffsetX <= -150f) {
-                                    finishRecording(false)
+                            while (isLocalRecording) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull()
+                                
+                                if (change == null || !change.pressed) {
+                                    if (isRecording) {
+                                        if (dragOffsetX <= -150f) finishRecording(false)
+                                        else finishRecording(true)
+                                    }
+                                    isLocalRecording = false
                                     dragOffsetX = 0f
                                     break
                                 }
+                                
+                                change.consume()
+                                val posChange = change.positionChange()
+                                
+                                if (lockAxis == 0 && Math.abs(posChange.x) > 2f) {
+                                    if (posChange.x < 0) {
+                                        lockAxis = 1 
+                                    }
+                                }
+                                
+                                if (lockAxis == 1) {
+                                    dragOffsetX = (dragOffsetX + posChange.x).coerceAtMost(0f)
+                                    if (dragOffsetX <= -150f) {
+                                        finishRecording(false)
+                                        isLocalRecording = false
+                                        dragOffsetX = 0f
+                                        break
+                                    }
+                                }
                             }
+                        } else {
+                            permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
                         }
                     }
                 }

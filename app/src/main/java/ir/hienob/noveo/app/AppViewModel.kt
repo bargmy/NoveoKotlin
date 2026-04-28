@@ -933,16 +933,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handlePinUpdate(chatId: String, messageId: String, isPinned: Boolean) {
-        messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().map {
-            if (it.id == messageId) it.copy(isPinned = isPinned) else it
+        val messages = messageCacheByChat[chatId].orEmpty()
+        val pinnedMsg = if (isPinned) messages.find { it.id == messageId } else null
+        
+        val updateFunc: (ChatMessage) -> ChatMessage = { msg ->
+            if (msg.id == messageId) msg.copy(isPinned = isPinned) else msg
         }
-        if (chatId == _uiState.value.selectedChatId) {
-            _uiState.value = _uiState.value.copy(
-                messages = _uiState.value.messages.map {
-                    if (it.id == messageId) it.copy(isPinned = isPinned) else it
-                }
-            )
+
+        val updatedMessages = messages.map(updateFunc)
+        messageCacheByChat[chatId] = updatedMessages
+        
+        val updatedChats = _uiState.value.chats.map {
+            if (it.id == chatId) it.copy(pinnedMessage = pinnedMsg) else it
         }
+
+        // Force uiState update for current messages and chats
+        _uiState.value = _uiState.value.copy(
+            chats = updatedChats,
+            messages = if (chatId == _uiState.value.selectedChatId) {
+                updatedMessages
+            } else _uiState.value.messages
+        )
         persistCachedHomeState()
     }
 
