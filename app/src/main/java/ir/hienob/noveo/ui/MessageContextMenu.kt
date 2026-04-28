@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -138,7 +139,7 @@ private fun MessageContextMenu(
     onPin: () -> Unit,
     onForward: () -> Unit
 ) {
-    val colorScheme = androidx.compose.material3.MaterialTheme.colorScheme
+    val colorScheme = MaterialTheme.colorScheme
     val menuSurface = colorScheme.surfaceContainerHigh
     val menuSecondary = colorScheme.surfaceContainerHighest
     val menuMuted = colorScheme.onSurfaceVariant
@@ -257,7 +258,7 @@ private fun MessageContextMenu(
                         if (state.ownMessage && state.message.content.text != null) {
                             ContextMenuActionItem(
                                 label = "Edit",
-                                icon = { Icon(androidx.compose.material.icons.Icons.Outlined.Edit, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                                icon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                                 textColor = menuText,
                                 onClick = onEdit
                             )
