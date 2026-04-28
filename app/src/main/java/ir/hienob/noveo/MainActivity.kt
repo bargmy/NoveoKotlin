@@ -11,8 +11,21 @@ import ir.hienob.noveo.app.AppViewModel
 import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.ui.NoveoRoot
 
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.os.Build
+
 class MainActivity : ComponentActivity() {
     private val viewModel: AppViewModel by viewModels()
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            val currentSettings = viewModel.uiState.value.notificationSettings
+            viewModel.updateNotificationSettings(currentSettings.copy(enabled = true))
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,9 +67,19 @@ class MainActivity : ComponentActivity() {
                 onInstallUpdate = viewModel::installUpdate,
                 onCheckUpdate = { viewModel.checkForUpdate(manual = true) },
                 onUpdateNotificationSettings = { viewModel.updateNotificationSettings(it) },
-                onRequestBatteryOptimization = { viewModel.requestDisableBatteryOptimization() }
+                onRequestBatteryOptimization = { viewModel.requestDisableBatteryOptimization() },
+                onRequestPermission = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
             )
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.checkBatteryOptimization()
     }
 
     override fun onNewIntent(intent: Intent) {

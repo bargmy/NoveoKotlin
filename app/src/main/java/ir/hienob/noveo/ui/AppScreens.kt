@@ -275,7 +275,8 @@ fun NoveoRoot(
     onInstallUpdate: () -> Unit,
     onCheckUpdate: () -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
-    onRequestBatteryOptimization: () -> Unit
+    onRequestBatteryOptimization: () -> Unit,
+    onRequestPermission: () -> Unit
 ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current

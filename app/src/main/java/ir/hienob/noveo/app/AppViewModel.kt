@@ -126,7 +126,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun checkBatteryOptimization() {
+    fun checkBatteryOptimization() {
         val pm = getApplication<Application>().getSystemService(Context.POWER_SERVICE) as PowerManager
         _uiState.value = _uiState.value.copy(
             isBatteryOptimized = !pm.isIgnoringBatteryOptimizations(getApplication<Application>().packageName)
