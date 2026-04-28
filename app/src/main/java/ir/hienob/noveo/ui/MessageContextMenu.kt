@@ -66,13 +66,13 @@ import ir.hienob.noveo.data.ChatMessage
 import kotlin.math.roundToInt
 
 private val CONTEXT_MENU_REACTIONS = listOf(
-    "\uD83D\uDE4F", "\uD83E\uDD70", "\uD83D\uDC4D", "\uD83D\uDE2D", "\uD83D\uDE0D", "\uD83D\uDE48",
-    "\uD83E\uDD23", "\uD83D\uDD25", "\u2764\uFE0F", "\uD83E\uDD2F", "\uD83E\uDD2C", "\uD83D\uDE22",
-    "\uD83C\uDF89", "\uD83E\uDD29", "\uD83E\uDD2E", "\uD83D\uDCA9", "\uD83D\uDC4C", "\uD83D\uDD4A\uFE0F",
-    "\uD83E\uDD21", "\uD83E\uDD71", "\uD83E\uDD74", "\uD83D\uDC33", "\u2764\uFE0F\u200D\uD83D\uDD25", "\uD83C\uDF1A",
-    "\uD83C\uDF2D", "\uD83D\uDCAF", "\u26A1\uFE0F", "\uD83C\uDFC6", "\uD83D\uDC94", "\uD83E\uDD28"
+    "🙏", "👍", "😭", "😍", "🥰", "🙈", "❤️", "🤔", "🤣", "😘", "😱", "💯", "👎", "🔥", "💩", "🤯",
+    "💔", "☃️", "😁", "🎉", "🤷", "😇", "🎃", "🗿", "🥴", "😐", "👏", "🤬", "😢", "🤩", "🤮", "👌",
+    "🕊️", "🤡", "🐳", "💘", "🌭", "⚡", "🍌", "🏆", "🤨", "🍓", "🍾", "🖕", "😈", "😴", "🤓", "👻",
+    "👨‍💻", "👀", "🙉", "😨", "🤝", "✍️", "🤗", "🫡", "🎅", "🎄", "💅", "🤪", "🆒", "🦄", "💊", "🙊",
+    "😎", "👾"
 )
-private val CONTEXT_MENU_QUICK_REACTIONS = CONTEXT_MENU_REACTIONS.take(6)
+private val CONTEXT_MENU_QUICK_REACTIONS = CONTEXT_MENU_REACTIONS.take(8)
 
 internal data class MessageContextMenuState(
     val message: ChatMessage,
@@ -129,6 +129,7 @@ internal fun MessageContextMenuOverlay(
 private fun MessageContextMenu(
     state: MessageContextMenuState,
     expanded: Boolean,
+    tgColors: TelegramThemeColors,
     onDismiss: () -> Unit,
     onExpandedChange: (Boolean) -> Unit,
     onReply: () -> Unit,
@@ -139,12 +140,12 @@ private fun MessageContextMenu(
     onPin: () -> Unit,
     onForward: () -> Unit
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val menuSurface = colorScheme.surfaceContainerHigh
-    val menuSecondary = colorScheme.surfaceContainerHighest
-    val menuMuted = colorScheme.onSurfaceVariant
-    val menuIcon = colorScheme.onSurface
-    val menuText = colorScheme.onSurface
+    val menuSurface = tgColors.incomingBubble
+    val menuSecondary = if (tgColors.isDark) Color(0xFF2C353F) else Color(0xFFF0F2F5)
+    val menuMuted = tgColors.incomingTime
+    val menuIcon = tgColors.headerIcon
+    val menuText = tgColors.incomingText
+    val deleteColor = Color(0xFFE53935)
 
     var animateIn by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { animateIn = true }
@@ -283,8 +284,8 @@ private fun MessageContextMenu(
                         )
                         ContextMenuActionItem(
                             label = "Delete",
-                            icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = colorScheme.error, modifier = Modifier.size(18.dp)) },
-                            textColor = colorScheme.error,
+                            icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = deleteColor, modifier = Modifier.size(18.dp)) },
+                            textColor = deleteColor,
                             onClick = onDelete
                         )
                     }

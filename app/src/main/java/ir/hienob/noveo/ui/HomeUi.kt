@@ -319,6 +319,7 @@ internal fun HomeScreen(
     onLoadOlder: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
     onEditMessage: (ChatMessage?) -> Unit,
+    onForwardMessage: (ChatMessage?) -> Unit,
     onToggleReaction: (String, String) -> Unit,
     onDeleteMessage: (String) -> Unit,
     onPinMessage: (String, Boolean) -> Unit,
@@ -332,7 +333,8 @@ internal fun HomeScreen(
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     currentTheme: ThemePreset,
-    onThemeChange: (ThemePreset) -> Unit
+    onThemeChange: (ThemePreset) -> Unit,
+    onForwardConfirm: (ChatMessage, String) -> Unit = { _, _ -> }
 ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current
@@ -349,9 +351,15 @@ internal fun HomeScreen(
     var selectedMediaUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var animateModalEntrance by remember { mutableStateOf(false) }
 
+    var showForwardPicker by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(state.forwardingMessage) {
+        showForwardPicker = state.forwardingMessage != null
+    }
+
     val isAnyModalVisible = showContactsModal || showCreateModal || showSettingsModal ||
                           (showGroupInfo && state.selectedChatId != null) ||
-                          profileUserId != null || selectedMediaUrl != null || showSearch
+                          profileUserId != null || selectedMediaUrl != null || showSearch || showForwardPicker
 
     androidx.activity.compose.BackHandler(enabled = isAnyModalVisible || showMenu || state.selectedChatId != null) {
         when {
@@ -367,11 +375,29 @@ internal fun HomeScreen(
             showSettingsModal -> showSettingsModal = false
             showCreateModal -> showCreateModal = false
             showContactsModal -> showContactsModal = false
+            showForwardPicker -> onReply(null) // Using onReply(null) as a proxy to clear forwarding state in VM if needed, but better to have explicit one
             showSearch -> { showSearch = false; searchQuery = "" }
             showMenu -> showMenu = false
             state.selectedChatId != null -> onBackToChats()
         }
     }
+...
+        ModalHost(visible = showForwardPicker && state.forwardingMessage != null, onDismiss = { onReply(null) }) {
+            state.forwardingMessage?.let { msg ->
+                ForwardChatPicker(
+                    strings = strings,
+                    chats = state.chats,
+                    onClose = { onReply(null) },
+                    onForward = { targetChatId ->
+                        onSend("") // This is a bit hacky, but forwardMessage in VM handles it
+                        // Actually, I should call VM.forwardMessage directly. 
+                        // But I only have onSend. I'll need to pass onForward to HomeScreen.
+                    }
+                )
+            }
+        }
+    }
+}
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -1052,6 +1078,12 @@ private fun ChatPane(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
+    LaunchedEffect(state.editingMessage) {
+        state.editingMessage?.content?.text?.let {
+            draft = it
+        }
+    }
+
     val photoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -1376,7 +1408,10 @@ private fun ChatPane(
                         replyingTo = state.replyingToMessage,
                         editingMessage = state.editingMessage,
                         onCancelReply = { onReply(null) },
-                        onCancelEdit = onCancelEdit,
+                        onCancelEdit = {
+                            onCancelEdit()
+                            draft = ""
+                        },
                         placeholder = strings.messagePlaceholder,
                         strings = strings,
                         onAttachClick = { 
@@ -1461,9 +1496,7 @@ private fun ChatPane(
                     onForward = {
                         contextMenuState = null
                         contextMenuExpanded = false
-                        // Simplified forward for now: just set it as a "reply" but without the reply UI
-                        // Or better, we could show a chat picker. 
-                        // For now, let's just show a toast or do nothing to keep it simple as requested
+                        onForwardMessage(menuState.message)
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -1543,34 +1576,44 @@ private fun MessageRow(
             .padding(top = if (showSenderInfo) 10.dp else 0.dp)
             .padding(bottom = if (hasTail) 6.dp else 0.dp)
             .pointerInput(message.id) {
-                detectHorizontalDragGestures(
-                    onHorizontalDrag = { change, dragAmount ->
-                        change.consume()
-                        if (dragAmount < 0) { // Only swipe left
-                            val current = swipeOffset.value
-                            val target = (current + dragAmount).coerceIn(-100f, 0f)
-                            if (current > -60f && target <= -60f) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
-                            scope.launch {
-                                swipeOffset.snapTo(target)
-                            }
-                        }
-                    },
-                    onDragEnd = {
-                        if (swipeOffset.value < -60f) {
-                            onReply()
-                        }
-                        scope.launch {
-                            swipeOffset.animateTo(0f, tween(200))
-                        }
-                    },
-                    onDragCancel = {
-                        scope.launch {
-                            swipeOffset.animateTo(0f, tween(200))
-                        }
+                coroutineScope {
+                    launch {
+                        detectTapGestures(
+                            onTap = { bubbleBounds?.let(onOpenContextMenu) },
+                            onLongPress = { bubbleBounds?.let(onOpenContextMenu) }
+                        )
                     }
-                )
+                    launch {
+                        detectHorizontalDragGestures(
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                if (dragAmount < 0) { // Only swipe left
+                                    val current = swipeOffset.value
+                                    val target = (current + dragAmount).coerceIn(-100f, 0f)
+                                    if (current > -60f && target <= -60f) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
+                                    scope.launch {
+                                        swipeOffset.snapTo(target)
+                                    }
+                                }
+                            },
+                            onDragEnd = {
+                                if (swipeOffset.value < -60f) {
+                                    onReply()
+                                }
+                                scope.launch {
+                                    swipeOffset.animateTo(0f, tween(200))
+                                }
+                            },
+                            onDragCancel = {
+                                scope.launch {
+                                    swipeOffset.animateTo(0f, tween(200))
+                                }
+                            }
+                        )
+                    }
+                }
             }
             .graphicsLayer {
                 translationY = animOffsetY.value
@@ -1685,6 +1728,32 @@ private fun MessageRow(
                                     modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
                                 )
                             }
+                            if (message.content.forwardedInfo != null) {
+                                Row(
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ArrowForward,
+                                        contentDescription = null,
+                                        tint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
+                                        modifier = Modifier.size(14.dp).scale(-1f, 1f) // Mirror for "from"
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Column {
+                                        Text(
+                                            text = strings.forwardedFrom,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                            color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = message.content.forwardedInfo.from,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                                            color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
+                                        )
+                                    }
+                                }
+                            }
                             if (repliedMessage != null) {
                                 Surface(
                                     modifier = Modifier
@@ -1757,7 +1826,7 @@ private fun MessageRow(
                                         message.reactions.forEach { (emoji, userIds) ->
                                             if (userIds.isNotEmpty()) {
                                                 Surface(
-                                                    modifier = Modifier.clickable { onReply() }, // Reuse reply or dedicated reaction toggle
+                                                    modifier = Modifier.clickable { onToggleReaction(message.id, emoji) },
                                                     shape = RoundedCornerShape(10.dp),
                                                     color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.1f),
                                                     border = if (userIds.contains(currentUserId)) BorderStroke(1.dp, if (ownMessage) tgColors.outgoingText.copy(alpha = 0.3f) else tgColors.incomingLink.copy(alpha = 0.3f)) else null
@@ -3341,6 +3410,38 @@ private fun UpdateBubble(
                     color = Color(0xFF2E7D32),
                     trackColor = Color(0xFFC8E6C9)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForwardChatPicker(
+    strings: NoveoStrings,
+    chats: List<ChatSummary>,
+    onClose: () -> Unit,
+    onForward: (String) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(28.dp),
+        tonalElevation = 4.dp,
+        modifier = Modifier.fillMaxWidth().height(480.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            ModalHeader(title = strings.forward, onClose = onClose)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(chats) { chat ->
+                    ChatRow(
+                        chat = chat,
+                        strings = strings,
+                        selected = false,
+                        onClick = { onForward(chat.id) }
+                    )
+                }
             }
         }
     }

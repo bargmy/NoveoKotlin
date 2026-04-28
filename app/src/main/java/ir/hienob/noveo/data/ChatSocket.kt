@@ -105,7 +105,7 @@ class ChatSocket(
                                 trySend(SocketEvent.MessageSeenUpdate(chatId, messageId, userId))
                             }
                         }
-                        "message_reaction", "reaction_update" -> {
+                        "message_reaction", "reaction_update", "message_reactions_update" -> {
                             val chatId = payload.optString("chatId").sanitizeRealtimeField()
                             val messageId = payload.optString("messageId").sanitizeRealtimeField()
                             val reactionsObj = payload.optJSONObject("reactions")

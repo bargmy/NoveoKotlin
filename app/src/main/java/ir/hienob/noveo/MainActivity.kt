@@ -41,6 +41,8 @@ class MainActivity : ComponentActivity() {
                 onLoadOlder = viewModel::loadOlderMessages,
                 onReply = viewModel::setReplyingTo,
                 onEditMessage = viewModel::setEditingMessage,
+                onForwardMessage = viewModel::setForwardingMessage,
+                onForwardConfirm = viewModel::forwardMessage,
                 onToggleReaction = viewModel::toggleReaction,
                 onDeleteMessage = viewModel::deleteMessage,
                 onPinMessage = viewModel::pinMessage,

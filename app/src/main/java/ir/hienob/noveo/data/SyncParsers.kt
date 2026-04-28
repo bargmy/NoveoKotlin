@@ -236,13 +236,21 @@ internal fun parseMessageContent(raw: Any?): MessageContent {
         )
     }
     
+    val forwardedInfoObj = payload.optJSONObject("forwardedInfo")
+    val forwardedInfo = forwardedInfoObj?.let {
+        ForwardedInfo(
+            from = it.optString("from").sanitizeServerString().ifBlank { "Unknown" },
+            originalTs = it.optLong("originalTs", 0L)
+        )
+    }
+    
     return MessageContent(
         text = payload.optString("text").sanitizeServerString().takeIf { it.isNotBlank() },
         file = file,
         poll = payload.optJSONObject("poll")?.toString(),
         theme = payload.optJSONObject("theme")?.toString(),
         callLog = payload.optJSONObject("callLog")?.toString(),
-        forwardedInfo = payload.has("forwardedInfo"),
+        forwardedInfo = forwardedInfo,
         replyToId = payload.optString("replyToId").sanitizeServerString().takeIf { it.isNotBlank() }
     )
 }

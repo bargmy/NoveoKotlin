@@ -72,7 +72,8 @@ data class AppUiState(
     val captchaInfo: CaptchaInfo? = null,
     val pendingAttachment: PendingAttachment? = null,
     val directRecipientId: String? = null,
-    val editingMessage: ChatMessage? = null
+    val editingMessage: ChatMessage? = null,
+    val forwardingMessage: ChatMessage? = null
 )
 
 data class PendingAttachment(
@@ -399,7 +400,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun backToChatList() {
         selectedChatRefreshJob?.cancel()
-        _uiState.value = _uiState.value.copy(selectedChatId = null, messages = emptyList(), replyingToMessage = null)
+        _uiState.value = _uiState.value.copy(
+            selectedChatId = null, 
+            messages = emptyList(), 
+            replyingToMessage = null,
+            editingMessage = null,
+            forwardingMessage = null
+        )
     }
 
     fun dismissCaptcha() {
@@ -485,7 +492,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 totalUnreadCount = sumUnread(updatedChats),
                 messages = cachedMessages,
                 loading = cachedMessages.isEmpty(),
-                replyingToMessage = null
+                replyingToMessage = null,
+                editingMessage = null,
+                forwardingMessage = null
             )
             persistCachedHomeState()
             
@@ -504,6 +513,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setEditingMessage(message: ChatMessage?) {
         _uiState.value = _uiState.value.copy(editingMessage = message)
+    }
+
+    fun setForwardingMessage(message: ChatMessage?) {
+        _uiState.value = _uiState.value.copy(forwardingMessage = message)
     }
 
     fun attachFile(uri: android.net.Uri) {
@@ -890,7 +903,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleReaction(messageId: String, emoji: String) {
         val chatId = _uiState.value.selectedChatId ?: return
         val payload = org.json.JSONObject()
-            .put("type", "message_reaction")
+            .put("type", "toggle_reaction")
             .put("chatId", chatId)
             .put("messageId", messageId)
             .put("reaction", emoji)
@@ -928,12 +941,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun forwardMessage(message: ChatMessage, targetChatId: String) {
         val session = _uiState.value.session ?: return
+        
+        val content = org.json.JSONObject()
+        message.content.text?.let { content.put("text", it) }
+        message.content.file?.let { file ->
+            val fileObj = org.json.JSONObject()
+                .put("url", file.url)
+                .put("name", file.name)
+                .put("type", file.type)
+            content.put("file", fileObj)
+        }
+        
+        val forwardedInfo = org.json.JSONObject()
+            .put("from", message.senderName)
+            .put("originalTs", message.timestamp)
+        content.put("forwardedInfo", forwardedInfo)
+
         val payload = org.json.JSONObject()
-            .put("type", "forward_message")
-            .put("fromChatId", message.chatId)
-            .put("messageId", message.id)
-            .put("toChatId", targetChatId)
+            .put("type", "message")
+            .put("chatId", targetChatId)
+            .put("content", content)
+            .put("replyToId", null)
+            
         NoveoNotificationService.send(payload)
+        _uiState.value = _uiState.value.copy(forwardingMessage = null)
     }
 
     private fun handleTyping(chatId: String, userId: String) {
@@ -1087,7 +1118,17 @@ private fun mergeMessages(existing: List<ChatMessage>, incoming: List<ChatMessag
         }
 
         if (existingIndex >= 0) {
-            merged[existingIndex] = message
+            val old = merged[existingIndex]
+            // Surgically merge fields to avoid corruption from partial server updates
+            merged[existingIndex] = old.copy(
+                content = if (message.content.text != null || message.content.file != null) message.content else old.content,
+                senderName = if (message.senderName != "Unknown") message.senderName else old.senderName,
+                reactions = if (message.reactions.isNotEmpty() || !message.pending) message.reactions else old.reactions,
+                seenBy = if (message.seenBy.isNotEmpty()) message.seenBy else old.seenBy,
+                isPinned = if (message.id.isNotBlank()) message.isPinned else old.isPinned,
+                editedAt = if (message.editedAt != null) message.editedAt else old.editedAt,
+                pending = message.pending
+            )
             continue
         }
 

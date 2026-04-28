@@ -56,13 +56,18 @@ data class MessageFileAttachment(
     fun isVideo(): Boolean = type.startsWith("video/") || name.endsWith(".mp4", true) || name.endsWith(".webm", true)
 }
 
+data class ForwardedInfo(
+    val from: String,
+    val originalTs: Long
+)
+
 data class MessageContent(
     val text: String? = null,
     val file: MessageFileAttachment? = null,
     val poll: String? = null, // Simplified for now
     val theme: String? = null,
     val callLog: String? = null,
-    val forwardedInfo: Boolean = false,
+    val forwardedInfo: ForwardedInfo? = null,
     val replyToId: String? = null
 ) {
     fun previewText(): String {
@@ -72,7 +77,7 @@ data class MessageContent(
             !poll.isNullOrBlank() -> "Poll"
             !theme.isNullOrBlank() -> "Theme"
             !callLog.isNullOrBlank() -> "Call"
-            forwardedInfo -> "Forwarded message"
+            forwardedInfo != null -> "Forwarded message"
             else -> ""
         }
     }
