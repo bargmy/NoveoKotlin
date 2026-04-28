@@ -106,7 +106,8 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
                     isVerified = item.optBoolean("isVerified", false),
                     ownerId = ownerId,
                     canChat = canChat,
-                    hasMoreHistory = item.optBoolean("hasMoreHistory", false)
+                    hasMoreHistory = item.optBoolean("hasMoreHistory", false),
+                    pinnedMessage = pinnedMessage
                 )
             )
         }

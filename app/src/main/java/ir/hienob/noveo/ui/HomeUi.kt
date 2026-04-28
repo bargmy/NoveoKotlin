@@ -1421,28 +1421,28 @@ private fun ChatPane(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 56.dp)
-                    .height(42.dp)
+                    .height(48.dp)
                     .clickable { onScrollToMessage(pinned.id) },
-                color = tgColors.incomingBubble.copy(alpha = 0.95f),
-                tonalElevation = 0.5.dp
+                color = tgColors.incomingBubble.copy(alpha = 0.98f),
+                tonalElevation = 1.dp,
+                shadowElevation = 1.dp
             ) {
                 Row(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .width(2.dp)
-                            .height(24.dp)
-                            .background(tgColors.incomingLink, RoundedCornerShape(1.dp))
+                    Icon(
+                        imageVector = Icons.Outlined.Bookmark,
+                        contentDescription = null,
+                        tint = tgColors.headerIcon,
+                        modifier = Modifier.size(20.dp)
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             strings.pinnedMessage,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = tgColors.incomingLink,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = tgColors.headerIcon,
                             fontSize = 12.sp
                         )
                         Text(
@@ -1452,6 +1452,14 @@ private fun ChatPane(
                             overflow = TextOverflow.Ellipsis,
                             fontSize = 13.sp,
                             color = tgColors.incomingTime
+                        )
+                    }
+                    IconButton(onClick = { onPinMessage(pinned.id, false) }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Close,
+                            contentDescription = "Unpin",
+                            tint = tgColors.headerSubtitle,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -1964,6 +1972,14 @@ private fun MessageRow(
                                 modifier = Modifier.align(Alignment.End).padding(top = 1.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                if (message.editedAt != null) {
+                                    Text(
+                                        "edited",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                        color = (if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime).copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(end = 4.dp)
+                                    )
+                                }
                                 Text(
                                     timeStr,
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),

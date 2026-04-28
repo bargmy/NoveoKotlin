@@ -300,6 +300,14 @@ private fun MessageContextMenu(
     }
 }
 
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+
+// ... (existing code)
+
 @Composable
 private fun ExpandedReactions(
     menuSecondary: Color,
@@ -307,6 +315,9 @@ private fun ExpandedReactions(
     onExpandedChange: (Boolean) -> Unit,
     onReaction: (String) -> Unit
 ) {
+    val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -328,27 +339,42 @@ private fun ExpandedReactions(
             }
         }
         
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(6),
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(horizontal = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { change, dragAmount ->
+                        change.consume()
+                        scope.launch {
+                            gridState.scrollBy(-dragAmount)
+                        }
+                    }
+                }
         ) {
-            items(CONTEXT_MENU_REACTIONS) { emoji ->
-                ReactionButton(
-                    emoji = emoji, 
-                    expanded = true, 
-                    menuSecondary = menuSecondary, 
-                    onClick = { onReaction(emoji) }
-                )
-            }
-            
-            // Padding at the bottom
-            item {
-                Spacer(Modifier.height(8.dp))
+            LazyVerticalGrid(
+                state = gridState,
+                columns = GridCells.Fixed(6),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                userScrollEnabled = true // Ensure system scrolling is also enabled
+            ) {
+                items(CONTEXT_MENU_REACTIONS) { emoji ->
+                    ReactionButton(
+                        emoji = emoji, 
+                        expanded = true, 
+                        menuSecondary = menuSecondary, 
+                        onClick = { onReaction(emoji) }
+                    )
+                }
+                
+                // Padding at the bottom
+                item {
+                    Spacer(Modifier.height(8.dp))
+                }
             }
         }
     }
