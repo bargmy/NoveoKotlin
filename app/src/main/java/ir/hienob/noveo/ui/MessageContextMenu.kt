@@ -45,14 +45,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,18 +65,20 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ir.hienob.noveo.data.ChatMessage
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private val CONTEXT_MENU_REACTIONS = listOf(
     "🙏", "👍", "😭", "😍", "🥰", "🙈", "❤️", "🤔", "🤣", "😘", "😱", "💯", "👎", "🔥", "💩", "🤯",
     "💔", "☃️", "😁", "🎉", "🤷", "😇", "🎃", "🗿", "🥴", "😐", "👏", "🤬", "😢", "🤩", "🤮", "👌",
-    "🕊️", "🤡", "🐳", "💘", "🌭", "⚡", "🍌", "🏆", "🤨", "🍓", "🍾", "🖕", "😈", "😴", "🤓", "👻",
+    "🕊️", "🤡", "🐳", "💘", "🌭", "⚡", "🍌", "🏆", "🤨", "🍓", "🍾", "🖕", "😈", "🤔", "😴", "🤓", "👻",
     "👨‍💻", "👀", "🙉", "😨", "🤝", "✍️", "🤗", "🫡", "🎅", "🎄", "💅", "🤪", "🆒", "🦄", "💊", "🙊",
     "😎", "👾"
 )
@@ -300,14 +306,6 @@ private fun MessageContextMenu(
     }
 }
 
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.ui.input.pointer.pointerInput
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
-
-// ... (existing code)
-
 @Composable
 private fun ExpandedReactions(
     menuSecondary: Color,
@@ -360,7 +358,7 @@ private fun ExpandedReactions(
                     .padding(horizontal = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
-                userScrollEnabled = true // Ensure system scrolling is also enabled
+                userScrollEnabled = true
             ) {
                 items(CONTEXT_MENU_REACTIONS) { emoji ->
                     ReactionButton(
@@ -371,7 +369,6 @@ private fun ExpandedReactions(
                     )
                 }
                 
-                // Padding at the bottom
                 item {
                     Spacer(Modifier.height(8.dp))
                 }
@@ -448,4 +445,3 @@ private fun ContextMenuActionItem(
         Text(text = label, fontSize = 15.sp, color = textColor)
     }
 }
-
