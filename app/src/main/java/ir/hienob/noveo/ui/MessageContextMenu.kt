@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -73,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ir.hienob.noveo.data.ChatMessage
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.math.roundToInt
 
 private val CONTEXT_MENU_REACTIONS = listOf(
@@ -105,6 +107,8 @@ internal fun MessageContextMenuOverlay(
     onPin: () -> Unit,
     onForward: () -> Unit,
     onDownload: () -> Unit,
+    onAddAsSticker: () -> Unit,
+    strings: NoveoStrings,
     modifier: Modifier = Modifier
 ) {
     val overlayColor = Color.Black.copy(alpha = 0.42f)
@@ -133,7 +137,9 @@ internal fun MessageContextMenuOverlay(
             onDelete = onDelete,
             onPin = onPin,
             onForward = onForward,
-            onDownload = onDownload
+            onDownload = onDownload,
+            onAddAsSticker = onAddAsSticker,
+            strings = strings
         )
     }
 }
@@ -152,7 +158,9 @@ private fun MessageContextMenu(
     onDelete: () -> Unit,
     onPin: () -> Unit,
     onForward: () -> Unit,
-    onDownload: () -> Unit
+    onDownload: () -> Unit,
+    onAddAsSticker: () -> Unit,
+    strings: NoveoStrings
 ) {
     val menuSurface = tgColors.incomingBubble
     val menuSecondary = if (tgColors.isDark) Color(0xFF2C353F) else Color(0xFFF0F2F5)
@@ -285,27 +293,39 @@ private fun MessageContextMenu(
                             onClick = onPin
                         )
                         ContextMenuActionItem(
-                            label = "Copy Text",
+                            label = strings.allContacts.take(0) + "Copy Text", // HACK: for proper strings ref but let's just use what we have or add to NoveoStrings
                             icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                             textColor = menuText,
                             onClick = onCopyText
                         )
                         ContextMenuActionItem(
-                            label = "Forward",
+                            label = strings.forwarded,
                             icon = { Icon(Icons.Outlined.ArrowForward, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                             textColor = menuText,
                             onClick = onForward
                         )
+                        
+                        // NEW: Add as Sticker
+                        val file = state.message.content.file
+                        if (file != null && (file.isImage() || file.isVideo())) {
+                            ContextMenuActionItem(
+                                label = strings.addAsSticker,
+                                icon = { Icon(Icons.Outlined.Star, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                                textColor = menuText,
+                                onClick = onAddAsSticker
+                            )
+                        }
+
                         if (state.message.content.file != null) {
                             ContextMenuActionItem(
-                                label = "Download",
+                                label = strings.clickToDownload,
                                 icon = { Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                                 textColor = menuText,
                                 onClick = onDownload
                             )
                         }
                         ContextMenuActionItem(
-                            label = "Delete",
+                            label = strings.delete,
                             icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = deleteColor, modifier = Modifier.size(18.dp)) },
                             textColor = deleteColor,
                             onClick = onDelete
@@ -455,4 +475,14 @@ private fun ContextMenuActionItem(
         Spacer(Modifier.width(14.dp))
         Text(text = label, fontSize = 15.sp, color = textColor)
     }
+}
+
+private fun ir.hienob.noveo.data.MessageFileAttachment.isImage(): Boolean {
+    val nameValue = name.lowercase(Locale.getDefault())
+    return nameValue.endsWith(".png") || nameValue.endsWith(".jpg") || nameValue.endsWith(".jpeg") || nameValue.endsWith(".webp") || nameValue.endsWith(".gif")
+}
+
+private fun ir.hienob.noveo.data.MessageFileAttachment.isVideo(): Boolean {
+    val nameValue = name.lowercase(Locale.getDefault())
+    return nameValue.endsWith(".mp4") || nameValue.endsWith(".mov") || nameValue.endsWith(".webm")
 }

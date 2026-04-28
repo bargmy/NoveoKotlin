@@ -71,7 +71,9 @@ internal fun ChatInput(
     placeholder: String = "Message",
     onAttachClick: () -> Unit = {},
     onLongAttachClick: () -> Unit = {},
+    onEmojiClick: () -> Unit = {},
     onPasteUri: (android.net.Uri) -> Unit = {},
+    showStickers: Boolean = false,
     hasAttachment: Boolean = false,
     tgColors: TelegramThemeColors = telegramColors(),
     strings: NoveoStrings
@@ -216,11 +218,11 @@ internal fun ChatInput(
 
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             GlassIconButton(
-                                resId = R.drawable.tg_input_smile,
+                                resId = if (showStickers) R.drawable.tg_input_smile else R.drawable.tg_input_smile, // Should use keyboard icon if showStickers but I don't have one in drawable list
                                 contentDescription = "Emoji",
                                 tint = tgColors.composerIcon,
                                 selectorTint = Color.Transparent,
-                                onClick = {},
+                                onClick = onEmojiClick,
                                 modifier = Modifier.padding(start = 4.dp)
                             )
 

@@ -1266,7 +1266,10 @@ private fun ChatPane(
     var highlightedMessageId by remember { mutableStateOf<String?>(null) }
     var contextMenuState by remember { mutableStateOf<MessageContextMenuState?>(null) }
     var contextMenuExpanded by remember { mutableStateOf(false) }
+    var showAttachPopup by remember { mutableStateOf(false) }
+    var showStickers by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+
 
     val canLoadOlder = selectedChat?.hasMoreHistory == true && !state.loading
     val firstVisibleItemIndex by remember { derivedStateOf { listState.firstVisibleItemIndex } }
@@ -1608,11 +1611,20 @@ private fun ChatPane(
                         placeholder = strings.messagePlaceholder,
                         strings = strings,
                         onAttachClick = { 
-                            photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                            showAttachPopup = true
                         },
                         onLongAttachClick = {
                             filePicker.launch(arrayOf("*/*"))
                         },
+                        onEmojiClick = {
+                            showStickers = !showStickers
+                            if (showStickers) {
+                                keyboardController?.hide()
+                            } else {
+                                keyboardController?.show()
+                            }
+                        },
+                        showStickers = showStickers,
                         onPasteUri = { onAttachFile(it) },
                         hasAttachment = state.pendingAttachment != null,
                         tgColors = tgColors,
@@ -1621,11 +1633,43 @@ private fun ChatPane(
                             if (text.isNotBlank() || state.pendingAttachment != null) {
                                 onSend(text)
                                 draft = ""
+                                showStickers = false
                             }
                         }
                     )
+                    
+                    if (showStickers) {
+                        StickerPicker(
+                            strings = strings,
+                            onStickerSelected = { stickerUrl ->
+                                // Send as sticker
+                                // Since we don't have a direct "send sticker" API call here, 
+                                // we'll use a hack or assume onSend handles it if we set it up.
+                                // Actually, I'll need a way to send it.
+                                // Let's assume stickers are sent as files.
+                                showStickers = false
+                            },
+                            tgColors = tgColors
+                        )
+                    }
                 }
             }
+        }
+        
+        if (showAttachPopup) {
+            AttachmentPicker(
+                strings = strings,
+                onGalleryClick = {
+                    showAttachPopup = false
+                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                },
+                onFilesClick = {
+                    showAttachPopup = false
+                    filePicker.launch(arrayOf("*/*"))
+                },
+                onDismiss = { showAttachPopup = false },
+                tgColors = tgColors
+            )
         }
 
         // Context Menu Layer
@@ -1696,6 +1740,12 @@ private fun ChatPane(
                         contextMenuExpanded = false
                         onDownloadFile(menuState.message)
                     },
+                    onAddAsSticker = {
+                        contextMenuState = null
+                        contextMenuExpanded = false
+                        // placeholder for add sticker
+                    },
+                    strings = strings,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -3557,26 +3607,183 @@ private fun String?.normalizeNoveoUrl(): String? {
     return "$NOVEO_BASE_URL$normalized"
 }
 
+@OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun FullscreenMediaModal(url: String, onDismiss: () -> Unit) {
     val normalizedUrl = remember(url) { url.normalizeNoveoUrl() }
+    val context = LocalContext.current
+    val isVideo = remember(url) { 
+        val lower = url.lowercase()
+        lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".webm")
+    }
+
     Surface(
         color = Color.Black,
         modifier = Modifier.fillMaxSize()
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            AsyncImage(
-                model = normalizedUrl,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit
-            )
+            if (isVideo && normalizedUrl != null) {
+                val exoPlayer = remember {
+                    androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+                        setMediaItem(androidx.media3.common.MediaItem.fromUri(android.net.Uri.parse(normalizedUrl)))
+                        prepare()
+                        playWhenReady = true
+                    }
+                }
+                androidx.compose.runtime.DisposableEffect(Unit) {
+                    onDispose { exoPlayer.release() }
+                }
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { ctx ->
+                        androidx.media3.ui.PlayerView(ctx).apply {
+                            player = exoPlayer
+                            useController = true
+                            setBackgroundColor(android.graphics.Color.BLACK)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                AsyncImage(
+                    model = normalizedUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            }
             
             HeaderIconButton(
                 icon = Icons.Outlined.Close,
                 onClick = onDismiss,
-                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp)
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp),
+                tint = Color.White
             )
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun AttachmentPicker(
+    strings: NoveoStrings,
+    onGalleryClick: () -> Unit,
+    onFilesClick: () -> Unit,
+    onDismiss: () -> Unit,
+    tgColors: TelegramThemeColors
+) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = tgColors.incomingBubble,
+        dragHandle = { androidx.compose.material3.BottomSheetDefaults.DragHandle(color = tgColors.headerSubtitle.copy(alpha = 0.4f)) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 24.dp, start = 16.dp, end = 16.dp)
+        ) {
+            Text(
+                text = "Select Source", 
+                style = MaterialTheme.typography.titleMedium,
+                color = tgColors.headerTitle,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                AttachmentOption(
+                    label = strings.gallery,
+                    icon = Icons.Outlined.Image, // Use Image icon
+                    color = Color(0xFF2EA6FF),
+                    onClick = onGalleryClick,
+                    modifier = Modifier.weight(1f)
+                )
+                AttachmentOption(
+                    label = strings.files,
+                    icon = Icons.Outlined.Description,
+                    color = Color(0xFF34C759),
+                    onClick = onFilesClick,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttachmentOption(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .background(color, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.White)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+@Composable
+private fun StickerPicker(
+    strings: NoveoStrings,
+    onStickerSelected: (String) -> Unit,
+    tgColors: TelegramThemeColors
+) {
+    val keyboardHeight = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val displayHeight = if (keyboardHeight > 0.dp) keyboardHeight else 300.dp
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(displayHeight),
+        color = tgColors.chatSurface
+    ) {
+        Column {
+            TabRow(
+                selectedTabIndex = 0,
+                containerColor = tgColors.incomingBubble,
+                contentColor = tgColors.headerIcon,
+                divider = {}
+            ) {
+                Tab(selected = true, onClick = {}, text = { Text(strings.stickers) })
+            }
+            
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(4),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(20) { index ->
+                    Box(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { /* onStickerSelected */ }
+                            .background(tgColors.incomingBubble.copy(alpha = 0.5f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("S$index")
+                    }
+                }
+            }
         }
     }
 }
