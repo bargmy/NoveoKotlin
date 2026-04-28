@@ -564,6 +564,10 @@ internal fun HomeScreen(
                                 onDismissUpdate = onDismissUpdate,
                                 onDownloadUpdate = onDownloadUpdate,
                                 onInstallUpdate = onInstallUpdate,
+                                onPauseAudio = onPauseAudio,
+                                onResumeAudio = onResumeAudio,
+                                onStopAudio = onStopAudio,
+                                onSeekAudio = onSeekAudio,
                                 modifier = Modifier.fillMaxSize()
                             )
                         } else {
@@ -638,6 +642,10 @@ internal fun HomeScreen(
                         onDismissUpdate = onDismissUpdate,
                         onDownloadUpdate = onDownloadUpdate,
                         onInstallUpdate = onInstallUpdate,
+                        onPauseAudio = onPauseAudio,
+                        onResumeAudio = onResumeAudio,
+                        onStopAudio = onStopAudio,
+                        onSeekAudio = onSeekAudio,
                         modifier = Modifier.width(360.dp).fillMaxHeight()
                     )
                     AnimatedContent(
@@ -3685,7 +3693,7 @@ private fun AudioPlayer(
             modifier = Modifier.size(36.dp)
         ) {
             Icon(
-                imageVector = if (isCurrent && isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                imageVector = if (isCurrent && isPlaying) Icons.Filled.Pause else Icons.Outlined.PlayArrow,
                 contentDescription = if (isPlaying) "Pause" else "Play",
                 tint = if (isCurrent) tgColors.headerIcon else tgColors.incomingText
             )
@@ -3738,7 +3746,7 @@ private fun GlobalAudioMiniPlayer(
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
-                    imageVector = if (state.isAudioPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    imageVector = if (state.isAudioPlaying) Icons.Filled.Pause else Icons.Outlined.PlayArrow,
                     contentDescription = null,
                     tint = tgColors.headerIcon
                 )
@@ -3764,7 +3772,7 @@ private fun GlobalAudioMiniPlayer(
             }
             
             IconButton(onClick = onStop, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.Close, contentDescription = "Close", tint = tgColors.headerIcon, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.Close, contentDescription = "Close", tint = tgColors.headerIcon, modifier = Modifier.size(18.dp))
             }
         }
     }
