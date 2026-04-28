@@ -1350,6 +1350,49 @@ private fun ChatPane(
             }
         }
 
+        // 2.1 Pinned Message Bar
+        selectedChat?.pinnedMessage?.let { pinned ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 56.dp)
+                    .height(42.dp)
+                    .clickable { onScrollToMessage(pinned.id) },
+                color = tgColors.incomingBubble.copy(alpha = 0.95f),
+                tonalElevation = 0.5.dp
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(2.dp)
+                            .height(24.dp)
+                            .background(tgColors.incomingLink, RoundedCornerShape(1.dp))
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            strings.pinnedMessage,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = tgColors.incomingLink,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            pinned.content.previewText(),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontSize = 13.sp,
+                            color = tgColors.incomingTime
+                        )
+                    }
+                }
+            }
+        }
+
         // 2.5 Scroll to Bottom Button
         AnimatedVisibility(
             visible = showScrollToBottom,
@@ -1820,36 +1863,31 @@ private fun MessageRow(
 
                             if (message.reactions.isNotEmpty()) {
                                 Spacer(Modifier.height(4.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = if (ownMessage) Arrangement.End else Arrangement.Start
+                                FlowRow(
+                                    modifier = Modifier.padding(horizontal = 4.dp).wrapContentWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    FlowRow(
-                                        modifier = Modifier.padding(horizontal = 4.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        message.reactions.forEach { (emoji, userIds) ->
-                                            if (userIds.isNotEmpty()) {
-                                                Surface(
-                                                    modifier = Modifier.clickable { onToggleReaction(message.id, emoji) },
-                                                    shape = RoundedCornerShape(10.dp),
-                                                    color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.1f),
-                                                    border = if (userIds.contains(currentUserId)) BorderStroke(1.dp, if (ownMessage) tgColors.outgoingText.copy(alpha = 0.3f) else tgColors.incomingLink.copy(alpha = 0.3f)) else null
+                                    message.reactions.forEach { (emoji, userIds) ->
+                                        if (userIds.isNotEmpty()) {
+                                            Surface(
+                                                modifier = Modifier.clickable { onToggleReaction(message.id, emoji) },
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.1f),
+                                                border = if (userIds.contains(currentUserId)) BorderStroke(1.dp, if (ownMessage) tgColors.outgoingText.copy(alpha = 0.3f) else tgColors.incomingLink.copy(alpha = 0.3f)) else null
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Row(
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Text(emoji, fontSize = 12.sp)
-                                                        Spacer(Modifier.width(2.dp))
-                                                        Text(
-                                                            localizeDigits(userIds.size.toString(), strings.languageCode),
-                                                            fontSize = 11.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
-                                                        )
-                                                    }
+                                                    Text(emoji, fontSize = 12.sp)
+                                                    Spacer(Modifier.width(2.dp))
+                                                    Text(
+                                                        localizeDigits(userIds.size.toString(), strings.languageCode),
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
+                                                    )
                                                 }
                                             }
                                         }

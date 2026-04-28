@@ -82,6 +82,9 @@ internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>
 
             val chatType = item.optString("chatType", item.optString("type", "private")).sanitizeServerString()
             val ownerId = item.optString("ownerId").sanitizeServerString().takeIf { it.isNotBlank() }
+            val pinnedMessageObj = item.optJSONObject("pinnedMessage")
+            val pinnedMessage = if (pinnedMessageObj != null) parseChatMessage(pinnedMessageObj, chatId, usersById) else null
+            
             val permissions = item.optJSONObject("permissions")
             val canChat = when (chatType) {
                 "channel" -> ownerId == selfUserId

@@ -712,9 +712,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             is SocketEvent.Typing -> handleTyping(event.chatId, event.senderId)
             is SocketEvent.MessageSeenUpdate -> handleSeenUpdate(event.chatId, event.messageId, event.userId)
             is SocketEvent.MessageReactionUpdate -> handleReactionUpdate(event.chatId, event.messageId, event.reactions)
-            is SocketEvent.MessageEditUpdate -> handleIncomingMessage(event.message) // mergeMessages handles updates
+            is SocketEvent.MessageEditUpdate -> handleMessageEditUpdate(event.chatId, event.messageId, event.newContent, event.editedAt)
             is SocketEvent.MessageDeleteUpdate -> handleMessageDelete(event.chatId, event.messageId)
             is SocketEvent.MessagePinUpdate -> handlePinUpdate(event.chatId, event.messageId, event.isPinned)
+            is SocketEvent.MessagePinnedUpdate -> handleMessagePinnedUpdate(event.chatId, event.pinnedMessage)
             is SocketEvent.UserListUpdate -> {
                 _uiState.value = _uiState.value.copy(
                     usersById = _uiState.value.usersById + event.usersById,
@@ -818,6 +819,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun sumUnread(chats: List<ChatSummary>) = chats.sumOf { it.unreadCount }
 
+    private fun handleMessageEditUpdate(chatId: String, messageId: String, newContent: String?, editedAt: Long?) {
+        val updateFunc: (ChatMessage) -> ChatMessage = { msg ->
+            if (msg.id == messageId) {
+                msg.copy(
+                    content = if (newContent != null) ir.hienob.noveo.data.parseMessageContent(newContent) else msg.content,
+                    editedAt = editedAt ?: msg.editedAt
+                )
+            } else msg
+        }
+
+        messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().map(updateFunc)
+        if (chatId == _uiState.value.selectedChatId) {
+            _uiState.value = _uiState.value.copy(
+                messages = _uiState.value.messages.map(updateFunc)
+            )
+        }
+        persistCachedHomeState()
+    }
+
+    private fun handleMessagePinnedUpdate(chatId: String, pinnedMessage: ChatMessage?) {
+        val updatedChats = _uiState.value.chats.map {
+            if (it.id == chatId) it.copy(pinnedMessage = pinnedMessage) else it
+        }
+        
+        // Also update individual message isPinned status in current list
+        val pinId = pinnedMessage?.id
+        val updateFunc: (ChatMessage) -> ChatMessage = { msg ->
+            msg.copy(isPinned = (msg.id == pinId))
+        }
+
+        messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().map(updateFunc)
+        
+        _uiState.value = _uiState.value.copy(
+            chats = updatedChats,
+            messages = if (chatId == _uiState.value.selectedChatId) {
+                _uiState.value.messages.map(updateFunc)
+            } else _uiState.value.messages
+        )
+        persistCachedHomeState()
+    }
+
     private fun handleIncomingMessage(msg: ChatMessage) {
         val latestState = _uiState.value
         val session = latestState.session ?: return
@@ -916,7 +958,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("type", "edit_message")
             .put("chatId", chatId)
             .put("messageId", messageId)
-            .put("content", newText)
+            .put("newContent", newText)
         NoveoNotificationService.send(payload)
     }
 

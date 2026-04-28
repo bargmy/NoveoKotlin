@@ -306,7 +306,7 @@ private fun ExpandedReactions(
     onExpandedChange: (Boolean) -> Unit,
     onReaction: (String) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

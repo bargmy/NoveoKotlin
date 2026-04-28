@@ -96,7 +96,8 @@ data class ChatSummary(
     val isVerified: Boolean = false,
     val ownerId: String? = null,
     val canChat: Boolean = true,
-    val hasMoreHistory: Boolean = false
+    val hasMoreHistory: Boolean = false,
+    val pinnedMessage: ChatMessage? = null
 )
 
 data class ChatMessage(
