@@ -1692,7 +1692,7 @@ private fun ChatPane(
                                 onSendSticker(sticker)
                                 showStickers = false
                                 if (state.replyingToMessage != null) {
-                                    onCancelReply()
+                                    onReply(null)
                                 }
                             },
                             tgColors = tgColors
