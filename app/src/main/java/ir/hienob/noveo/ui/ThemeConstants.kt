@@ -13,6 +13,7 @@ fun telegramColors(): TelegramThemeColors {
     return if (!isDark) {
         // Light Theme - Standard Telegram Colors
         TelegramThemeColors(
+            isDark = false,
             composerBlue = Color(0xFF229AF0),
             composerPanel = Color(0xFFF6F7F8),
             composerField = Color.White,
@@ -40,6 +41,7 @@ fun telegramColors(): TelegramThemeColors {
     } else {
         // Dark Theme - Standard Telegram Colors
         TelegramThemeColors(
+            isDark = true,
             composerBlue = Color(0xFF40A7E3),
             composerPanel = Color(0xFF1C242F),
             composerField = Color(0xFF1C242F),
@@ -68,6 +70,7 @@ fun telegramColors(): TelegramThemeColors {
 }
 
 data class TelegramThemeColors(
+    val isDark: Boolean,
     val composerBlue: Color,
     val composerPanel: Color,
     val composerField: Color,

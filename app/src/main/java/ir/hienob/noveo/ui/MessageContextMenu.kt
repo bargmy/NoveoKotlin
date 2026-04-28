@@ -112,6 +112,7 @@ internal fun MessageContextMenuOverlay(
         MessageContextMenu(
             state = state,
             expanded = expanded,
+            tgColors = tgColors,
             onDismiss = onDismiss,
             onExpandedChange = onExpandedChange,
             onReply = onReply,

@@ -24,6 +24,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
@@ -187,6 +188,7 @@ import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.UserSummary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
 private const val CLIENT_VERSION = "v0.4.5 Kotlin"
@@ -375,29 +377,12 @@ internal fun HomeScreen(
             showSettingsModal -> showSettingsModal = false
             showCreateModal -> showCreateModal = false
             showContactsModal -> showContactsModal = false
-            showForwardPicker -> onReply(null) // Using onReply(null) as a proxy to clear forwarding state in VM if needed, but better to have explicit one
+            showForwardPicker -> onForwardMessage(null)
             showSearch -> { showSearch = false; searchQuery = "" }
             showMenu -> showMenu = false
             state.selectedChatId != null -> onBackToChats()
         }
     }
-...
-        ModalHost(visible = showForwardPicker && state.forwardingMessage != null, onDismiss = { onReply(null) }) {
-            state.forwardingMessage?.let { msg ->
-                ForwardChatPicker(
-                    strings = strings,
-                    chats = state.chats,
-                    onClose = { onReply(null) },
-                    onForward = { targetChatId ->
-                        onSend("") // This is a bit hacky, but forwardMessage in VM handles it
-                        // Actually, I should call VM.forwardMessage directly. 
-                        // But I only have onSend. I'll need to pass onForward to HomeScreen.
-                    }
-                )
-            }
-        }
-    }
-}
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -821,6 +806,22 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                         onStartDirectChat(user.id)
                     },
                     animateEntrance = animateModalEntrance
+                )
+            }
+        }
+
+        ModalHost(
+            visible = showForwardPicker && state.forwardingMessage != null,
+            onDismiss = { onForwardMessage(null) }
+        ) {
+            state.forwardingMessage?.let { msg ->
+                ForwardChatPicker(
+                    strings = strings,
+                    chats = state.chats,
+                    onClose = { onForwardMessage(null) },
+                    onForward = { targetChatId ->
+                        onForwardConfirm(msg, targetChatId)
+                    }
                 )
             }
         }
@@ -3428,7 +3429,7 @@ private fun ForwardChatPicker(
         modifier = Modifier.fillMaxWidth().height(480.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            ModalHeader(title = strings.forward, onClose = onClose)
+            ModalHeader(title = strings.forwarded, onClose = onClose)
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(10.dp),

@@ -191,9 +191,13 @@ private fun MessageContent.toJson(): JSONObject = JSONObject()
     .put("poll", poll)
     .put("theme", theme)
     .put("callLog", callLog)
-    .put("forwardedInfo", forwardedInfo)
+    .put("forwardedInfo", forwardedInfo?.toJson())
     .put("replyToId", replyToId)
     .put("file", file?.toJson())
+
+private fun ForwardedInfo.toJson(): JSONObject = JSONObject()
+    .put("from", from)
+    .put("originalTs", originalTs)
 
 private fun MessageFileAttachment.toJson(): JSONObject = JSONObject()
     .put("url", url)
@@ -268,7 +272,12 @@ private fun JSONObject.toMessageContent(): MessageContent = MessageContent(
     poll = optString("poll").takeIf { it.isNotBlank() },
     theme = optString("theme").takeIf { it.isNotBlank() },
     callLog = optString("callLog").takeIf { it.isNotBlank() },
-    forwardedInfo = optBoolean("forwardedInfo", false),
+    forwardedInfo = optJSONObject("forwardedInfo")?.let {
+        ForwardedInfo(
+            from = it.optString("from"),
+            originalTs = it.optLong("originalTs", 0L)
+        )
+    },
     replyToId = optString("replyToId").takeIf { it.isNotBlank() }
 )
 

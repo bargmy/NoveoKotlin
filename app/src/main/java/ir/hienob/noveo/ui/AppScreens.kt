@@ -263,6 +263,7 @@ fun NoveoRoot(
     onReply: (ChatMessage?) -> Unit,
     onEditMessage: (ChatMessage?) -> Unit,
     onForwardMessage: (ChatMessage?) -> Unit,
+    onForwardConfirm: (ChatMessage, String) -> Unit,
     onToggleReaction: (String, String) -> Unit,
     onDeleteMessage: (String) -> Unit,
     onPinMessage: (String, Boolean) -> Unit,
