@@ -5,3 +5,6 @@ app-core.js
 app-core.css
 app-dynamic.css
 server_no_captcha_creation.py
+
+.gemini/
+gha-creds-*.json

@@ -916,7 +916,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("type", "edit_message")
             .put("chatId", chatId)
             .put("messageId", messageId)
-            .put("text", newText)
+            .put("content", newText)
         NoveoNotificationService.send(payload)
     }
 
@@ -932,10 +932,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun pinMessage(messageId: String, isPinned: Boolean) {
         val chatId = _uiState.value.selectedChatId ?: return
         val payload = org.json.JSONObject()
-            .put("type", "pin_message")
+            .put("type", if (isPinned) "pin_message" else "unpin_message")
             .put("chatId", chatId)
-            .put("messageId", messageId)
-            .put("isPinned", isPinned)
+        
+        if (isPinned) {
+            payload.put("messageId", messageId)
+        }
+        
         NoveoNotificationService.send(payload)
     }
 

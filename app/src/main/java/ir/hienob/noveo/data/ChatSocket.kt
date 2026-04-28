@@ -108,22 +108,11 @@ class ChatSocket(
                         "message_reaction", "reaction_update", "message_reactions_update" -> {
                             val chatId = payload.optString("chatId").sanitizeRealtimeField()
                             val messageId = payload.optString("messageId").sanitizeRealtimeField()
-                            val reactionsObj = payload.optJSONObject("reactions")
-                            if (chatId != null && messageId != null && reactionsObj != null) {
-                                val reactions = mutableMapOf<String, List<String>>()
-                                val keys = reactionsObj.keys()
-                                while (keys.hasNext()) {
-                                    val emoji = keys.next()
-                                    val users = mutableListOf<String>()
-                                    val usersArray = reactionsObj.optJSONArray(emoji)
-                                    if (usersArray != null) {
-                                        for (i in 0 until usersArray.length()) {
-                                            usersArray.optString(i).sanitizeRealtimeField()?.let(users::add)
-                                        }
-                                    }
-                                    reactions[emoji] = users
+                            if (chatId != null && messageId != null) {
+                                val reactions = parseReactions(payload)
+                                if (reactions.isNotEmpty() || payload.has("reactions")) {
+                                    trySend(SocketEvent.MessageReactionUpdate(chatId, messageId, reactions))
                                 }
-                                trySend(SocketEvent.MessageReactionUpdate(chatId, messageId, reactions))
                             }
                         }
                         "message_edit", "message_edited" -> {

@@ -296,6 +296,10 @@ private fun MessageContextMenu(
     }
 }
 
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+
 @Composable
 private fun ExpandedReactions(
     menuSecondary: Color,
@@ -323,20 +327,28 @@ private fun ExpandedReactions(
                 Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Collapse reactions", tint = menuMuted, modifier = Modifier.size(18.dp))
             }
         }
-        Column(
+        
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(6),
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(horizontal = 8.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            CONTEXT_MENU_REACTIONS.chunked(6).forEach { row ->
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                    row.forEach { emoji ->
-                        ReactionButton(emoji = emoji, expanded = true, menuSecondary = menuSecondary, onClick = { onReaction(emoji) })
-                    }
-                }
+            items(CONTEXT_MENU_REACTIONS) { emoji ->
+                ReactionButton(
+                    emoji = emoji, 
+                    expanded = true, 
+                    menuSecondary = menuSecondary, 
+                    onClick = { onReaction(emoji) }
+                )
+            }
+            
+            // Padding at the bottom
+            item {
+                Spacer(Modifier.height(8.dp))
             }
         }
     }

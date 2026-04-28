@@ -167,6 +167,30 @@ internal fun parseChatMessageList(array: JSONArray?, chatId: String, usersById: 
     }
 }
 
+internal fun parseReactions(json: JSONObject, key: String = "reactions"): Map<String, List<String>> {
+    val reactions = mutableMapOf<String, List<String>>()
+    val reactionsObj = json.optJSONObject(key)
+    if (reactionsObj != null) {
+        val keys = reactionsObj.keys()
+        while (keys.hasNext()) {
+            val emoji = keys.next()
+            reactions[emoji] = parseStringList(reactionsObj.optJSONArray(emoji))
+        }
+    } else {
+        val reactionsArray = json.optJSONArray(key)
+        if (reactionsArray != null) {
+            for (i in 0 until reactionsArray.length()) {
+                val item = reactionsArray.optJSONObject(i) ?: continue
+                val emoji = item.optString("emoji").takeIf { it.isNotBlank() } ?: continue
+                val userIds = parseStringList(item.optJSONArray("userIds"))
+                    .ifEmpty { parseStringList(item.optJSONArray("users")) }
+                reactions[emoji] = userIds
+            }
+        }
+    }
+    return reactions
+}
+
 private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map<String, UserSummary>): ChatMessage {
     val messageId = message.optString("messageId").sanitizeServerString().ifBlank { message.optString("id").sanitizeServerString() }
     val senderId = message.optString("senderId").sanitizeServerString().ifBlank { message.optString("sender").sanitizeServerString() }
@@ -174,15 +198,7 @@ private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map
     val seenByArray = message.optJSONArray("seenBy") ?: JSONArray()
     val seenBy = (0 until seenByArray.length()).map { seenByArray.optString(it) }
 
-    val reactionsObj = message.optJSONObject("reactions")
-    val reactions = mutableMapOf<String, List<String>>()
-    if (reactionsObj != null) {
-        val keys = reactionsObj.keys()
-        while (keys.hasNext()) {
-            val emoji = keys.next()
-            reactions[emoji] = parseStringList(reactionsObj.optJSONArray(emoji))
-        }
-    }
+    val reactions = parseReactions(message)
 
     return ChatMessage(
         id = messageId,
