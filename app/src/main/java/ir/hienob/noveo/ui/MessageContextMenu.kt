@@ -104,6 +104,7 @@ internal fun MessageContextMenuOverlay(
     onDelete: () -> Unit,
     onPin: () -> Unit,
     onForward: () -> Unit,
+    onDownload: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val overlayColor = Color.Black.copy(alpha = 0.42f)
@@ -131,7 +132,8 @@ internal fun MessageContextMenuOverlay(
             onEdit = onEdit,
             onDelete = onDelete,
             onPin = onPin,
-            onForward = onForward
+            onForward = onForward,
+            onDownload = onDownload
         )
     }
 }
@@ -149,7 +151,8 @@ private fun MessageContextMenu(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onPin: () -> Unit,
-    onForward: () -> Unit
+    onForward: () -> Unit,
+    onDownload: () -> Unit
 ) {
     val menuSurface = tgColors.incomingBubble
     val menuSecondary = if (tgColors.isDark) Color(0xFF2C353F) else Color(0xFFF0F2F5)
@@ -293,6 +296,14 @@ private fun MessageContextMenu(
                             textColor = menuText,
                             onClick = onForward
                         )
+                        if (state.message.content.file != null) {
+                            ContextMenuActionItem(
+                                label = "Download",
+                                icon = { Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                                textColor = menuText,
+                                onClick = onDownload
+                            )
+                        }
                         ContextMenuActionItem(
                             label = "Delete",
                             icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = deleteColor, modifier = Modifier.size(18.dp)) },

@@ -73,7 +73,10 @@ data class AppUiState(
     val pendingAttachment: PendingAttachment? = null,
     val directRecipientId: String? = null,
     val editingMessage: ChatMessage? = null,
-    val forwardingMessage: ChatMessage? = null
+    val forwardingMessage: ChatMessage? = null,
+    val currentAudioMessage: ChatMessage? = null,
+    val isAudioPlaying: Boolean = false,
+    val audioProgress: Float = 0f
 )
 
 data class PendingAttachment(
@@ -113,6 +116,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var socketResyncJob: Job? = null
     private var selectedChatRefreshJob: Job? = null
     private var pendingChatId: String? = null
+    
+    private var mediaPlayer: android.media.MediaPlayer? = null
+    private var audioProgressJob: Job? = null
 
     init {
         restoreSession()
@@ -124,6 +130,155 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 handleSocketEvent(event)
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopAudio()
+    }
+
+    fun playAudio(message: ChatMessage) {
+        val url = message.content.file?.url ?: return
+        val normalizedUrl = normalizeUrl(url) ?: return
+        
+        if (_uiState.value.currentAudioMessage?.id == message.id) {
+            if (_uiState.value.isAudioPlaying) {
+                pauseAudio()
+            } else {
+                resumeAudio()
+            }
+            return
+        }
+
+        stopAudio()
+
+        mediaPlayer = android.media.MediaPlayer().apply {
+            setDataSource(normalizedUrl)
+            prepareAsync()
+            setOnPreparedListener {
+                start()
+                _uiState.value = _uiState.value.copy(
+                    currentAudioMessage = message,
+                    isAudioPlaying = true,
+                    audioProgress = 0f
+                )
+                startAudioProgressTracking()
+            }
+            setOnCompletionListener {
+                stopAudio()
+            }
+            setOnErrorListener { _, _, _ ->
+                _uiState.value = _uiState.value.copy(error = "Failed to play audio")
+                stopAudio()
+                true
+            }
+        }
+    }
+
+    fun pauseAudio() {
+        mediaPlayer?.pause()
+        _uiState.value = _uiState.value.copy(isAudioPlaying = false)
+        audioProgressJob?.cancel()
+    }
+
+    fun resumeAudio() {
+        mediaPlayer?.start()
+        _uiState.value = _uiState.value.copy(isAudioPlaying = true)
+        startAudioProgressTracking()
+    }
+
+    fun stopAudio() {
+        mediaPlayer?.stop()
+        mediaPlayer?.release()
+        mediaPlayer = null
+        audioProgressJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            currentAudioMessage = null,
+            isAudioPlaying = false,
+            audioProgress = 0f
+        )
+    }
+    
+    fun seekAudio(progress: Float) {
+        val player = mediaPlayer ?: return
+        val duration = player.duration
+        if (duration > 0) {
+            player.seekTo((duration * progress).toInt())
+            _uiState.value = _uiState.value.copy(audioProgress = progress)
+        }
+    }
+
+    private fun startAudioProgressTracking() {
+        audioProgressJob?.cancel()
+        audioProgressJob = viewModelScope.launch {
+            while (true) {
+                val player = mediaPlayer
+                if (player != null && player.isPlaying) {
+                    val duration = player.duration
+                    if (duration > 0) {
+                        val progress = player.currentPosition.toFloat() / duration
+                        _uiState.value = _uiState.value.copy(audioProgress = progress)
+                    }
+                }
+                delay(100)
+            }
+        }
+    }
+
+    fun downloadFile(message: ChatMessage) {
+        val file = message.content.file ?: return
+        val url = normalizeUrl(file.url) ?: return
+        val context = getApplication<Application>()
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val client = OkHttpClient()
+                val request = Request.Builder().url(url).build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw Exception("Download failed")
+                    val body = response.body ?: throw Exception("Empty body")
+                    
+                    val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                    val localFile = File(downloadsDir, file.name)
+                    
+                    body.byteStream().use { input ->
+                        FileOutputStream(localFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    
+                    withContext(Dispatchers.Main) {
+                        // Notify user or open file
+                        val uri = FileProvider.getUriForFile(context, "ir.hienob.noveo.updates.provider", localFile)
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "Open file").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }
+            }.onFailure {
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(error = "Download failed: ${it.message}")
+                }
+            }
+        }
+    }
+
+    private fun normalizeUrl(url: String): String? {
+        // Simple normalization for now, matching HomeUi.kt logic
+        val baseUrl = "https://noveo.ir:8443"
+        val value = url.trim().replace("\\", "/")
+        if (value.isBlank()) return null
+        if (value.startsWith("data:")) return value
+        if (value.contains("server_no_captcha")) {
+             return value.replace(Regex("^(?:(?:https?|wss?)://)?server_no_captcha(?::\\d+)?", RegexOption.IGNORE_CASE), baseUrl)
+        }
+        if (value.startsWith("//")) return "https:$value"
+        if (value.startsWith("http://") || value.startsWith("https://")) return value
+        val normalized = if (value.startsWith("/")) value else "/$value"
+        return "$baseUrl$normalized"
     }
 
     fun checkBatteryOptimization() {

@@ -54,6 +54,8 @@ data class MessageFileAttachment(
 ) {
     fun isImage(): Boolean = type.startsWith("image/") || name.endsWith(".jpg", true) || name.endsWith(".png", true) || name.endsWith(".gif", true) || name.endsWith(".webp", true)
     fun isVideo(): Boolean = type.startsWith("video/") || name.endsWith(".mp4", true) || name.endsWith(".webm", true)
+    fun isAudio(): Boolean = type.startsWith("audio/") || name.endsWith(".mp3", true) || name.endsWith(".m4a", true) || name.endsWith(".wav", true) || name.endsWith(".ogg", true)
+    fun isSticker(): Boolean = name == "sticker.png" || name == "sticker.gif" || name == "sticker.webp"
 }
 
 data class ForwardedInfo(

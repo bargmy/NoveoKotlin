@@ -276,7 +276,13 @@ fun NoveoRoot(
     onCheckUpdate: () -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
-    onRequestPermission: () -> Unit
+    onRequestPermission: () -> Unit,
+    onPlayAudio: (ChatMessage) -> Unit,
+    onPauseAudio: () -> Unit,
+    onResumeAudio: () -> Unit,
+    onStopAudio: () -> Unit,
+    onSeekAudio: (Float) -> Unit,
+    onDownloadFile: (ChatMessage) -> Unit
 ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current
@@ -356,10 +362,15 @@ fun NoveoRoot(
                         onCheckUpdate = onCheckUpdate,
                         onUpdateNotificationSettings = onUpdateNotificationSettings,
                         onRequestBatteryOptimization = onRequestBatteryOptimization,
+                        onPlayAudio = onPlayAudio,
+                        onPauseAudio = onPauseAudio,
+                        onResumeAudio = onResumeAudio,
+                        onStopAudio = onStopAudio,
+                        onSeekAudio = onSeekAudio,
+                        onDownloadFile = onDownloadFile,
                         currentTheme = currentTheme,
-
                         onThemeChange = { currentTheme = it }
-                    )
+                        )
                 }
             }
         }

@@ -335,6 +335,12 @@ internal fun HomeScreen(
     onCheckUpdate: () -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
+    onPlayAudio: (ChatMessage) -> Unit,
+    onPauseAudio: () -> Unit,
+    onResumeAudio: () -> Unit,
+    onStopAudio: () -> Unit,
+    onSeekAudio: (Float) -> Unit,
+    onDownloadFile: (ChatMessage) -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
     onForwardConfirm: (ChatMessage, String) -> Unit = { _, _ -> }
@@ -588,7 +594,13 @@ internal fun HomeScreen(
                                 onToggleReaction = onToggleReaction,
                                 onDeleteMessage = onDeleteMessage,
                                 onPinMessage = onPinMessage,
-                                onCancelEdit = { onEditMessage(null) }
+                                onCancelEdit = { onEditMessage(null) },
+                                onPlayAudio = onPlayAudio,
+                                onPauseAudio = onPauseAudio,
+                                onResumeAudio = onResumeAudio,
+                                onStopAudio = onStopAudio,
+                                onSeekAudio = onSeekAudio,
+                                onDownloadFile = onDownloadFile
                             )
                         }
                     }
@@ -667,8 +679,14 @@ internal fun HomeScreen(
                                 onDeleteMessage = onDeleteMessage,
                                 onPinMessage = onPinMessage,
                                 onCancelEdit = { onEditMessage(null) },
+                                onPlayAudio = onPlayAudio,
+                                onPauseAudio = onPauseAudio,
+                                onResumeAudio = onResumeAudio,
+                                onStopAudio = onStopAudio,
+                                onSeekAudio = onSeekAudio,
+                                onDownloadFile = onDownloadFile,
                                 modifier = Modifier.weight(1f)
-                                )                        }
+                            )                        }
                     }
                 }
             }
@@ -851,8 +869,13 @@ private fun SidebarPane(
     onDismissUpdate: () -> Unit,
     onDownloadUpdate: () -> Unit,
     onInstallUpdate: () -> Unit,
+    onPauseAudio: () -> Unit,
+    onResumeAudio: () -> Unit,
+    onStopAudio: () -> Unit,
+    onSeekAudio: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val tgColors = telegramColors()
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(modifier = Modifier.fillMaxSize()) {
             SidebarHeader(
@@ -865,6 +888,18 @@ private fun SidebarPane(
                 onSearchToggle = onSearchToggle,
                 onSearchQueryChange = onSearchQueryChange
             )
+            
+            if (state.currentAudioMessage != null) {
+                GlobalAudioMiniPlayer(
+                    state = state,
+                    strings = strings,
+                    onPause = onPauseAudio,
+                    onResume = onResumeAudio,
+                    onStop = onStopAudio,
+                    onSeek = onSeekAudio,
+                    tgColors = tgColors
+                )
+            }
             
             state.updateInfo?.let { info ->
                 UpdateBubble(
@@ -1136,6 +1171,12 @@ private fun ChatPane(
     onDeleteMessage: (String) -> Unit,
     onPinMessage: (String, Boolean) -> Unit,
     onCancelEdit: () -> Unit,
+    onPlayAudio: (ChatMessage) -> Unit,
+    onPauseAudio: () -> Unit,
+    onResumeAudio: () -> Unit,
+    onStopAudio: () -> Unit,
+    onSeekAudio: (Float) -> Unit,
+    onDownloadFile: (ChatMessage) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
@@ -1325,6 +1366,13 @@ private fun ChatPane(
                         contextMenuExpanded = false
                     },
                     onScrollToMessage = onScrollToMessage,
+                    onPlayAudio = onPlayAudio,
+                    onPauseAudio = onPauseAudio,
+                    onResumeAudio = onResumeAudio,
+                    onStopAudio = onStopAudio,
+                    onSeekAudio = onSeekAudio,
+                    onDownloadFile = onDownloadFile,
+                    appUiState = state,
                     isHighlighted = highlightedMessageId == message.id,
                     tgColors = tgColors
                 )
@@ -1415,12 +1463,27 @@ private fun ChatPane(
             }
         }
 
+        if (state.currentAudioMessage != null) {
+            Box(modifier = Modifier.padding(top = 56.dp)) {
+                GlobalAudioMiniPlayer(
+                    state = state,
+                    strings = strings,
+                    onPause = onPauseAudio,
+                    onResume = onResumeAudio,
+                    onStop = onStopAudio,
+                    onSeek = onSeekAudio,
+                    tgColors = tgColors
+                )
+            }
+        }
+
         // 2.1 Pinned Message Bar
         selectedChat?.pinnedMessage?.let { pinned ->
+            val pinnedOffset = if (state.currentAudioMessage != null) 104.dp else 56.dp
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 56.dp)
+                    .padding(top = pinnedOffset)
                     .height(48.dp)
                     .clickable { onScrollToMessage(pinned.id) },
                 color = tgColors.incomingBubble.copy(alpha = 0.98f),
@@ -1619,6 +1682,11 @@ private fun ChatPane(
                         contextMenuExpanded = false
                         onForwardMessage(menuState.message)
                     },
+                    onDownload = {
+                        contextMenuState = null
+                        contextMenuExpanded = false
+                        onDownloadFile(menuState.message)
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -1644,6 +1712,13 @@ private fun MessageRow(
     onToggleReaction: (String, String) -> Unit,
     onOpenContextMenu: (Rect) -> Unit = {},
     onScrollToMessage: (String) -> Unit,
+    onPlayAudio: (ChatMessage) -> Unit,
+    onPauseAudio: () -> Unit,
+    onResumeAudio: () -> Unit,
+    onStopAudio: () -> Unit,
+    onSeekAudio: (Float) -> Unit,
+    onDownloadFile: (ChatMessage) -> Unit,
+    appUiState: AppUiState,
     isHighlighted: Boolean = false,
     tgColors: TelegramThemeColors = telegramColors()
 ) {
@@ -1916,12 +1991,24 @@ private fun MessageRow(
 
                             val file = message.content.file
                             if (file != null) {
-                                MessageAttachment(
-                                    file = file,
-                                    ownMessage = ownMessage,
-                                    onClick = { onMediaClick(file.url) },
-                                    tgColors = tgColors
-                                )
+                                if (file.isAudio()) {
+                                    AudioPlayer(
+                                        message = message,
+                                        isCurrent = appUiState.currentAudioMessage?.id == message.id,
+                                        isPlaying = appUiState.isAudioPlaying,
+                                        progress = appUiState.audioProgress,
+                                        onPlayToggle = { onPlayAudio(message) },
+                                        onSeek = onSeekAudio,
+                                        tgColors = tgColors
+                                    )
+                                } else {
+                                    MessageAttachment(
+                                        file = file,
+                                        ownMessage = ownMessage,
+                                        onClick = { onMediaClick(file.url) },
+                                        tgColors = tgColors
+                                    )
+                                }
                             }
                             val caption = message.content.text
 
@@ -1935,7 +2022,7 @@ private fun MessageRow(
                                 }
                             }
 
-                            if (message.reactions.isNotEmpty()) {
+                            if (message.reactions.isNotEmpty() || (isSticker && message.reactions.isNotEmpty())) {
                                 Spacer(Modifier.height(4.dp))
                                 FlowRow(
                                     modifier = Modifier.padding(horizontal = 4.dp).wrapContentWidth(),
@@ -3568,6 +3655,116 @@ private fun ForwardChatPicker(
                         onClick = { onForward(chat.id) }
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioPlayer(
+    message: ChatMessage,
+    isCurrent: Boolean,
+    isPlaying: Boolean,
+    progress: Float,
+    onPlayToggle: () -> Unit,
+    onSeek: (Float) -> Unit,
+    tgColors: TelegramThemeColors
+) {
+    val durationText = remember(message.content.file?.size) {
+        "Audio"
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            onClick = onPlayToggle,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                imageVector = if (isCurrent && isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (isPlaying) "Pause" else "Play",
+                tint = if (isCurrent) tgColors.headerIcon else tgColors.incomingText
+            )
+        }
+        
+        Spacer(Modifier.width(8.dp))
+        
+        Column(modifier = Modifier.weight(1f)) {
+            androidx.compose.material3.Slider(
+                value = if (isCurrent) progress else 0f,
+                onValueChange = onSeek,
+                modifier = Modifier.height(24.dp),
+                colors = androidx.compose.material3.SliderDefaults.colors(
+                    thumbColor = if (isCurrent) tgColors.headerIcon else tgColors.incomingText,
+                    activeTrackColor = if (isCurrent) tgColors.headerIcon else tgColors.incomingText
+                )
+            )
+            Text(
+                text = durationText,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isCurrent) tgColors.headerSubtitle else tgColors.incomingTime
+            )
+        }
+    }
+}
+
+@Composable
+private fun GlobalAudioMiniPlayer(
+    state: AppUiState,
+    strings: NoveoStrings,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+    onSeek: (Float) -> Unit,
+    tgColors: TelegramThemeColors
+) {
+    val audio = state.currentAudioMessage ?: return
+    
+    Surface(
+        color = tgColors.chatSurface,
+        modifier = Modifier.fillMaxWidth().height(48.dp),
+        shadowElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = { if (state.isAudioPlaying) onPause() else onResume() },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = if (state.isAudioPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = tgColors.headerIcon
+                )
+            }
+            
+            Column(
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = audio.content.file?.name ?: strings.brandName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = tgColors.headerTitle,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = { state.audioProgress },
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                    color = tgColors.headerIcon,
+                    trackColor = tgColors.headerIcon.copy(alpha = 0.2f)
+                )
+            }
+            
+            IconButton(onClick = onStop, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Filled.Close, contentDescription = "Close", tint = tgColors.headerIcon, modifier = Modifier.size(18.dp))
             }
         }
     }
