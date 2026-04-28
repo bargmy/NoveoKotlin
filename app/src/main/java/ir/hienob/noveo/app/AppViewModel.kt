@@ -858,13 +858,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } else _uiState.value.messages
         )
 
-        // If the chat being updated is the selected one, refresh it
-        _uiState.value = if (chatId == newState.selectedChatId) {
-            val selected = updatedChats.find { it.id == chatId }
-            newState.copy(selectedChat = selected)
-        } else {
-            newState
-        }
+        // The UI derives the selected chat object from selectedChatId and chats list.
+        // Since we updated updatedChats above, the UI will see the new pinnedMessage automatically.
+        _uiState.value = newState
         persistCachedHomeState()
     }
 
