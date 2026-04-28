@@ -367,6 +367,30 @@ internal fun HomeScreen(
     var selectedMediaAttachment by remember { mutableStateOf<MessageFileAttachment?>(null) }
     var animateModalEntrance by remember { mutableStateOf(false) }
 
+    val keyboardHeight = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    var lastKeyboardHeight by remember { mutableStateOf(300.dp) }
+    LaunchedEffect(keyboardHeight) {
+        if (keyboardHeight > 0.dp) {
+            lastKeyboardHeight = keyboardHeight
+        }
+    }
+
+    val onMediaClick = { attachment: MessageFileAttachment ->
+        if (attachment.isImage() || attachment.isVideo()) {
+            selectedMediaAttachment = attachment
+        } else {
+            val url = attachment.url.normalizeNoveoUrl()
+            if (url != null) {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    // Fallback or ignore
+                }
+            }
+        }
+    }
+
     var showForwardPicker by remember { mutableStateOf(false) }
     
     LaunchedEffect(state.forwardingMessage) {
@@ -588,7 +612,7 @@ internal fun HomeScreen(
                                 onSend = onSend,
                                 onTyping = onTyping,
                                 onLoadOlder = onLoadOlder,
-                                onMediaClick = { selectedMediaAttachment = it },
+                                onMediaClick = onMediaClick,
                                 onAttachFile = onAttachFile,
                                 onRemoveAttachment = onRemoveAttachment,
                                 onOpenProfile = { userId -> 
@@ -613,7 +637,8 @@ internal fun HomeScreen(
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
                                 onSendSticker = onSendSticker,
-                                onAddSavedSticker = onAddSavedSticker
+                                onAddSavedSticker = onAddSavedSticker,
+                                lastKeyboardHeight = lastKeyboardHeight
                             )
                         }
                     }
@@ -678,7 +703,7 @@ internal fun HomeScreen(
                                 onSend = onSend,
                                 onTyping = onTyping,
                                 onLoadOlder = onLoadOlder,
-                                onMediaClick = { selectedMediaAttachment = it },
+                                onMediaClick = onMediaClick,
                                 onAttachFile = onAttachFile,
                                 onRemoveAttachment = onRemoveAttachment,
                                 onOpenProfile = { userId -> 
@@ -704,8 +729,10 @@ internal fun HomeScreen(
                                 onDownloadFile = onDownloadFile,
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
+                                lastKeyboardHeight = lastKeyboardHeight,
                                 modifier = Modifier.weight(1f)
-                            )                        }
+                                )
+                        }
                     }
                 }
             }
@@ -1198,6 +1225,7 @@ private fun ChatPane(
     onDownloadFile: (ChatMessage) -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
     onAddSavedSticker: (ChatMessage) -> Unit,
+    lastKeyboardHeight: Dp = 300.dp,
     modifier: Modifier = Modifier
 ) {
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
@@ -1636,6 +1664,9 @@ private fun ChatPane(
                             } else {
                                 keyboardController?.show()
                             }
+                        },
+                        onTextFieldFocused = {
+                            showStickers = false
                         },
                         showStickers = showStickers,
                         onPasteUri = { onAttachFile(it) },
@@ -3753,11 +3784,9 @@ private fun StickerPicker(
     strings: NoveoStrings,
     stickers: List<SavedSticker>,
     onStickerSelected: (SavedSticker) -> Unit,
-    tgColors: TelegramThemeColors
+    tgColors: TelegramThemeColors,
+    displayHeight: Dp = 300.dp
 ) {
-    val keyboardHeight = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-    val displayHeight = if (keyboardHeight > 0.dp) keyboardHeight else 300.dp
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()

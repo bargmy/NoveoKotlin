@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import ir.hienob.noveo.R
 import ir.hienob.noveo.data.ChatMessage
 import kotlinx.coroutines.delay
@@ -73,6 +74,7 @@ internal fun ChatInput(
     onLongAttachClick: () -> Unit = {},
     onEmojiClick: () -> Unit = {},
     onPasteUri: (android.net.Uri) -> Unit = {},
+    onTextFieldFocused: () -> Unit = {},
     showStickers: Boolean = false,
     hasAttachment: Boolean = false,
     tgColors: TelegramThemeColors = telegramColors(),
@@ -233,7 +235,10 @@ internal fun ChatInput(
                                 BasicTextField(
                                     value = draft,
                                     onValueChange = onDraftChange,
-                                    modifier = Modifier.fillMaxWidth().focusRequester(inputFocusRequester),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(inputFocusRequester)
+                                        .onFocusChanged { if (it.isFocused) onTextFieldFocused() },
                                     textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, color = tgColors.composerText),
                                     cursorBrush = SolidColor(tgColors.composerCursor),
                                     maxLines = 6

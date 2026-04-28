@@ -84,7 +84,7 @@ private val CONTEXT_MENU_REACTIONS = listOf(
     "👨‍💻", "👀", "🙉", "😨", "🤝", "✍️", "🤗", "🫡", "🎅", "🎄", "💅", "🤪", "🆒", "🦄", "💊", "🙊",
     "😎", "👾"
 )
-private val CONTEXT_MENU_QUICK_REACTIONS = CONTEXT_MENU_REACTIONS.take(8)
+private val CONTEXT_MENU_QUICK_REACTIONS = CONTEXT_MENU_REACTIONS.take(7)
 
 internal data class MessageContextMenuState(
     val message: ChatMessage,
