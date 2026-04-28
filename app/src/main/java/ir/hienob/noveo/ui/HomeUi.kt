@@ -148,6 +148,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.material.icons.outlined.Collections
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
