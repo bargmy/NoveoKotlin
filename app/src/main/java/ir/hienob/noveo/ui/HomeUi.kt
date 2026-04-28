@@ -1691,6 +1691,9 @@ private fun ChatPane(
                             onStickerSelected = { sticker ->
                                 onSendSticker(sticker)
                                 showStickers = false
+                                if (state.replyingToMessage != null) {
+                                    onCancelReply()
+                                }
                             },
                             tgColors = tgColors
                         )
@@ -1963,10 +1966,47 @@ private fun MessageRow(
                             ) { bubbleBounds?.let(onOpenContextMenu) }
                     ) {
                         Column(horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start) {
+                            if (repliedMessage != null) {
+                                Surface(
+                                    modifier = Modifier
+                                        .padding(bottom = 4.dp)
+                                        .clickable { onScrollToMessage(repliedMessage.id) },
+                                    color = tgColors.chatSurface.copy(alpha = 0.4f),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(2.dp)
+                                                .height(28.dp)
+                                                .background(if (ownMessage) tgColors.outgoingText.copy(alpha = 0.6f) else tgColors.incomingLink, RoundedCornerShape(1.dp))
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = repliedMessage.senderName,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = repliedMessage.content.previewText(),
+                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = Color.White.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
                             SubcomposeAsyncImage(
                                 model = normalizedUrl,
                                 contentDescription = "sticker",
-                                modifier = Modifier.size(160.dp).clickable { onMediaClick(file) },
+                                modifier = Modifier.size(160.dp),
                                 contentScale = ContentScale.Fit,
                                 loading = {
                                     Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
@@ -1974,24 +2014,65 @@ private fun MessageRow(
                                     }
                                 }
                             )
-                            Row(
-                                modifier = Modifier.padding(top = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
+
+                            if (message.reactions.isNotEmpty()) {
+                                Spacer(Modifier.height(4.dp))
+                                FlowRow(
+                                    modifier = Modifier.padding(horizontal = 4.dp).wrapContentWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    message.reactions.forEach { (emoji, userIds) ->
+                                        if (userIds.isNotEmpty()) {
+                                            Surface(
+                                                modifier = Modifier.clickable { onToggleReaction(message.id, emoji) },
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = Color.Black.copy(alpha = 0.25f),
+                                                border = if (userIds.contains(currentUserId)) BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)) else null
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(emoji, fontSize = 12.sp)
+                                                    Spacer(Modifier.width(2.dp))
+                                                    Text(
+                                                        localizeDigits(userIds.size.toString(), strings.languageCode),
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color.White
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Surface(
+                                modifier = Modifier.padding(top = 4.dp),
+                                color = Color.Black.copy(alpha = 0.35f),
+                                shape = CircleShape
                             ) {
-                                Text(
-                                    timeStr,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                    color = tgColors.incomingTime // Use a neutral color for stickers
-                                )
-                                if (ownMessage) {
-                                    Spacer(Modifier.width(4.dp))
-                                    val seen = message.seenBy.isNotEmpty()
-                                    Icon(
-                                        imageVector = if (seen) Icons.Outlined.DoneAll else Icons.Outlined.Check,
-                                        contentDescription = if (seen) "Seen" else "Sent",
-                                        modifier = Modifier.size(15.dp),
-                                        tint = tgColors.incomingTime
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        timeStr,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                        color = Color.White
                                     )
+                                    if (ownMessage) {
+                                        Spacer(Modifier.width(4.dp))
+                                        val seen = message.seenBy.isNotEmpty()
+                                        Icon(
+                                            imageVector = if (seen) Icons.Outlined.DoneAll else Icons.Outlined.Check,
+                                            contentDescription = if (seen) "Seen" else "Sent",
+                                            modifier = Modifier.size(13.dp),
+                                            tint = Color.White
+                                        )
+                                    }
                                 }
                             }
                         }
