@@ -184,7 +184,7 @@ private fun MessageContextMenu(
     )
 
     val reactionsWidth by animateDpAsState(
-        targetValue = if (expanded) 320.dp else 290.dp,
+        targetValue = if (expanded) 320.dp else 320.dp,
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "reactionsWidth"
     )
