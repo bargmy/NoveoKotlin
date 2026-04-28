@@ -1702,6 +1702,7 @@ private fun MessageRow(
                     launch {
                         detectTapGestures(
                             onTap = { bubbleBounds?.let(onOpenContextMenu) },
+                            onDoubleTap = { onToggleReaction(message.id, "❤️") },
                             onLongPress = { bubbleBounds?.let(onOpenContextMenu) }
                         )
                     }

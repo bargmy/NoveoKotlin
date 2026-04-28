@@ -851,12 +851,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().map(updateFunc)
         
-        _uiState.value = _uiState.value.copy(
+        val newState = _uiState.value.copy(
             chats = updatedChats,
             messages = if (chatId == _uiState.value.selectedChatId) {
                 _uiState.value.messages.map(updateFunc)
             } else _uiState.value.messages
         )
+
+        // If the chat being updated is the selected one, refresh it
+        _uiState.value = if (chatId == newState.selectedChatId) {
+            val selected = updatedChats.find { it.id == chatId }
+            newState.copy(selectedChat = selected)
+        } else {
+            newState
+        }
         persistCachedHomeState()
     }
 
