@@ -245,6 +245,7 @@ private fun MessageContextMenu(
                 ) {
                     if (expanded) {
                         ExpandedReactions(
+                            strings = strings,
                             menuSecondary = menuSecondary,
                             menuMuted = menuMuted,
                             onExpandedChange = onExpandedChange,
@@ -273,41 +274,42 @@ private fun MessageContextMenu(
                 ) {
                     Column(modifier = Modifier.width(220.dp).padding(vertical = 4.dp)) {
                         ContextMenuActionItem(
-                            label = "Reply",
+                            label = strings.reply,
                             icon = { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                             textColor = menuText,
                             onClick = onReply
                         )
                         if (state.ownMessage && state.message.content.text != null) {
                             ContextMenuActionItem(
-                                label = "Edit",
+                                label = strings.edit,
                                 icon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                                 textColor = menuText,
                                 onClick = onEdit
                             )
                         }
                         ContextMenuActionItem(
-                            label = if (state.message.isPinned) "Unpin" else "Pin",
+                            label = if (state.message.isPinned) strings.unpin else strings.pin,
                             icon = { Icon(Icons.Outlined.Bookmark, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                             textColor = menuText,
                             onClick = onPin
                         )
+                        if (state.message.content.text != null) {
+                            ContextMenuActionItem(
+                                label = strings.copyText,
+                                icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                                textColor = menuText,
+                                onClick = onCopyText
+                            )
+                        }
                         ContextMenuActionItem(
-                            label = strings.allContacts.take(0) + "Copy Text", // HACK: for proper strings ref but let's just use what we have or add to NoveoStrings
-                            icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
-                            textColor = menuText,
-                            onClick = onCopyText
-                        )
-                        ContextMenuActionItem(
-                            label = strings.forwarded,
+                            label = strings.forward,
                             icon = { Icon(Icons.Outlined.ArrowForward, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                             textColor = menuText,
                             onClick = onForward
                         )
                         
-                        // NEW: Add as Sticker
                         val file = state.message.content.file
-                        if (file != null && (file.isImage() || file.isVideo())) {
+                        if (file != null && file.isImage()) {
                             ContextMenuActionItem(
                                 label = strings.addAsSticker,
                                 icon = { Icon(Icons.Outlined.Star, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
@@ -318,7 +320,7 @@ private fun MessageContextMenu(
 
                         if (state.message.content.file != null) {
                             ContextMenuActionItem(
-                                label = strings.clickToDownload,
+                                label = strings.download,
                                 icon = { Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
                                 textColor = menuText,
                                 onClick = onDownload
@@ -339,6 +341,7 @@ private fun MessageContextMenu(
 
 @Composable
 private fun ExpandedReactions(
+    strings: NoveoStrings,
     menuSecondary: Color,
     menuMuted: Color,
     onExpandedChange: (Boolean) -> Unit,
@@ -355,7 +358,7 @@ private fun ExpandedReactions(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Reactions", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = menuMuted)
+            Text(strings.reactions, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = menuMuted)
             Box(
                 modifier = Modifier
                     .size(28.dp)

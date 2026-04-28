@@ -53,10 +53,28 @@ data class MessageFileAttachment(
     val size: Long = 0L
 ) {
     fun isImage(): Boolean = type.startsWith("image/") || name.endsWith(".jpg", true) || name.endsWith(".png", true) || name.endsWith(".gif", true) || name.endsWith(".webp", true)
-    fun isVideo(): Boolean = type.startsWith("video/") || name.endsWith(".mp4", true) || name.endsWith(".webm", true)
+    fun isVideo(): Boolean =
+        type.startsWith("video/") ||
+            name.endsWith(".mp4", true) ||
+            name.endsWith(".webm", true) ||
+            name.endsWith(".mov", true) ||
+            name.endsWith(".ogg", true)
     fun isAudio(): Boolean = type.startsWith("audio/") || name.endsWith(".mp3", true) || name.endsWith(".m4a", true) || name.endsWith(".wav", true) || name.endsWith(".ogg", true)
-    fun isSticker(): Boolean = name == "sticker.png" || name == "sticker.gif" || name == "sticker.webp"
+    fun isSticker(): Boolean {
+        val lowerName = name.lowercase()
+        return lowerName == "sticker.png" ||
+            lowerName == "sticker.gif" ||
+            lowerName == "sticker.webp" ||
+            lowerName == "sticker.jpg" ||
+            lowerName == "sticker.jpeg" ||
+            lowerName == "sticker.tgs"
+    }
 }
+
+data class SavedSticker(
+    val url: String,
+    val type: String = "image"
+)
 
 data class ForwardedInfo(
     val from: String,

@@ -189,6 +189,7 @@ import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSummary
 import ir.hienob.noveo.data.MessageFileAttachment
 import ir.hienob.noveo.data.NotificationSettings
+import ir.hienob.noveo.data.SavedSticker
 import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.UserSummary
 import kotlinx.coroutines.delay
@@ -345,6 +346,8 @@ internal fun HomeScreen(
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
     onDownloadFile: (ChatMessage) -> Unit,
+    onSendSticker: (SavedSticker) -> Unit,
+    onAddSavedSticker: (ChatMessage) -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
     onForwardConfirm: (ChatMessage, String) -> Unit = { _, _ -> }
@@ -361,7 +364,7 @@ internal fun HomeScreen(
     var settingsSection by rememberSaveable { mutableStateOf(SettingsSection.MENU) }
     var profileUserId by rememberSaveable { mutableStateOf<String?>(null) }
     var showGroupInfo by rememberSaveable { mutableStateOf(false) }
-    var selectedMediaUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedMediaAttachment by remember { mutableStateOf<MessageFileAttachment?>(null) }
     var animateModalEntrance by remember { mutableStateOf(false) }
 
     var showForwardPicker by remember { mutableStateOf(false) }
@@ -372,11 +375,11 @@ internal fun HomeScreen(
 
     val isAnyModalVisible = showContactsModal || showCreateModal || showSettingsModal ||
                           (showGroupInfo && state.selectedChatId != null) ||
-                          profileUserId != null || selectedMediaUrl != null || showSearch || showForwardPicker
+                          profileUserId != null || selectedMediaAttachment != null || showSearch || showForwardPicker
 
     androidx.activity.compose.BackHandler(enabled = isAnyModalVisible || showMenu || state.selectedChatId != null) {
         when {
-            selectedMediaUrl != null -> selectedMediaUrl = null
+            selectedMediaAttachment != null -> selectedMediaAttachment = null
             profileUserId != null -> {
                 profileUserId = null
                 animateModalEntrance = false
@@ -585,7 +588,7 @@ internal fun HomeScreen(
                                 onSend = onSend,
                                 onTyping = onTyping,
                                 onLoadOlder = onLoadOlder,
-                                onMediaClick = { selectedMediaUrl = it },
+                                onMediaClick = { selectedMediaAttachment = it },
                                 onAttachFile = onAttachFile,
                                 onRemoveAttachment = onRemoveAttachment,
                                 onOpenProfile = { userId -> 
@@ -608,7 +611,9 @@ internal fun HomeScreen(
                                 onResumeAudio = onResumeAudio,
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
-                                onDownloadFile = onDownloadFile
+                                onDownloadFile = onDownloadFile,
+                                onSendSticker = onSendSticker,
+                                onAddSavedSticker = onAddSavedSticker
                             )
                         }
                     }
@@ -673,7 +678,7 @@ internal fun HomeScreen(
                                 onSend = onSend,
                                 onTyping = onTyping,
                                 onLoadOlder = onLoadOlder,
-                                onMediaClick = { selectedMediaUrl = it },
+                                onMediaClick = { selectedMediaAttachment = it },
                                 onAttachFile = onAttachFile,
                                 onRemoveAttachment = onRemoveAttachment,
                                 onOpenProfile = { userId -> 
@@ -697,6 +702,8 @@ internal fun HomeScreen(
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
+                                onSendSticker = onSendSticker,
+                                onAddSavedSticker = onAddSavedSticker,
                                 modifier = Modifier.weight(1f)
                             )                        }
                     }
@@ -774,10 +781,10 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
     )
 }
 
-        if (selectedMediaUrl != null) {
+        if (selectedMediaAttachment != null) {
             FullscreenMediaModal(
-                url = selectedMediaUrl!!,
-                onDismiss = { selectedMediaUrl = null }
+                attachment = selectedMediaAttachment!!,
+                onDismiss = { selectedMediaAttachment = null }
             )
         }
 
@@ -1171,7 +1178,7 @@ private fun ChatPane(
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
     onLoadOlder: () -> Unit,
-    onMediaClick: (String) -> Unit,
+    onMediaClick: (MessageFileAttachment) -> Unit,
     onAttachFile: (android.net.Uri) -> Unit,
     onRemoveAttachment: () -> Unit,
     onOpenProfile: (String) -> Unit,
@@ -1189,6 +1196,8 @@ private fun ChatPane(
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
     onDownloadFile: (ChatMessage) -> Unit,
+    onSendSticker: (SavedSticker) -> Unit,
+    onAddSavedSticker: (ChatMessage) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
@@ -1645,12 +1654,9 @@ private fun ChatPane(
                     if (showStickers) {
                         StickerPicker(
                             strings = strings,
-                            onStickerSelected = { stickerUrl ->
-                                // Send as sticker
-                                // Since we don't have a direct "send sticker" API call here, 
-                                // we'll use a hack or assume onSend handles it if we set it up.
-                                // Actually, I'll need a way to send it.
-                                // Let's assume stickers are sent as files.
+                            stickers = state.savedStickers,
+                            onStickerSelected = { sticker ->
+                                onSendSticker(sticker)
                                 showStickers = false
                             },
                             tgColors = tgColors
@@ -1747,7 +1753,7 @@ private fun ChatPane(
                     onAddAsSticker = {
                         contextMenuState = null
                         contextMenuExpanded = false
-                        // placeholder for add sticker
+                        onAddSavedSticker(menuState.message)
                     },
                     strings = strings,
                     modifier = Modifier.fillMaxSize()
@@ -1768,7 +1774,7 @@ private fun MessageRow(
     hasTail: Boolean,
     isGroupChat: Boolean,
     currentUserId: String?,
-    onMediaClick: (String) -> Unit,
+    onMediaClick: (MessageFileAttachment) -> Unit,
     onOpenProfile: (String) -> Unit,
     repliedMessage: ChatMessage? = null,
     onReply: () -> Unit,
@@ -1909,7 +1915,7 @@ private fun MessageRow(
                 horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
                 modifier = if (ownMessage) Modifier else Modifier.weight(1f, false)
             ) {
-                val isSticker = message.content.file?.let { it.name == "sticker.png" || it.name == "sticker.gif" } ?: false
+                val isSticker = message.content.file?.isSticker() == true
                 
                 if (isSticker) {
                     val file = message.content.file!!
@@ -1927,7 +1933,7 @@ private fun MessageRow(
                             SubcomposeAsyncImage(
                                 model = normalizedUrl,
                                 contentDescription = "sticker",
-                                modifier = Modifier.size(160.dp).clickable { onMediaClick(file.url) },
+                                modifier = Modifier.size(160.dp).clickable { onMediaClick(file) },
                                 contentScale = ContentScale.Fit,
                                 loading = {
                                     Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
@@ -2068,7 +2074,7 @@ private fun MessageRow(
                                     MessageAttachment(
                                         file = file,
                                         ownMessage = ownMessage,
-                                        onClick = { onMediaClick(file.url) },
+                                        onClick = { onMediaClick(file) },
                                         tgColors = tgColors
                                     )
                                 }
@@ -3585,9 +3591,11 @@ private fun MessageFileAttachment.isVideo(): Boolean {
         nameValue.endsWith(".mp4") ||
         nameValue.endsWith(".mov") ||
         nameValue.endsWith(".webm") ||
+        nameValue.endsWith(".ogg") ||
         urlValue.endsWith(".mp4") ||
         urlValue.endsWith(".mov") ||
-        urlValue.endsWith(".webm")
+        urlValue.endsWith(".webm") ||
+        urlValue.endsWith(".ogg")
 }
 
 private fun String?.normalizeNoveoUrl(): String? {
@@ -3613,13 +3621,10 @@ private fun String?.normalizeNoveoUrl(): String? {
 
 @OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-private fun FullscreenMediaModal(url: String, onDismiss: () -> Unit) {
-    val normalizedUrl = remember(url) { url.normalizeNoveoUrl() }
+private fun FullscreenMediaModal(attachment: MessageFileAttachment, onDismiss: () -> Unit) {
+    val normalizedUrl = remember(attachment.url) { attachment.url.normalizeNoveoUrl() }
     val context = LocalContext.current
-    val isVideo = remember(url) { 
-        val lower = url.lowercase()
-        lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".webm")
-    }
+    val isVideo = remember(attachment) { attachment.isVideo() }
 
     Surface(
         color = Color.Black,
@@ -3746,7 +3751,8 @@ private fun AttachmentOption(
 @Composable
 private fun StickerPicker(
     strings: NoveoStrings,
-    onStickerSelected: (String) -> Unit,
+    stickers: List<SavedSticker>,
+    onStickerSelected: (SavedSticker) -> Unit,
     tgColors: TelegramThemeColors
 ) {
     val keyboardHeight = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
@@ -3775,16 +3781,49 @@ private fun StickerPicker(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(20) { index ->
+                items(stickers.size, key = { index -> stickers[index].url }) { index ->
+                    val sticker = stickers[index]
+                    val normalizedUrl = remember(sticker.url) { sticker.url.normalizeNoveoUrl() }
                     Box(
                         modifier = Modifier
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { /* onStickerSelected */ }
+                            .clickable { onStickerSelected(sticker) }
                             .background(tgColors.incomingBubble.copy(alpha = 0.5f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("S$index")
+                        if (sticker.type == "tgs") {
+                            Text(
+                                text = "TGS",
+                                color = tgColors.headerIcon,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            AsyncImage(
+                                model = normalizedUrl,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(6.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
+                    }
+                }
+                if (stickers.isEmpty()) {
+                    item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(4) }) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = strings.noSavedStickers,
+                                color = tgColors.headerSubtitle,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }

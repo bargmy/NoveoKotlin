@@ -8,7 +8,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import android.content.Intent
 import ir.hienob.noveo.app.AppViewModel
-import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.ui.NoveoRoot
 
 import androidx.activity.result.contract.ActivityResultContracts
@@ -78,7 +77,9 @@ class MainActivity : ComponentActivity() {
                 onResumeAudio = { viewModel.resumeAudio() },
                 onStopAudio = { viewModel.stopAudio() },
                 onSeekAudio = { viewModel.seekAudio(it) },
-                onDownloadFile = { viewModel.downloadFile(it) }
+                onDownloadFile = { viewModel.downloadFile(it) },
+                onSendSticker = { sticker -> viewModel.sendSticker(sticker) },
+                onAddSavedSticker = { message -> viewModel.addSavedStickerFromMessage(message) }
             )
         }
     }

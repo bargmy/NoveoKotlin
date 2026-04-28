@@ -15,6 +15,7 @@ import ir.hienob.noveo.data.MessageContent
 import ir.hienob.noveo.data.MessageFileAttachment
 import ir.hienob.noveo.data.NoveoApi
 import ir.hienob.noveo.data.NotificationSettings
+import ir.hienob.noveo.data.SavedSticker
 import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.SessionStore
 import ir.hienob.noveo.data.SocketEvent
@@ -74,6 +75,7 @@ data class AppUiState(
     val directRecipientId: String? = null,
     val editingMessage: ChatMessage? = null,
     val forwardingMessage: ChatMessage? = null,
+    val savedStickers: List<SavedSticker> = emptyList(),
     val currentAudioMessage: ChatMessage? = null,
     val isAudioPlaying: Boolean = false,
     val audioProgress: Float = 0f
@@ -475,6 +477,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 notificationSettings = notifySettings
             )
             NoveoNotificationService.start(getApplication())
+            loadSavedStickers(session)
             loadHome(session)
         }
     }
@@ -497,6 +500,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 sessionStore.write(session)
                 NoveoNotificationService.start(getApplication())
+                loadSavedStickers(session)
                 loadHome(session)
             }.onFailure {
                 _uiState.value = _uiState.value.copy(startupState = StartupState.Auth, loading = false, error = it.message ?: "Authentication failed")
@@ -545,12 +549,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
+        val languageCode = _uiState.value.languageCode
+        val notificationSettings = _uiState.value.notificationSettings
         getApplication<Application>().stopService(Intent(getApplication(), NoveoNotificationService::class.java))
         socketResyncJob?.cancel()
         selectedChatRefreshJob?.cancel()
         messageCacheByChat.clear()
         sessionStore.clear()
-        _uiState.value = AppUiState(startupState = StartupState.Auth)
+        _uiState.value = AppUiState(
+            startupState = StartupState.Auth,
+            languageCode = languageCode,
+            notificationSettings = notificationSettings
+        )
     }
 
     fun backToChatList() {
@@ -701,6 +711,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(pendingAttachment = null)
     }
 
+    fun sendSticker(sticker: SavedSticker) {
+        val session = _uiState.value.session ?: return
+        val chatId = _uiState.value.selectedChatId ?: return
+        sendPreparedMessage(
+            session = session,
+            chatId = chatId,
+            text = "",
+            file = sticker.toMessageAttachment(),
+            replyToId = _uiState.value.replyingToMessage?.id
+        )
+    }
+
+    fun addSavedStickerFromMessage(message: ChatMessage) {
+        val session = _uiState.value.session ?: return
+        val file = message.content.file ?: return
+        if (!file.canBeSavedAsSticker()) return
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    api.addSavedSticker(session, SavedSticker(url = file.url, type = "image"))
+                }
+            }.onSuccess { stickers ->
+                _uiState.value = _uiState.value.copy(savedStickers = stickers)
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(error = "Failed to save sticker: ${it.message}")
+            }
+        }
+    }
+
     fun sendMessage(text: String) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
@@ -785,6 +824,117 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
         }
+    }
+
+    private fun loadSavedStickers(session: Session) {
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    api.getSavedStickers(session)
+                }
+            }.onSuccess { stickers ->
+                _uiState.value = _uiState.value.copy(savedStickers = stickers)
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(error = "Failed to load stickers: ${it.message}")
+            }
+        }
+    }
+
+    private fun sendPreparedMessage(
+        session: Session,
+        chatId: String,
+        text: String,
+        file: MessageFileAttachment?,
+        replyToId: String?
+    ) {
+        val tempId = "temp-${System.currentTimeMillis()}"
+        viewModelScope.launch {
+            try {
+                val pendingMsg = ChatMessage(
+                    id = tempId,
+                    chatId = chatId,
+                    senderId = session.userId,
+                    senderName = _uiState.value.usersById[session.userId]?.username ?: "Me",
+                    content = MessageContent(
+                        text = text.takeIf { it.isNotBlank() },
+                        file = file,
+                        replyToId = replyToId
+                    ),
+                    timestamp = System.currentTimeMillis() / 1000,
+                    pending = true,
+                    clientTempId = tempId,
+                    replyToId = replyToId
+                )
+
+                _uiState.value = _uiState.value.copy(
+                    messages = _uiState.value.messages + pendingMsg,
+                    replyingToMessage = null
+                )
+                messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
+                persistCachedHomeState()
+
+                withContext(Dispatchers.IO) {
+                    val contentObj = org.json.JSONObject().put("text", text.takeIf { it.isNotBlank() })
+                    if (file != null) {
+                        contentObj.put("file", org.json.JSONObject()
+                            .put("url", file.url)
+                            .put("name", file.name)
+                            .put("type", file.type)
+                            .put("size", file.size))
+                    }
+
+                    val payload = org.json.JSONObject()
+                        .put("type", "message")
+                        .put("chatId", chatId)
+                        .put("content", contentObj.toString())
+                        .put("replyToId", replyToId)
+                        .put("clientTempId", tempId)
+
+                    val directRecipient = _uiState.value.directRecipientId
+                    if (directRecipient != null) {
+                        payload.put("recipientId", directRecipient)
+                    }
+
+                    NoveoNotificationService.send(payload)
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = "Failed to send message: ${e.message}")
+            }
+        }
+    }
+
+    private fun SavedSticker.toMessageAttachment(): MessageFileAttachment {
+        val normalizedType = type.ifBlank { "image" }
+        val extension = when {
+            normalizedType == "tgs" -> "tgs"
+            url.contains(".webp", true) -> "webp"
+            url.contains(".gif", true) -> "gif"
+            url.contains(".jpg", true) -> "jpg"
+            url.contains(".jpeg", true) -> "jpeg"
+            else -> "png"
+        }
+        val mimeType = when (extension) {
+            "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            "jpg", "jpeg" -> "image/jpeg"
+            "tgs" -> "application/x-tgsticker"
+            else -> "image/png"
+        }
+        return MessageFileAttachment(
+            url = url,
+            name = "sticker.$extension",
+            type = mimeType
+        )
+    }
+
+    private fun MessageFileAttachment.canBeSavedAsSticker(): Boolean {
+        val lowerUrl = url.lowercase()
+        return isImage() ||
+            lowerUrl.contains(".png") ||
+            lowerUrl.contains(".webp") ||
+            lowerUrl.contains(".gif") ||
+            lowerUrl.contains(".jpg") ||
+            lowerUrl.contains(".jpeg")
     }
 
     private fun android.content.Context.getFileName(uri: android.net.Uri): String? {

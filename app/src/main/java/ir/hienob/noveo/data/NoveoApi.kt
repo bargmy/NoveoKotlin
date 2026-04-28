@@ -182,6 +182,43 @@ class NoveoApi(
         }
     }
 
+    fun getSavedStickers(session: Session): List<SavedSticker> {
+        val url = "https://noveo.ir:8443/user/stickers".toHttpUrl()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Saved stickers load failed (${response.code})")
+            return parseStickerList(JSONObject(response.body?.string().orEmpty().ifBlank { "{}" }))
+        }
+    }
+
+    fun addSavedSticker(session: Session, sticker: SavedSticker): List<SavedSticker> {
+        val url = "https://noveo.ir:8443/user/stickers".toHttpUrl()
+        val body = JSONObject()
+            .put("action", "add")
+            .put(
+                "sticker",
+                JSONObject()
+                    .put("url", sticker.url)
+                    .put("type", sticker.type)
+            )
+            .toString()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Saved sticker update failed (${response.code})")
+            return parseStickerList(JSONObject(response.body?.string().orEmpty().ifBlank { "{}" }))
+        }
+    }
+
     fun sendMessage(session: Session, chatId: String, text: String, file: MessageFileAttachment? = null, clientTempId: String? = null, replyToId: String? = null) {
         val latch = CountDownLatch(1)
         val failure = AtomicReference<String?>(null)
@@ -394,6 +431,23 @@ class NoveoApi(
 
     private fun request(): Request = Request.Builder().url(wsUrl).header("Origin", origin).build()
     private fun reconnect(session: Session): JSONObject = JSONObject().put("type", "reconnect").put("userId", session.userId).put("token", session.token).put("sessionId", session.sessionId)
+    private fun parseStickerList(payload: JSONObject): List<SavedSticker> {
+        val stickersArray = payload.optJSONArray("stickers") ?: JSONArray()
+        return (0 until stickersArray.length()).mapNotNull { index ->
+            stickersArray.optJSONObject(index)?.let { sticker ->
+                val url = sticker.optString("url").trim()
+                if (url.isBlank()) {
+                    null
+                } else {
+                    SavedSticker(
+                        url = url,
+                        type = sticker.optString("type", "image").ifBlank { "image" }
+                    )
+                }
+            }
+        }
+    }
+
     private fun fail(response: Response?, t: Throwable, context: String): String {
         val code = response?.code
         return when (code) {

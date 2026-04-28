@@ -50,6 +50,7 @@ import ir.hienob.noveo.app.AppUiState
 import ir.hienob.noveo.app.StartupState
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.NotificationSettings
+import ir.hienob.noveo.data.SavedSticker
 
 internal enum class ThemePreset(val label: String) {
     SKY_LIGHT("Sky Light"),
@@ -282,7 +283,9 @@ fun NoveoRoot(
     onResumeAudio: () -> Unit,
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
-    onDownloadFile: (ChatMessage) -> Unit
+    onDownloadFile: (ChatMessage) -> Unit,
+    onSendSticker: (SavedSticker) -> Unit,
+    onAddSavedSticker: (ChatMessage) -> Unit
 ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current
@@ -368,6 +371,8 @@ fun NoveoRoot(
                         onStopAudio = onStopAudio,
                         onSeekAudio = onSeekAudio,
                         onDownloadFile = onDownloadFile,
+                        onSendSticker = onSendSticker,
+                        onAddSavedSticker = onAddSavedSticker,
                         currentTheme = currentTheme,
                         onThemeChange = { currentTheme = it }
                         )
