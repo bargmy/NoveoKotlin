@@ -1053,6 +1053,65 @@ fun VerifiedIcon(modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+private fun PinnedMessageBanner(
+    pinnedMessage: ChatMessage,
+    tgColors: TelegramThemeColors,
+    strings: NoveoStrings,
+    onClick: () -> Unit,
+    onUnpin: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .clickable { onClick() },
+        color = tgColors.incomingBubble,
+        tonalElevation = 2.dp,
+        shadowElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Outlined.Bookmark,
+                contentDescription = null,
+                tint = tgColors.headerIcon,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    strings.pinnedMessage,
+                    color = tgColors.headerIcon,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+                Text(
+                    pinnedMessage.content.previewText(),
+                    color = tgColors.incomingText,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(onClick = onUnpin) {
+                Icon(
+                    Icons.Outlined.Close,
+                    contentDescription = "Unpin",
+                    tint = tgColors.headerSubtitle,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChatPane(
@@ -1211,7 +1270,12 @@ private fun ChatPane(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 8.dp, top = 64.dp, end = 8.dp, bottom = 90.dp),
+            contentPadding = PaddingValues(
+                start = 8.dp, 
+                top = if (selectedChat?.pinnedMessage != null) 114.dp else 64.dp, 
+                end = 8.dp, 
+                bottom = 90.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             itemsIndexed(

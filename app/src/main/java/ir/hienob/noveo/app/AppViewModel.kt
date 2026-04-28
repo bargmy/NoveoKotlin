@@ -1166,13 +1166,15 @@ private fun mergeMessages(existing: List<ChatMessage>, incoming: List<ChatMessag
             val old = merged[existingIndex]
             // Surgically merge fields to avoid corruption from partial server updates
             merged[existingIndex] = old.copy(
+                id = if (message.id.isNotBlank()) message.id else old.id,
                 content = if (message.content.text != null || message.content.file != null) message.content else old.content,
                 senderName = if (message.senderName != "Unknown") message.senderName else old.senderName,
                 reactions = if (message.reactions.isNotEmpty() || !message.pending) message.reactions else old.reactions,
                 seenBy = if (message.seenBy.isNotEmpty()) message.seenBy else old.seenBy,
                 isPinned = if (message.id.isNotBlank()) message.isPinned else old.isPinned,
                 editedAt = if (message.editedAt != null) message.editedAt else old.editedAt,
-                pending = message.pending
+                pending = message.pending,
+                clientTempId = if (message.clientTempId != null) message.clientTempId else old.clientTempId
             )
             continue
         }
@@ -1196,16 +1198,18 @@ private fun findPendingReplacementIndex(messages: List<ChatMessage>, incoming: C
     val pendingIndexes = messages.indices.filter { messages[it].pending }
     if (pendingIndexes.isEmpty()) return -1
 
+    // 1. First try matching by signature (covers chatId, senderId, replyToId, and content)
     val exactSignatureIndex = pendingIndexes.firstOrNull { index ->
         messageMatchSignature(messages[index]) == messageMatchSignature(incoming)
     }
     if (exactSignatureIndex != null) return exactSignatureIndex
 
+    // 2. Fallback to same chatId, senderId, and content with close timestamp
     val sameSenderCandidates = pendingIndexes.filter { index ->
         val current = messages[index]
         current.chatId == incoming.chatId &&
             current.senderId == incoming.senderId &&
-            current.replyToId == incoming.replyToId &&
+            messageMatchSignature(current) == messageMatchSignature(incoming) &&
             isTimestampClose(current.timestamp, incoming.timestamp)
     }
     if (sameSenderCandidates.size == 1) return sameSenderCandidates.first()

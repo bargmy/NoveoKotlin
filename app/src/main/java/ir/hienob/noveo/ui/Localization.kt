@@ -275,6 +275,7 @@ private val translations = mapOf(
         justNow = "gerade eben",
         minutesAgo = "vor %d Minuten",
         dropToAttach = "Zum Anhängen loslassen",
+        pinnedMessage = "Angeheftete Nachricht",
         onboardingPages = listOf(
             "Chatten Sie mit Ihren Kontakten an einem Ort.",
             "Springen Sie mit der Noveo-Mobilschale schnell in Gespräche.",

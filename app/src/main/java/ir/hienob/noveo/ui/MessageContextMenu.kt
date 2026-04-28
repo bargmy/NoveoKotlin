@@ -172,7 +172,7 @@ private fun MessageContextMenu(
         label = "reactionsWidth"
     )
     val reactionsHeight by animateDpAsState(
-        targetValue = if (expanded) 280.dp else 52.dp,
+        targetValue = if (expanded) 320.dp else 52.dp,
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "reactionsHeight"
     )
@@ -307,7 +307,7 @@ private fun ExpandedReactions(
     onExpandedChange: (Boolean) -> Unit,
     onReaction: (String) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
+    Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
