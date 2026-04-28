@@ -33,7 +33,7 @@ data class NoveoStrings(
     val create: String = "Create",
     val cancel: String = "Cancel",
     val delete: String = "Delete",
-    val open = "Open",
+    val open: String = "Open",
     val next: String = "Next",
     val skip: String = "Skip",
     val deleteConfirmText: String = "Are you sure? This action is permanent and will remove all your data.",

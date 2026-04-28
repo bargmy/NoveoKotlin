@@ -146,6 +146,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.material.icons.outlined.Collections
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1191,6 +1194,7 @@ private fun ChatPane(
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(state.editingMessage) {
         state.editingMessage?.content?.text?.let {
@@ -3694,7 +3698,7 @@ private fun AttachmentPicker(
             ) {
                 AttachmentOption(
                     label = strings.gallery,
-                    icon = Icons.Outlined.Image, // Use Image icon
+                    icon = Icons.Outlined.Collections, // Use Collections icon
                     color = Color(0xFF2EA6FF),
                     onClick = onGalleryClick,
                     modifier = Modifier.weight(1f)
