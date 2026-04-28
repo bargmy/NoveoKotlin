@@ -138,6 +138,7 @@ data class NoveoStrings(
     val files: String = "Files",
     val stickers: String = "Stickers",
     val addAsSticker: String = "Add as Sticker",
+    val selectSource: String = "Select Source",
     val onboardingPages: List<String> = listOf(
         "Chat with your contacts in one place.",
         "Jump into conversations quickly with the Noveo mobile shell.",

@@ -3683,7 +3683,7 @@ private fun AttachmentPicker(
                 .padding(bottom = 24.dp, start = 16.dp, end = 16.dp)
         ) {
             Text(
-                text = "Select Source", 
+                text = strings.selectSource, 
                 style = MaterialTheme.typography.titleMedium,
                 color = tgColors.headerTitle,
                 modifier = Modifier.padding(bottom = 16.dp)
