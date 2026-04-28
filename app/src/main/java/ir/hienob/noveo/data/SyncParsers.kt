@@ -194,7 +194,7 @@ internal fun parseReactions(json: JSONObject, key: String = "reactions"): Map<St
     return reactions
 }
 
-private fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map<String, UserSummary>): ChatMessage {
+internal fun parseChatMessage(message: JSONObject, chatId: String, usersById: Map<String, UserSummary>): ChatMessage {
     val messageId = message.optString("messageId").sanitizeServerString().ifBlank { message.optString("id").sanitizeServerString() }
     val senderId = message.optString("senderId").sanitizeServerString().ifBlank { message.optString("sender").sanitizeServerString() }
     val timestamp = message.optLong("timestamp", message.optLong("createdAt", 0L))

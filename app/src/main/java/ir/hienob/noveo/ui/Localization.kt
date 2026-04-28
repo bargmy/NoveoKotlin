@@ -133,6 +133,7 @@ data class NoveoStrings(
     val justNow: String = "just now",
     val minutesAgo: String = "%d minutes ago",
     val dropToAttach: String = "Drop to attach",
+    val pinnedMessage: String = "Pinned Message",
     val onboardingPages: List<String> = listOf(
         "Chat with your contacts in one place.",
         "Jump into conversations quickly with the Noveo mobile shell.",
