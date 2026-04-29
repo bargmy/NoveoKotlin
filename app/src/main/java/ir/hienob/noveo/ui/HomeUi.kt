@@ -2013,6 +2013,13 @@ private fun MessageRow(
                         modifier = Modifier
                             .padding(vertical = 4.dp)
                             .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
+                            .pointerInput(message.id) {
+                                detectTapGestures(
+                                    onTap = { bubbleBounds?.let(onOpenContextMenu) },
+                                    onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
+                                    onLongPress = { bubbleBounds?.let(onOpenContextMenu) }
+                                )
+                            }
                     ) {
                         Column(horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start) {
                             if (repliedMessage != null) {
@@ -2138,7 +2145,14 @@ private fun MessageRow(
                     Surface(
                         modifier = Modifier
                             .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f)
-                            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() },
+                            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
+                            .pointerInput(message.id) {
+                                detectTapGestures(
+                                    onTap = { bubbleBounds?.let(onOpenContextMenu) },
+                                    onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
+                                    onLongPress = { bubbleBounds?.let(onOpenContextMenu) }
+                                )
+                            },
                         shape = TelegramBubbleShape(
                             isOutgoing = ownMessage,
                             hasTail = hasTail,
@@ -2449,8 +2463,7 @@ private fun MessageAttachment(
     tgColors: TelegramThemeColors = telegramColors()
 ) {
     val context = LocalContext.current
-    val localFile = (downloadState?.localPath?.let(::File) ?: localAttachmentCacheFile(context.filesDir, file))
-        .takeIf { it.exists() && it.length() > 0 }
+    val localFile = downloadState?.localPath?.let(::File)?.takeIf { it.exists() }
     val isDownloaded = localFile != null
     val isDownloading = downloadState?.isDownloading == true
     val progress = downloadState?.progress ?: 0f
@@ -2472,42 +2485,42 @@ private fun MessageAttachment(
                     .heightIn(min = 180.dp)
                     .background((if (ownMessage) tgColors.outgoingBubble else tgColors.incomingBubble).copy(alpha = 0.68f))
             ) {
-                val imageUrl = remember(file.url, isDownloaded) { if (isDownloaded) localFile else file.url.normalizeNoveoUrl() }
-                SubcomposeAsyncImage(
-                    model = imageUrl,
-                    contentDescription = file.name,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.FillWidth,
-                    loading = {
-                        Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp), color = overlayTint)
+                if (isDownloaded) {
+                    SubcomposeAsyncImage(
+                        model = localFile,
+                        contentDescription = file.name,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentScale = ContentScale.FillWidth,
+                        loading = {
+                            Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp), color = overlayTint)
+                            }
                         }
-                    },
-                    error = {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Description,
-                                contentDescription = null,
-                                tint = overlayTint.copy(alpha = 0.4f),
-                                modifier = Modifier.size(44.dp)
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = file.name.ifBlank { "Image" },
-                                color = overlayTint.copy(alpha = 0.75f),
-                                style = MaterialTheme.typography.labelMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Description,
+                            contentDescription = null,
+                            tint = overlayTint.copy(alpha = 0.4f),
+                            modifier = Modifier.size(44.dp)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = file.name.ifBlank { "Image" },
+                            color = overlayTint.copy(alpha = 0.75f),
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
-                )
+                }
                 AttachmentDownloadOverlay(
                     isVideo = false,
                     isDownloaded = isDownloaded,
@@ -3140,26 +3153,31 @@ private fun SettingsPreferencesSection(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(strings.doubleTapReactionBody)
-                    reactionOptions.forEach { reaction ->
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSetDoubleTapReaction(reaction)
-                                    showReactionDialog = false
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(48.dp),
+                        modifier = Modifier.heightIn(max = 320.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(reactionOptions) { reaction ->
+                            Surface(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clickable {
+                                        onSetDoubleTapReaction(reaction)
+                                        showReactionDialog = false
+                                    },
+                                color = if (reaction == state.doubleTapReaction) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    Color.Transparent
                                 },
-                            color = if (reaction == state.doubleTapReaction) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                Color.Transparent
-                            },
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = reaction,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(text = reaction, fontSize = 22.sp)
+                                }
+                            }
                         }
                     }
                 }
