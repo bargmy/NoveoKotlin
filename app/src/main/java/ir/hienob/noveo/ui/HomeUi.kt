@@ -1938,6 +1938,7 @@ private fun MessageRow(
                 coroutineScope {
                     launch {
                         detectTapGestures(
+                            onTap = { bubbleBounds?.let(onOpenContextMenu) },
                             onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
                             onLongPress = { bubbleBounds?.let(onOpenContextMenu) }
                         )
