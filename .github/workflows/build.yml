@@ -232,7 +232,7 @@ jobs:
               fh.write(f"latest_stable_tag={latest_stable_tag}\n")
           PY
 
-      - name: Generate changelog from diff
+      - name: Groq Diffgen
         id: changelog
         shell: bash
         env:
@@ -265,13 +265,14 @@ jobs:
           git log --no-merges --pretty=format:'- %s (%h)' "$RANGE" > commits.txt || true
           git diff --name-status "$RANGE" > files.txt || true
           export PREV_LABEL RANGE
+          python3 -m pip install --disable-pip-version-check --quiet groq
 
           python3 - <<'PY'
-          import json
           import os
           import pathlib
+          import sys
           import textwrap
-          import urllib.request
+          from groq import Groq
 
           release_tag = os.environ["RELEASE_TAG"]
           release_version = os.environ["RELEASE_VERSION"]
@@ -328,32 +329,22 @@ jobs:
               - no hype
               - no unsupported claims
               """)
-
-              payload = {
-                  "model": "openai/gpt-oss-120b",
-                  "reasoning_effort": "medium",
-                  "messages": [
-                      {"role": "system", "content": system_prompt},
-                      {"role": "user", "content": user_prompt},
-                  ],
-              }
-
-              req = urllib.request.Request(
-                  "https://api.groq.com/openai/v1/chat/completions",
-                  data=json.dumps(payload).encode("utf-8"),
-                  headers={
-                      "Authorization": f"Bearer {api_key}",
-                      "Content-Type": "application/json",
-                  },
-              )
               try:
-                  with urllib.request.urlopen(req, timeout=90) as resp:
-                      response = json.load(resp)
-                  body = response["choices"][0]["message"]["content"].strip()
+                  client = Groq(api_key=api_key)
+                  completion = client.chat.completions.create(
+                      model="openai/gpt-oss-120b",
+                      reasoning_effort="medium",
+                      messages=[
+                          {"role": "system", "content": system_prompt},
+                          {"role": "user", "content": user_prompt},
+                      ],
+                  )
+                  body = (completion.choices[0].message.content or "").strip()
                   if not body:
-                      body = fallback
-              except Exception:
-                  body = fallback
+                      raise RuntimeError("Groq returned an empty changelog response")
+              except Exception as exc:
+                  print(f"Groq diffgen failed: {exc}", file=sys.stderr)
+                  raise
 
           pathlib.Path("release-notes.md").write_text(body + "\n", encoding="utf-8")
           pathlib.Path("release-caption.txt").write_text(body[:900], encoding="utf-8")
