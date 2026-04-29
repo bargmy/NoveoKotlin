@@ -1,0 +1,4 @@
+interface:
+  display_name: "Noveo Safe Client Edit"
+  short_description: "Safely modify and ship this Noveo client"
+  default_prompt: "Use $noveo-safe-client-edit to modify this Noveo Android client safely, validate the change, commit it, and push when done."
