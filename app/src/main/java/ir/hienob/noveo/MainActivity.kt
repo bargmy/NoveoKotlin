@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
                 onInstallUpdate = viewModel::installUpdate,
                 onCheckUpdate = { viewModel.checkForUpdate(manual = true) },
                 onSetBetaUpdatesEnabled = viewModel::setBetaUpdatesEnabled,
+                onSetDoubleTapReaction = viewModel::setDoubleTapReaction,
                 onUpdateNotificationSettings = { viewModel.updateNotificationSettings(it) },
                 onRequestBatteryOptimization = { viewModel.requestDisableBatteryOptimization() },
                 onRequestPermission = {
@@ -79,6 +80,7 @@ class MainActivity : ComponentActivity() {
                 onStopAudio = { viewModel.stopAudio() },
                 onSeekAudio = { viewModel.seekAudio(it) },
                 onDownloadFile = { viewModel.downloadFile(it) },
+                onCancelUpload = viewModel::cancelPendingUpload,
                 onSendSticker = { sticker -> viewModel.sendSticker(sticker) },
                 onAddSavedSticker = { message -> viewModel.addSavedStickerFromMessage(message) }
             )

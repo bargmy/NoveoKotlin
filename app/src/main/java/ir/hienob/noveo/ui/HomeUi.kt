@@ -210,6 +210,25 @@ private data class SelectedMediaAttachment(
     val localPath: String
 )
 
+private fun localAttachmentCacheFile(root: File, file: MessageFileAttachment): File {
+    val extension = file.name.substringAfterLast('.', "").ifBlank {
+        when {
+            file.isVideo() -> "mp4"
+            file.type.equals("image/gif", true) -> "gif"
+            file.type.equals("image/webp", true) -> "webp"
+            file.type.equals("image/jpeg", true) -> "jpg"
+            file.isTgsSticker() -> "tgs"
+            else -> "bin"
+        }
+    }
+    val safeName = file.name
+        .substringBeforeLast('.', file.name)
+        .replace(Regex("[^A-Za-z0-9._-]"), "_")
+        .take(40)
+        .ifBlank { "attachment" }
+    return File(root, "attachments/$safeName-${file.downloadKey()}.$extension")
+}
+
 private fun formatLastSeen(lastSeen: Long?, strings: NoveoStrings): String {
     if (lastSeen == null || lastSeen <= 0) return strings.lastSeenRecently
     
@@ -350,6 +369,7 @@ internal fun HomeScreen(
     onInstallUpdate: () -> Unit,
     onCheckUpdate: () -> Unit,
     onSetBetaUpdatesEnabled: (Boolean) -> Unit,
+    onSetDoubleTapReaction: (String) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     onPlayAudio: (ChatMessage) -> Unit,
@@ -357,7 +377,9 @@ internal fun HomeScreen(
     onResumeAudio: () -> Unit,
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
+    doubleTapReaction: String,
     onDownloadFile: (ChatMessage) -> Unit,
+    onCancelUpload: () -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
     onAddSavedSticker: (ChatMessage) -> Unit,
     currentTheme: ThemePreset,
@@ -389,6 +411,7 @@ internal fun HomeScreen(
 
     val onMediaClick = { message: ChatMessage, attachment: MessageFileAttachment ->
         val localPath = state.attachmentDownloads[attachment.downloadKey()]?.localPath
+            ?: localAttachmentCacheFile(context.filesDir, attachment).takeIf { it.exists() }?.absolutePath
         if (!localPath.isNullOrBlank() && (attachment.isImage() || attachment.isVideo())) {
             selectedMediaAttachment = SelectedMediaAttachment(attachment = attachment, localPath = localPath)
         } else if (attachment.isImage() || attachment.isVideo()) {
@@ -846,6 +869,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 onSetLanguage = onSetLanguage,
                 onCheckUpdate = onCheckUpdate,
                 onSetBetaUpdatesEnabled = onSetBetaUpdatesEnabled,
+                onSetDoubleTapReaction = onSetDoubleTapReaction,
                 onUpdateNotificationSettings = onUpdateNotificationSettings,
                 onRequestBatteryOptimization = onRequestBatteryOptimization,
                 onRequestPermission = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
@@ -1450,6 +1474,7 @@ private fun ChatPane(
                     onResumeAudio = onResumeAudio,
                     onStopAudio = onStopAudio,
                     onSeekAudio = onSeekAudio,
+                    doubleTapReaction = state.doubleTapReaction,
                     onDownloadFile = onDownloadFile,
                     appUiState = state,
                     isHighlighted = highlightedMessageId == message.id,
@@ -1697,6 +1722,8 @@ private fun ChatPane(
                         showStickers = showStickers,
                         onPasteUri = { onAttachFile(it) },
                         hasAttachment = state.pendingAttachment != null,
+                        isSendingMessage = state.isSendingMessage,
+                        onCancelSend = onCancelUpload,
                         tgColors = tgColors,
                         onActionClick = {
                             val text = draft.trim()
@@ -1905,7 +1932,6 @@ private fun MessageRow(
                 coroutineScope {
                     launch {
                         detectTapGestures(
-                            onTap = { bubbleBounds?.let(onOpenContextMenu) },
                             onDoubleTap = { onToggleReaction(message.id, "❤️") },
                             onLongPress = { bubbleBounds?.let(onOpenContextMenu) }
                         )
@@ -2427,7 +2453,9 @@ private fun MessageAttachment(
     onDownloadClick: () -> Unit,
     tgColors: TelegramThemeColors = telegramColors()
 ) {
-    val localFile = downloadState?.localPath?.let(::File)?.takeIf { it.exists() }
+    val context = LocalContext.current
+    val localFile = (downloadState?.localPath?.let(::File) ?: localAttachmentCacheFile(context.filesDir, file))
+        .takeIf { it.exists() }
     val isDownloaded = localFile != null
     val isDownloading = downloadState?.isDownloading == true
     val progress = downloadState?.progress ?: 0f
@@ -2811,6 +2839,7 @@ private fun SettingsModal(
     onSetLanguage: (String) -> Unit,
     onCheckUpdate: () -> Unit,
     onSetBetaUpdatesEnabled: (Boolean) -> Unit,
+    onSetDoubleTapReaction: (String) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     onRequestPermission: () -> Unit
@@ -2843,7 +2872,7 @@ private fun SettingsModal(
                     SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings)
                     SettingsSection.PROFILE -> SettingsProfileSection(strings, me, onUpdateProfile)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, currentTheme, onThemeChange, onRequestBatteryOptimization)
+                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, currentTheme, onThemeChange, onRequestBatteryOptimization)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection(strings)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
                     SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings, onRequestPermission)
@@ -2999,12 +3028,15 @@ private fun SettingsPreferencesSection(
     onSetLanguage: (String) -> Unit,
     onCheckUpdate: () -> Unit,
     onSetBetaUpdatesEnabled: (Boolean) -> Unit,
+    onSetDoubleTapReaction: (String) -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
     onRequestBatteryOptimization: () -> Unit
 ) {
     val scrollState = rememberScrollState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
+    var showReactionDialog by rememberSaveable { mutableStateOf(false) }
+    val reactionOptions = listOf("❤", "👍", "🔥", "😂", "😮", "😢")
     val languages = listOf(
         "English" to "en",
         "Persian (فارسی)" to "fa",
@@ -3055,6 +3087,9 @@ private fun SettingsPreferencesSection(
                 )
             }
         }
+        SettingsRow("${strings.doubleTapReaction}: ${state.doubleTapReaction}", Icons.Outlined.Star) {
+            showReactionDialog = true
+        }
 
         if (state.isBatteryOptimized) {
             Spacer(Modifier.height(8.dp))
@@ -3100,6 +3135,41 @@ private fun SettingsPreferencesSection(
                 }
             },
             confirmButton = { TextButton(onClick = { showLanguageDialog = false }) { Text(strings.cancel) } }
+        )
+    }
+
+    if (showReactionDialog) {
+        AlertDialog(
+            onDismissRequest = { showReactionDialog = false },
+            title = { Text(strings.doubleTapReaction) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(strings.doubleTapReactionBody)
+                    reactionOptions.forEach { reaction ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSetDoubleTapReaction(reaction)
+                                    showReactionDialog = false
+                                },
+                            color = if (reaction == state.doubleTapReaction) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                Color.Transparent
+                            },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = reaction,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showReactionDialog = false }) { Text(strings.cancel) } }
         )
     }
 }

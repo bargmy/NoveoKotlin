@@ -37,6 +37,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.max
@@ -81,7 +82,9 @@ data class AppUiState(
     val isAudioPlaying: Boolean = false,
     val audioProgress: Float = 0f,
     val attachmentDownloads: Map<String, AttachmentDownloadState> = emptyMap(),
-    val betaUpdatesEnabled: Boolean = false
+    val betaUpdatesEnabled: Boolean = false,
+    val doubleTapReaction: String = "❤",
+    val isSendingMessage: Boolean = false
 )
 
 data class AttachmentDownloadState(
@@ -128,12 +131,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var socketResyncJob: Job? = null
     private var selectedChatRefreshJob: Job? = null
     private var pendingChatId: String? = null
+    private var activeUploadJob: Job? = null
+    private var activeUploadController: NoveoApi.UploadController? = null
     
     private var mediaPlayer: android.media.MediaPlayer? = null
     private var audioProgressJob: Job? = null
 
     init {
-        _uiState.value = _uiState.value.copy(betaUpdatesEnabled = sessionStore.readBetaUpdatesEnabled())
+        _uiState.value = _uiState.value.copy(
+            betaUpdatesEnabled = sessionStore.readBetaUpdatesEnabled(),
+            doubleTapReaction = sessionStore.readDoubleTapReaction()
+        )
         restoreSession()
         checkForUpdate()
         checkBatteryOptimization()
@@ -366,6 +374,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             isCheckingUpdate = false
         )
         checkForUpdate()
+    }
+
+    fun setDoubleTapReaction(reaction: String) {
+        sessionStore.writeDoubleTapReaction(reaction)
+        _uiState.value = _uiState.value.copy(doubleTapReaction = reaction)
+    }
+
+    fun cancelPendingUpload() {
+        activeUploadController?.cancel()
+        activeUploadJob?.cancel()
+        val attachment = _uiState.value.pendingAttachment
+        _uiState.value = _uiState.value.copy(
+            pendingAttachment = attachment?.copy(isUploading = false, progress = 0f),
+            isSendingMessage = false
+        )
     }
 
     fun checkForUpdate(manual: Boolean = false) {
@@ -629,18 +652,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val languageCode = _uiState.value.languageCode
         val notificationSettings = _uiState.value.notificationSettings
         val betaUpdatesEnabled = _uiState.value.betaUpdatesEnabled
+        val doubleTapReaction = _uiState.value.doubleTapReaction
         getApplication<Application>().stopService(Intent(getApplication(), NoveoNotificationService::class.java))
         socketResyncJob?.cancel()
         selectedChatRefreshJob?.cancel()
+        activeUploadController?.cancel()
+        activeUploadJob?.cancel()
         messageCacheByChat.clear()
         sessionStore.clear()
         sessionStore.writeNotificationSettings(notificationSettings)
         sessionStore.writeBetaUpdatesEnabled(betaUpdatesEnabled)
+        sessionStore.writeDoubleTapReaction(doubleTapReaction)
         _uiState.value = AppUiState(
             startupState = StartupState.Auth,
             languageCode = languageCode,
             notificationSettings = notificationSettings,
-            betaUpdatesEnabled = betaUpdatesEnabled
+            betaUpdatesEnabled = betaUpdatesEnabled,
+            doubleTapReaction = doubleTapReaction
         )
     }
 
@@ -811,7 +839,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    api.addSavedSticker(session, SavedSticker(url = file.url, type = "image"))
+                    api.addSavedSticker(
+                        session,
+                        SavedSticker(
+                            url = file.url,
+                            type = if (file.isTgsSticker()) "tgs" else "image"
+                        )
+                    )
                 }
             }.onSuccess { stickers ->
                 _uiState.value = _uiState.value.copy(savedStickers = stickers)
@@ -827,6 +861,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val replyingTo = _uiState.value.replyingToMessage
         val editingMessage = _uiState.value.editingMessage
         val attachment = _uiState.value.pendingAttachment
+        if (_uiState.value.isSendingMessage) return
         if (text.isBlank() && attachment == null) return
 
         if (editingMessage != null) {
@@ -838,20 +873,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val tempId = "temp-${System.currentTimeMillis()}"
         
         // If we have an attachment, we need to upload it first
-        viewModelScope.launch {
+        activeUploadJob = viewModelScope.launch {
             try {
                 var uploadedFile: MessageFileAttachment? = null
+                _uiState.value = _uiState.value.copy(isSendingMessage = true)
                 if (attachment != null) {
+                    val uploadController = NoveoApi.UploadController()
+                    activeUploadController = uploadController
                     _uiState.value = _uiState.value.copy(
                         pendingAttachment = attachment.copy(isUploading = true, progress = 0f)
                     )
                     uploadedFile = withContext(Dispatchers.IO) {
-                        api.uploadFile(session, attachment.fileData, attachment.fileName, attachment.mimeType) { progress ->
+                        api.uploadFile(session, attachment.fileData, attachment.fileName, attachment.mimeType, uploadController) { progress ->
                             _uiState.value = _uiState.value.copy(
                                 pendingAttachment = _uiState.value.pendingAttachment?.copy(progress = progress)
                             )
                         }
                     }
+                    ensureActive()
                     _uiState.value = _uiState.value.copy(pendingAttachment = null)
                 }
 
@@ -898,11 +937,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
                     NoveoNotificationService.send(payload)
                 }
+                _uiState.value = _uiState.value.copy(isSendingMessage = false)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException || e is java.io.InterruptedIOException) {
+                    val currentAttachment = _uiState.value.pendingAttachment ?: attachment
+                    _uiState.value = _uiState.value.copy(
+                        pendingAttachment = currentAttachment?.copy(isUploading = false, progress = 0f),
+                        isSendingMessage = false
+                    )
+                    return@launch
+                }
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to send message: ${e.message}",
-                    pendingAttachment = attachment?.copy(isUploading = false) // Restore if failed
+                    pendingAttachment = attachment?.copy(isUploading = false),
+                    isSendingMessage = false
                 )
+            } finally {
+                activeUploadController = null
+                activeUploadJob = null
             }
         }
     }
@@ -1010,12 +1062,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun MessageFileAttachment.canBeSavedAsSticker(): Boolean {
         val lowerUrl = url.lowercase()
-        return isImage() ||
+        return isTgsSticker() ||
+            isImage() ||
             lowerUrl.contains(".png") ||
             lowerUrl.contains(".webp") ||
             lowerUrl.contains(".gif") ||
             lowerUrl.contains(".jpg") ||
-            lowerUrl.contains(".jpeg")
+            lowerUrl.contains(".jpeg") ||
+            lowerUrl.contains(".tgs")
     }
 
     private fun android.content.Context.getFileName(uri: android.net.Uri): String? {
@@ -1345,11 +1399,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleReaction(messageId: String, emoji: String) {
         val chatId = _uiState.value.selectedChatId ?: return
+        val resolvedEmoji = when (emoji) {
+            "❤", "❤️", "â¤ï¸" -> _uiState.value.doubleTapReaction
+            else -> emoji
+        }
         val payload = org.json.JSONObject()
             .put("type", "toggle_reaction")
             .put("chatId", chatId)
             .put("messageId", messageId)
-            .put("reaction", emoji)
+            .put("reaction", resolvedEmoji)
         NoveoNotificationService.send(payload)
     }
 

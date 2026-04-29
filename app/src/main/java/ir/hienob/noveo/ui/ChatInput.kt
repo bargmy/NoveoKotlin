@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -77,6 +78,8 @@ internal fun ChatInput(
     onTextFieldFocused: () -> Unit = {},
     showStickers: Boolean = false,
     hasAttachment: Boolean = false,
+    isSendingMessage: Boolean = false,
+    onCancelSend: () -> Unit = {},
     tgColors: TelegramThemeColors = telegramColors(),
     strings: NoveoStrings
 ) {
@@ -148,8 +151,8 @@ internal fun ChatInput(
         }
     }
 
-    val showSendButton = (draft.isNotBlank() || hasAttachment)
-    val targetButtonColor = if (isRecording) Color.Red else if (!showSendButton) tgColors.composerField else tgColors.composerBlue
+    val showSendButton = (draft.isNotBlank() || hasAttachment || isSendingMessage)
+    val targetButtonColor = if (isRecording || isSendingMessage) Color.Red else if (!showSendButton) tgColors.composerField else tgColors.composerBlue
     val buttonColor by animateColorAsState(targetValue = targetButtonColor, label = "buttonColor")
     val iconColor = if (!showSendButton && !isRecording) tgColors.composerIcon else Color.White
 
@@ -359,7 +362,7 @@ internal fun ChatInput(
             }
         } else {
             Modifier.clickable(interactionSource = buttonInteraction, indication = null) {
-                onActionClick()
+                if (isSendingMessage) onCancelSend() else onActionClick()
             }
         }
 
@@ -399,12 +402,21 @@ internal fun ChatInput(
                         transitionSpec = { tween(250) }
                     ) { state -> if (state == EnterExitState.PreEnter && !targetIsMic) -25f else 0f }
 
-                    Image(
-                        painter = painterResource(if (targetIsMic) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = animRotation },
-                        colorFilter = ColorFilter.tint(iconColor)
-                    )
+                    if (isSendingMessage) {
+                        Icon(
+                            imageVector = Icons.Outlined.Clear,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = iconColor
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(if (targetIsMic) R.drawable.tg_input_mic else R.drawable.tg_send_plane_24),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = animRotation },
+                            colorFilter = ColorFilter.tint(iconColor)
+                        )
+                    }
                 }
             }
         }

@@ -115,6 +115,8 @@ data class NoveoStrings(
     val betaUpdates: String = "Beta updates",
     val betaUpdatesBody: String = "Receive beta builds when they are newer than your current version.",
     val downloading: String = "Downloading...",
+    val doubleTapReaction: String = "Double tap reaction",
+    val doubleTapReactionBody: String = "Choose which reaction is sent when you double tap a message.",
     val requestPermission: String = "Request Permission",
     val handle: String = "Handle",
     val handleOptional: String = "Handle (optional)",
@@ -1305,7 +1307,94 @@ private val translations = mapOf(
 )
 
 fun getStrings(languageCode: String): NoveoStrings {
-    return translations[languageCode] ?: translations["en"]!!
+    val base = translations[languageCode] ?: translations["en"]!!
+    return applyExtendedOverrides(base)
+}
+
+private fun applyExtendedOverrides(strings: NoveoStrings): NoveoStrings {
+    return when (strings.languageCode) {
+        "de" -> strings.copy(
+            registerOnWebTitle = "Auf Noveo Web registrieren",
+            registerOnWebBody = "Sie mussen sich aus Sicherheitsgrunden uber Noveo Web registrieren.",
+            openNoveoWeb = "Noveo Web offnen",
+            betaUpdates = "Beta-Updates",
+            betaUpdatesBody = "Beta-Builds erhalten, wenn sie neuer als Ihre aktuelle Version sind.",
+            downloading = "Wird heruntergeladen...",
+            doubleTapReaction = "Doppeltipp-Reaktion",
+            doubleTapReactionBody = "Wahlen Sie die Reaktion aus, die beim Doppeltippen auf eine Nachricht gesendet wird."
+        )
+        "ru" -> strings.copy(
+            registerOnWebTitle = "Регистрация в Noveo Web",
+            registerOnWebBody = "Из соображений безопасности регистрация доступна только через Noveo Web.",
+            openNoveoWeb = "Открыть Noveo Web",
+            betaUpdates = "Бета-обновления",
+            betaUpdatesBody = "Получать бета-сборки, если они новее текущей версии.",
+            downloading = "Загрузка...",
+            doubleTapReaction = "Реакция по двойному тапу",
+            doubleTapReactionBody = "Выберите реакцию, которая отправляется при двойном тапе по сообщению."
+        )
+        "zh" -> strings.copy(
+            registerOnWebTitle = "在 Noveo Web 注册",
+            registerOnWebBody = "出于安全原因，您需要通过 Noveo Web 注册。",
+            openNoveoWeb = "打开 Noveo Web",
+            betaUpdates = "Beta 更新",
+            betaUpdatesBody = "当 Beta 版本比当前版本更新时接收它。",
+            downloading = "下载中...",
+            doubleTapReaction = "双击反应",
+            doubleTapReactionBody = "选择双击消息时发送的反应。"
+        )
+        "fa" -> strings.copy(
+            registerOnWebTitle = "ثبت نام در نوئو وب",
+            registerOnWebBody = "به دلایل امنیتی باید از طریق نوئو وب ثبت نام کنید.",
+            openNoveoWeb = "باز کردن نوئو وب",
+            betaUpdates = "بروزرسانی های بتا",
+            betaUpdatesBody = "اگر نسخه های بتا از نسخه فعلی شما جدیدتر باشند آنها را دریافت کنید.",
+            downloading = "در حال دانلود...",
+            doubleTapReaction = "واکنش با دو ضربه",
+            doubleTapReactionBody = "واکنشی را انتخاب کنید که با دو بار ضربه روی پیام ارسال می شود."
+        )
+        "es" -> strings.copy(
+            registerOnWebTitle = "Registrarse en Noveo Web",
+            registerOnWebBody = "Por motivos de seguridad, debes registrarte desde Noveo Web.",
+            openNoveoWeb = "Abrir Noveo Web",
+            betaUpdates = "Actualizaciones beta",
+            betaUpdatesBody = "Recibe compilaciones beta cuando sean mas nuevas que tu version actual.",
+            downloading = "Descargando...",
+            doubleTapReaction = "Reaccion de doble toque",
+            doubleTapReactionBody = "Elige la reaccion que se envia al tocar dos veces un mensaje."
+        )
+        "fr" -> strings.copy(
+            registerOnWebTitle = "S'inscrire sur Noveo Web",
+            registerOnWebBody = "Pour des raisons de securite, vous devez vous inscrire depuis Noveo Web.",
+            openNoveoWeb = "Ouvrir Noveo Web",
+            betaUpdates = "Mises a jour beta",
+            betaUpdatesBody = "Recevoir les versions beta lorsqu'elles sont plus recentes que votre version actuelle.",
+            downloading = "Telechargement...",
+            doubleTapReaction = "Reaction au double appui",
+            doubleTapReactionBody = "Choisissez la reaction envoyee lorsque vous touchez deux fois un message."
+        )
+        "ar" -> strings.copy(
+            registerOnWebTitle = "التسجيل عبر Noveo Web",
+            registerOnWebBody = "لأسباب أمنية يجب عليك التسجيل من خلال Noveo Web.",
+            openNoveoWeb = "فتح Noveo Web",
+            betaUpdates = "تحديثات بيتا",
+            betaUpdatesBody = "استلم إصدارات بيتا عندما تكون أحدث من إصدارك الحالي.",
+            downloading = "جارٍ التنزيل...",
+            doubleTapReaction = "تفاعل النقر المزدوج",
+            doubleTapReactionBody = "اختر التفاعل الذي يتم إرساله عند النقر المزدوج على الرسالة."
+        )
+        "tr" -> strings.copy(
+            registerOnWebTitle = "Noveo Web uzerinden kayit olun",
+            registerOnWebBody = "Guvenlik nedenleriyle kaydi Noveo Web uzerinden yapmalisiniz.",
+            openNoveoWeb = "Noveo Web'i ac",
+            betaUpdates = "Beta guncellemeleri",
+            betaUpdatesBody = "Mevcut surumunuzden daha yeni olduklarinda beta surumleri alin.",
+            downloading = "Indiriliyor...",
+            doubleTapReaction = "Cift dokunma tepkisi",
+            doubleTapReactionBody = "Bir mesaja cift dokundugunuzda gonderilecek tepkiyi secin."
+        )
+        else -> strings
+    }
 }
 
 fun localizeDigits(input: String, languageCode: String): String {

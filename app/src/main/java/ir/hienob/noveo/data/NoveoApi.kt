@@ -20,13 +20,36 @@ class NoveoApi(
     private val wsUrl: String = "wss://noveo.ir:8443/ws",
     private val origin: String = "https://noveo.ir"
 ) {
-    fun login(handle: String, password: String): Session = auth(JSONObject().put("type", "login_with_password").put("username", handle).put("password", password).put("languageCode", "en"))
+    class UploadController {
+        @Volatile
+        var canceled: Boolean = false
+
+        @Volatile
+        var call: okhttp3.Call? = null
+
+        fun cancel() {
+            canceled = true
+            call?.cancel()
+        }
+    }
+
+    private val userAgent = "NoveoKotlin/${ir.hienob.noveo.BuildConfig.VERSION_NAME}"
+
+    fun login(handle: String, password: String): Session = auth(
+        JSONObject()
+            .put("type", "login_with_password")
+            .put("username", handle)
+            .put("password", password)
+            .put("languageCode", "en")
+            .put("clientInfo", clientInfoJson())
+    )
     fun signup(handle: String, password: String, captchaToken: String? = null): Session = auth(
         JSONObject()
             .put("type", "register")
             .put("username", handle)
             .put("password", password)
             .put("languageCode", "en")
+            .put("clientInfo", clientInfoJson())
             .apply { if (captchaToken != null) put("captchaToken", captchaToken) }
     )
 
@@ -55,6 +78,7 @@ class NoveoApi(
         fileData: ByteArray,
         fileName: String,
         mimeType: String,
+        controller: UploadController = UploadController(),
         onProgress: (Float) -> Unit
     ): MessageFileAttachment {
         val url = "https://noveo.ir:8443/upload/file".toHttpUrl()
@@ -71,6 +95,9 @@ class NoveoApi(
                 
                 var read: Int
                 while (inputStream.read(buffer).also { read = it } != -1) {
+                    if (controller.canceled) {
+                        throw java.io.InterruptedIOException("Upload canceled")
+                    }
                     sink.write(buffer, 0, read)
                     uploaded += read
                     onProgress(uploaded.toFloat() / total)
@@ -87,11 +114,15 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
-            .header("User-Agent", "NoveoKotlin/0.4.0")
+            .header("User-Agent", userAgent)
+            .header("X-Noveo-Client", "kotlin")
+            .header("X-Noveo-Version", ir.hienob.noveo.BuildConfig.VERSION_NAME)
             .post(multipartBody)
             .build()
 
-        client.newCall(request).execute().use { response ->
+        val call = client.newCall(request)
+        controller.call = call
+        call.execute().use { response ->
             if (!response.isSuccessful) {
                 val errBody = response.body?.string().orEmpty()
                 error("Upload failed (${response.code}): $errBody")
@@ -361,7 +392,9 @@ class NoveoApi(
         val builder = Request.Builder()
             .url(url)
             .header("Origin", origin)
-            .header("User-Agent", "NoveoKotlin/0.4.5")
+            .header("User-Agent", userAgent)
+            .header("X-Noveo-Client", "kotlin")
+            .header("X-Noveo-Version", ir.hienob.noveo.BuildConfig.VERSION_NAME)
         if (session != null) {
             builder.header("X-User-ID", session.userId)
             builder.header("X-Auth-Token", session.token)
@@ -429,8 +462,25 @@ class NoveoApi(
         return SyncSnapshot(users.get(), online.get(), history.get() ?: JSONObject().put("chats", JSONArray()))
     }
 
-    private fun request(): Request = Request.Builder().url(wsUrl).header("Origin", origin).build()
-    private fun reconnect(session: Session): JSONObject = JSONObject().put("type", "reconnect").put("userId", session.userId).put("token", session.token).put("sessionId", session.sessionId)
+    private fun request(): Request = Request.Builder()
+        .url(wsUrl)
+        .header("Origin", origin)
+        .header("User-Agent", userAgent)
+        .header("X-Noveo-Client", "kotlin")
+        .header("X-Noveo-Version", ir.hienob.noveo.BuildConfig.VERSION_NAME)
+        .build()
+
+    private fun reconnect(session: Session): JSONObject = JSONObject()
+        .put("type", "reconnect")
+        .put("userId", session.userId)
+        .put("token", session.token)
+        .put("sessionId", session.sessionId)
+        .put("clientInfo", clientInfoJson())
+
+    private fun clientInfoJson(): JSONObject = JSONObject()
+        .put("client", "kotlin")
+        .put("platform", "android")
+        .put("version", ir.hienob.noveo.BuildConfig.VERSION_NAME)
     private fun parseStickerList(payload: JSONObject): List<SavedSticker> {
         val stickersArray = payload.optJSONArray("stickers") ?: JSONArray()
         return (0 until stickersArray.length()).mapNotNull { index ->

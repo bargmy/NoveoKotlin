@@ -278,6 +278,7 @@ fun NoveoRoot(
     onInstallUpdate: () -> Unit,
     onCheckUpdate: () -> Unit,
     onSetBetaUpdatesEnabled: (Boolean) -> Unit,
+    onSetDoubleTapReaction: (String) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     onRequestPermission: () -> Unit,
@@ -287,6 +288,7 @@ fun NoveoRoot(
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
     onDownloadFile: (ChatMessage) -> Unit,
+    onCancelUpload: () -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
     onAddSavedSticker: (ChatMessage) -> Unit
 ) {
@@ -367,6 +369,7 @@ fun NoveoRoot(
                         onInstallUpdate = onInstallUpdate,
                         onCheckUpdate = onCheckUpdate,
                         onSetBetaUpdatesEnabled = onSetBetaUpdatesEnabled,
+                        onSetDoubleTapReaction = onSetDoubleTapReaction,
                         onUpdateNotificationSettings = onUpdateNotificationSettings,
                         onRequestBatteryOptimization = onRequestBatteryOptimization,
                         onPlayAudio = onPlayAudio,
@@ -375,6 +378,7 @@ fun NoveoRoot(
                         onStopAudio = onStopAudio,
                         onSeekAudio = onSeekAudio,
                         onDownloadFile = onDownloadFile,
+                        onCancelUpload = onCancelUpload,
                         onSendSticker = onSendSticker,
                         onAddSavedSticker = onAddSavedSticker,
                         currentTheme = currentTheme,
@@ -612,7 +616,8 @@ private fun CaptchaModal(
                                 headers["X-Auth-Token"] = session.token
                             }
                             headers["X-Noveo-Client"] = "kotlin"
-                            headers["User-Agent"] = "NoveoKotlin/0.4.5"
+                            headers["X-Noveo-Version"] = ir.hienob.noveo.BuildConfig.VERSION_NAME
+                            headers["User-Agent"] = "NoveoKotlin/${ir.hienob.noveo.BuildConfig.VERSION_NAME}"
 
                             loadUrl(fullUrl, headers)
                         }

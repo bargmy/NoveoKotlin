@@ -54,6 +54,14 @@ class SessionStore(context: Context) {
             .apply()
     }
 
+    fun readDoubleTapReaction(): String = prefs.getString("double_tap_reaction", "❤") ?: "❤"
+
+    fun writeDoubleTapReaction(reaction: String) {
+        prefs.edit()
+            .putString("double_tap_reaction", reaction)
+            .apply()
+    }
+
     fun readCachedHomeState(): CachedHomeState? {
         val raw = prefs.getString("cached_home_state", null) ?: return null
         return runCatching {
