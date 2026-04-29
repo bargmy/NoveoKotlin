@@ -94,8 +94,8 @@ dependencies {
     implementation("com.airbnb.android:lottie-compose:6.4.0")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("io.livekit:livekit-android:2.10.0")
-    implementation("com.github.ajalt.timberkt:timberkt:1.5.1")
+    implementation("io.livekit:livekit-android:2.18.0")
+    implementation("com.github.ajalt:timberkt:1.5.1")
 
     implementation("androidx.media3:media3-exoplayer:1.5.0")
     implementation("androidx.media3:media3-ui:1.5.0")
