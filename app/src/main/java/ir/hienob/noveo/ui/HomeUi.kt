@@ -377,7 +377,6 @@ internal fun HomeScreen(
     onResumeAudio: () -> Unit,
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
-    doubleTapReaction: String,
     onDownloadFile: (ChatMessage) -> Unit,
     onCancelUpload: () -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
@@ -673,6 +672,7 @@ internal fun HomeScreen(
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
+                                onCancelUpload = onCancelUpload,
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
                                 lastKeyboardHeight = lastKeyboardHeight
@@ -764,6 +764,7 @@ internal fun HomeScreen(
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
+                                onCancelUpload = onCancelUpload,
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
                                 lastKeyboardHeight = lastKeyboardHeight,
@@ -1263,6 +1264,7 @@ private fun ChatPane(
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
     onDownloadFile: (ChatMessage) -> Unit,
+    onCancelUpload: () -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
     onAddSavedSticker: (ChatMessage) -> Unit,
     lastKeyboardHeight: Dp = 300.dp,
@@ -1873,6 +1875,7 @@ private fun MessageRow(
     onResumeAudio: () -> Unit,
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
+    doubleTapReaction: String,
     onDownloadFile: (ChatMessage) -> Unit,
     appUiState: AppUiState,
     isHighlighted: Boolean = false,
@@ -1932,7 +1935,7 @@ private fun MessageRow(
                 coroutineScope {
                     launch {
                         detectTapGestures(
-                            onDoubleTap = { onToggleReaction(message.id, "❤️") },
+                            onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
                             onLongPress = { bubbleBounds?.let(onOpenContextMenu) }
                         )
                     }
