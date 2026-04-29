@@ -198,6 +198,7 @@ import ir.hienob.noveo.data.MessageFileAttachment
 import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.data.SavedSticker
 import ir.hienob.noveo.data.Session
+import ir.hienob.noveo.data.SocketEvent
 import ir.hienob.noveo.data.UserSummary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
