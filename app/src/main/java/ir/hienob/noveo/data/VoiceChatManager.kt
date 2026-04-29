@@ -213,7 +213,7 @@ class VoiceChatManager(
         val r = room ?: return
         val participantsList = mutableListOf<String>()
         for (p in r.participants.values) {
-            val identityValue = p.identity?.value
+            val identityValue = p.identity?.value?.toString()
             if (identityValue != null && !participantsList.contains(identityValue)) {
                 participantsList.add(identityValue)
             }
