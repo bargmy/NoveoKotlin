@@ -88,7 +88,7 @@ class VoiceChatManager(
 
                     override fun onActiveSpeakersChanged(room: Room, speakers: List<Participant>) {
                         val activeIds = mutableListOf<String>()
-                        for (s in speakers) {
+                        speakers.forEach { s ->
                             s.identity?.value?.toString()?.let { activeIds.add(it) }
                         }
                         _state.value = _state.value.copy(activeSpeakers = activeIds)
@@ -215,7 +215,7 @@ class VoiceChatManager(
         r.localParticipant.identity?.value?.toString()?.let { participantsList.add(it) }
         
         // Include remote participants
-        for (p in r.remoteParticipants.values) {
+        r.remoteParticipants.values.forEach { p ->
             val identityValue = p.identity?.value?.toString()
             if (identityValue != null && !participantsList.contains(identityValue)) {
                 participantsList.add(identityValue)
