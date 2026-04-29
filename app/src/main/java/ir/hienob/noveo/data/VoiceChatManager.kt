@@ -89,7 +89,7 @@ class VoiceChatManager(
                     override fun onActiveSpeakersChanged(room: Room, speakers: List<Participant>) {
                         val activeIds = mutableListOf<String>()
                         for (s in speakers) {
-                            s.identity?.value?.let { activeIds.add(it) }
+                            s.identity?.value?.toString()?.let { activeIds.add(it) }
                         }
                         _state.value = _state.value.copy(activeSpeakers = activeIds)
                     }
@@ -111,7 +111,7 @@ class VoiceChatManager(
                         if (track is RemoteVideoTrack && publication.source == Track.Source.SCREEN_SHARE) {
                             _state.value = _state.value.copy(
                                 isScreenSharing = true,
-                                screenShareOwnerId = participant.identity?.value
+                                screenShareOwnerId = participant.identity?.value?.toString()
                             )
                         }
                         updateParticipants()
@@ -123,7 +123,7 @@ class VoiceChatManager(
                         participant: RemoteParticipant
                     ) {
                         if (track is RemoteVideoTrack && publication.source == Track.Source.SCREEN_SHARE) {
-                             if (_state.value.screenShareOwnerId == participant.identity?.value) {
+                             if (_state.value.screenShareOwnerId == participant.identity?.value?.toString()) {
                                  _state.value = _state.value.copy(
                                      isScreenSharing = false,
                                      screenShareOwnerId = null
@@ -212,11 +212,11 @@ class VoiceChatManager(
         val participantsList = mutableListOf<String>()
         
         // Include local participant
-        r.localParticipant.identity?.value?.let { participantsList.add(it) }
+        r.localParticipant.identity?.value?.toString()?.let { participantsList.add(it) }
         
         // Include remote participants
         for (p in r.remoteParticipants.values) {
-            val identityValue = p.identity?.value
+            val identityValue = p.identity?.value?.toString()
             if (identityValue != null && !participantsList.contains(identityValue)) {
                 participantsList.add(identityValue)
             }
