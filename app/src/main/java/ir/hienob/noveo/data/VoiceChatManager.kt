@@ -2,8 +2,8 @@ package ir.hienob.noveo.data
 
 import android.content.Context
 import io.livekit.android.LiveKit
+import io.livekit.android.events.RoomEvent
 import io.livekit.android.room.Room
-import io.livekit.android.room.RoomListener
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.LocalAudioTrack
@@ -15,6 +15,8 @@ import io.livekit.android.room.track.TrackPublication
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import org.json.JSONObject
 import timber.log.Timber
 
@@ -73,66 +75,51 @@ class VoiceChatManager(
                 val r: Room = LiveKit.create(context)
                 room = r
                 
-                r.listener = object : RoomListener {
-                    override fun onDisconnect(room: Room, error: Exception?) {
-                        _state.value = VoiceChatState(connectionState = VoiceConnectionState.IDLE)
-                    }
-
-                    override fun onParticipantConnected(room: Room, participant: RemoteParticipant) {
-                        updateParticipants()
-                    }
-
-                    override fun onParticipantDisconnected(room: Room, participant: RemoteParticipant) {
-                        updateParticipants()
-                    }
-
-                    override fun onActiveSpeakersChanged(room: Room, speakers: List<Participant>) {
-                        val activeIds = mutableListOf<String>()
-                        for (s in speakers) {
-                            s.identity?.value?.toString()?.let { activeIds.add(it) }
+                r.events.onEach { event ->
+                    when (event) {
+                        is RoomEvent.Disconnected -> {
+                            _state.value = VoiceChatState(connectionState = VoiceConnectionState.IDLE)
                         }
-                        _state.value = _state.value.copy(activeSpeakers = activeIds)
-                    }
-
-                    override fun onReconnecting(room: Room, error: Exception?) {
-                        _state.value = _state.value.copy(connectionState = VoiceConnectionState.RECONNECTING)
-                    }
-
-                    override fun onReconnected(room: Room) {
-                        _state.value = _state.value.copy(connectionState = VoiceConnectionState.CONNECTED)
-                        updateParticipants()
-                    }
-
-                    override fun onTrackSubscribed(
-                        track: Track,
-                        publication: TrackPublication,
-                        participant: RemoteParticipant
-                    ) {
-                        if (track is RemoteVideoTrack && publication.source == Track.Source.SCREEN_SHARE) {
-                            _state.value = _state.value.copy(
-                                isScreenSharing = true,
-                                screenShareOwnerId = participant.identity?.value?.toString()
-                            )
+                        is RoomEvent.ParticipantConnected -> {
+                            updateParticipants()
                         }
-                        updateParticipants()
-                    }
-
-                    override fun onTrackUnsubscribed(
-                        track: Track,
-                        publication: TrackPublication,
-                        participant: RemoteParticipant
-                    ) {
-                        if (track is RemoteVideoTrack && publication.source == Track.Source.SCREEN_SHARE) {
-                             if (_state.value.screenShareOwnerId == participant.identity?.value?.toString()) {
-                                 _state.value = _state.value.copy(
-                                     isScreenSharing = false,
-                                     screenShareOwnerId = null
-                                 )
-                             }
+                        is RoomEvent.ParticipantDisconnected -> {
+                            updateParticipants()
                         }
-                        updateParticipants()
+                        is RoomEvent.ActiveSpeakersChanged -> {
+                            val activeIds = event.speakers.mapNotNull { it.identity?.value?.toString() }
+                            _state.value = _state.value.copy(activeSpeakers = activeIds)
+                        }
+                        is RoomEvent.Reconnecting -> {
+                            _state.value = _state.value.copy(connectionState = VoiceConnectionState.RECONNECTING)
+                        }
+                        is RoomEvent.Reconnected -> {
+                            _state.value = _state.value.copy(connectionState = VoiceConnectionState.CONNECTED)
+                            updateParticipants()
+                        }
+                        is RoomEvent.TrackSubscribed -> {
+                            if (event.track is RemoteVideoTrack && event.publication.source == Track.Source.SCREEN_SHARE) {
+                                _state.value = _state.value.copy(
+                                    isScreenSharing = true,
+                                    screenShareOwnerId = event.participant.identity?.value?.toString()
+                                )
+                            }
+                            updateParticipants()
+                        }
+                        is RoomEvent.TrackUnsubscribed -> {
+                            if (event.track is RemoteVideoTrack && event.publication.source == Track.Source.SCREEN_SHARE) {
+                                 if (_state.value.screenShareOwnerId == event.participant.identity?.value?.toString()) {
+                                     _state.value = _state.value.copy(
+                                         isScreenSharing = false,
+                                         screenShareOwnerId = null
+                                     )
+                                 }
+                            }
+                            updateParticipants()
+                        }
+                        else -> {}
                     }
-                }
+                }.launchIn(scope)
 
                 r.connect(serverUrl, token)
                 
@@ -199,8 +186,8 @@ class VoiceChatManager(
         val remoteParticipants = r.remoteParticipants
         for (participant in remoteParticipants.values) {
             val publications = participant.audioTrackPublications
-            for (pub in publications) {
-                val track: Track? = pub.track
+            for (pubPair in publications) {
+                val track = pubPair.second
                 if (track is RemoteAudioTrack) {
                     // track.enabled = !nextDeafened
                 }
