@@ -4516,6 +4516,7 @@ private fun GlobalAudioMiniPlayer(
 }
 
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VoiceCallOverlay(
     state: ir.hienob.noveo.data.VoiceChatState,
