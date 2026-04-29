@@ -195,13 +195,11 @@ class VoiceChatManager(
 
     private fun setDeafened(nextDeafened: Boolean) {
         // In LiveKit Android, deafening usually involves muting all remote audio tracks
-        room?.participants?.values?.forEach { participant ->
-            if (participant is RemoteParticipant) {
-                participant.audioTrackPublications.forEach { pub ->
-                    pub.track?.let { track ->
-                        if (track is RemoteAudioTrack) {
-                            // track.enabled = !nextDeafened
-                        }
+        room?.remoteParticipants?.values?.forEach { participant ->
+            participant.audioTrackPublications.forEach { pub ->
+                pub.track?.let { track: Track ->
+                    if (track is RemoteAudioTrack) {
+                        // track.enabled = !nextDeafened
                     }
                 }
             }
@@ -212,8 +210,13 @@ class VoiceChatManager(
     private fun updateParticipants() {
         val r = room ?: return
         val participantsList = mutableListOf<String>()
-        for (p in r.participants.values) {
-            val identityValue = p.identity?.value?.toString()
+        
+        // Include local participant
+        r.localParticipant.identity?.value?.let { participantsList.add(it) }
+        
+        // Include remote participants
+        for (p in r.remoteParticipants.values) {
+            val identityValue = p.identity?.value
             if (identityValue != null && !participantsList.contains(identityValue)) {
                 participantsList.add(identityValue)
             }
