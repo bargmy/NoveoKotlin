@@ -61,6 +61,9 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -4221,8 +4224,8 @@ private fun StickerPicker(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
             
-            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(4),
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(4),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
