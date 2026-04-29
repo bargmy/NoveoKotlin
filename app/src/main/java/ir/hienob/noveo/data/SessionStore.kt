@@ -46,6 +46,14 @@ class SessionStore(context: Context) {
             .apply()
     }
 
+    fun readBetaUpdatesEnabled(): Boolean = prefs.getBoolean("beta_updates_enabled", false)
+
+    fun writeBetaUpdatesEnabled(enabled: Boolean) {
+        prefs.edit()
+            .putBoolean("beta_updates_enabled", enabled)
+            .apply()
+    }
+
     fun readCachedHomeState(): CachedHomeState? {
         val raw = prefs.getString("cached_home_state", null) ?: return null
         return runCatching {

@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.max
 
 sealed interface StartupState {
     data object Splash : StartupState
@@ -78,7 +79,16 @@ data class AppUiState(
     val savedStickers: List<SavedSticker> = emptyList(),
     val currentAudioMessage: ChatMessage? = null,
     val isAudioPlaying: Boolean = false,
-    val audioProgress: Float = 0f
+    val audioProgress: Float = 0f,
+    val attachmentDownloads: Map<String, AttachmentDownloadState> = emptyMap(),
+    val betaUpdatesEnabled: Boolean = false
+)
+
+data class AttachmentDownloadState(
+    val localPath: String? = null,
+    val isDownloading: Boolean = false,
+    val progress: Float = 0f,
+    val error: String? = null
 )
 
 data class PendingAttachment(
@@ -123,6 +133,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var audioProgressJob: Job? = null
 
     init {
+        _uiState.value = _uiState.value.copy(betaUpdatesEnabled = sessionStore.readBetaUpdatesEnabled())
         restoreSession()
         checkForUpdate()
         checkBatteryOptimization()
@@ -230,8 +241,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun downloadFile(message: ChatMessage) {
         val file = message.content.file ?: return
         val url = normalizeUrl(file.url) ?: return
-        val context = getApplication<Application>()
-        
+        val key = file.downloadKey()
+        val targetFile = getAttachmentFile(file)
+        val shouldOpenWhenDone = !(file.isImage() || file.isVideo())
+
+        if (targetFile.exists()) {
+            updateAttachmentDownload(key, AttachmentDownloadState(localPath = targetFile.absolutePath, progress = 1f))
+            if (shouldOpenWhenDone) {
+                openDownloadedFile(targetFile, file.type)
+            }
+            return
+        }
+
+        _uiState.value.attachmentDownloads[key]?.let { existing ->
+            if (existing.isDownloading) return
+            if (!existing.localPath.isNullOrBlank() && File(existing.localPath).exists()) {
+                if (shouldOpenWhenDone) {
+                    openDownloadedFile(File(existing.localPath), file.type)
+                }
+                return
+            }
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val client = OkHttpClient()
@@ -239,29 +270,53 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw Exception("Download failed")
                     val body = response.body ?: throw Exception("Empty body")
-                    
-                    val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                    val localFile = File(downloadsDir, file.name)
-                    
+
+                    val total = max(body.contentLength(), 1L)
+                    targetFile.parentFile?.mkdirs()
+                    withContext(Dispatchers.Main) {
+                        updateAttachmentDownload(
+                            key = key,
+                            state = AttachmentDownloadState(isDownloading = true, progress = 0f)
+                        )
+                    }
+
                     body.byteStream().use { input ->
-                        FileOutputStream(localFile).use { output ->
-                            input.copyTo(output)
+                        FileOutputStream(targetFile).use { output ->
+                            val buffer = ByteArray(8192)
+                            var current = 0L
+                            var read: Int
+                            while (input.read(buffer).also { read = it } != -1) {
+                                output.write(buffer, 0, read)
+                                current += read
+                                withContext(Dispatchers.Main) {
+                                    updateAttachmentDownload(
+                                        key = key,
+                                        state = AttachmentDownloadState(
+                                            isDownloading = true,
+                                            progress = current.toFloat() / total.toFloat()
+                                        )
+                                    )
+                                }
+                            }
                         }
                     }
-                    
+
                     withContext(Dispatchers.Main) {
-                        // Notify user or open file
-                        val uri = FileProvider.getUriForFile(context, "ir.hienob.noveo.updates.provider", localFile)
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        updateAttachmentDownload(
+                            key = key,
+                            state = AttachmentDownloadState(localPath = targetFile.absolutePath, progress = 1f)
+                        )
+                        if (shouldOpenWhenDone) {
+                            openDownloadedFile(targetFile, file.type)
                         }
-                        context.startActivity(Intent.createChooser(intent, "Open file").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                 }
             }.onFailure {
                 withContext(Dispatchers.Main) {
+                    updateAttachmentDownload(
+                        key = key,
+                        state = AttachmentDownloadState(error = it.message)
+                    )
                     _uiState.value = _uiState.value.copy(error = "Download failed: ${it.message}")
                 }
             }
@@ -303,6 +358,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         sessionStore.writeNotificationSettings(settings)
     }
 
+    fun setBetaUpdatesEnabled(enabled: Boolean) {
+        sessionStore.writeBetaUpdatesEnabled(enabled)
+        _uiState.value = _uiState.value.copy(
+            betaUpdatesEnabled = enabled,
+            updateInfo = null,
+            isCheckingUpdate = false
+        )
+        checkForUpdate()
+    }
+
     fun checkForUpdate(manual: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             val currentVersion = ir.hienob.noveo.BuildConfig.VERSION_NAME
@@ -324,21 +389,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            val version = updateJson.optString("version")
-            val url = updateJson.optString("url")
+            val releaseVersion = updateJson.optString("version")
+            val releaseUrl = updateJson.optString("url")
+            val betaVersion = updateJson.optString("beta_version")
+            val betaUrl = updateJson.optString("beta_url")
 
-            if (version > currentVersion) {
-                val apkFile = File(getApplication<Application>().filesDir, "update-$version.apk")
+            val candidates = buildList {
+                if (releaseVersion.isNotBlank() && releaseUrl.isNotBlank()) {
+                    add(UpdateInfo(version = releaseVersion, url = releaseUrl))
+                }
+                if (_uiState.value.betaUpdatesEnabled && betaVersion.isNotBlank() && betaUrl.isNotBlank()) {
+                    add(UpdateInfo(version = betaVersion, url = betaUrl))
+                }
+            }
+            val nextUpdate = candidates
+                .filter { compareVersions(it.version, currentVersion) > 0 }
+                .maxWithOrNull(Comparator { left, right -> compareVersions(left.version, right.version) })
+
+            if (nextUpdate != null) {
+                val apkFile = File(getApplication<Application>().filesDir, "update-${nextUpdate.version}.apk")
                 withContext(Dispatchers.Main) {
                     _uiState.value = _uiState.value.copy(
                         isCheckingUpdate = false,
-                        updateInfo = UpdateInfo(
-                            version = version,
-                            url = url,
+                        updateInfo = nextUpdate.copy(
                             isAvailable = true,
                             isDownloaded = apkFile.exists(),
                             localPath = if (apkFile.exists()) apkFile.absolutePath else null,
-                            isDismissed = false // Re-show bubble if manual check
+                            isDismissed = false
                         )
                     )
                 }
@@ -551,15 +628,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun logout() {
         val languageCode = _uiState.value.languageCode
         val notificationSettings = _uiState.value.notificationSettings
+        val betaUpdatesEnabled = _uiState.value.betaUpdatesEnabled
         getApplication<Application>().stopService(Intent(getApplication(), NoveoNotificationService::class.java))
         socketResyncJob?.cancel()
         selectedChatRefreshJob?.cancel()
         messageCacheByChat.clear()
         sessionStore.clear()
+        sessionStore.writeNotificationSettings(notificationSettings)
+        sessionStore.writeBetaUpdatesEnabled(betaUpdatesEnabled)
         _uiState.value = AppUiState(
             startupState = StartupState.Auth,
             languageCode = languageCode,
-            notificationSettings = notificationSettings
+            notificationSettings = notificationSettings,
+            betaUpdatesEnabled = betaUpdatesEnabled
         )
     }
 
@@ -1467,6 +1548,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
         )
     }
+
+    private fun getAttachmentFile(file: MessageFileAttachment): File {
+        val extension = file.name.substringAfterLast('.', "").ifBlank {
+            when {
+                file.isVideo() -> "mp4"
+                file.type.equals("image/gif", true) -> "gif"
+                file.type.equals("image/webp", true) -> "webp"
+                file.type.equals("image/jpeg", true) -> "jpg"
+                else -> "bin"
+            }
+        }
+        val safeName = file.name
+            .substringBeforeLast('.', file.name)
+            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+            .take(40)
+            .ifBlank { "attachment" }
+        return File(getApplication<Application>().filesDir, "attachments/$safeName-${file.downloadKey()}.$extension")
+    }
+
+    private fun openDownloadedFile(file: File, mimeTypeHint: String) {
+        val context = getApplication<Application>()
+        val uri = FileProvider.getUriForFile(context, "ir.hienob.noveo.updates.provider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, context.contentResolver.getType(uri) ?: mimeTypeHint.ifBlank { "*/*" })
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(Intent.createChooser(intent, "Open file").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    private fun updateAttachmentDownload(key: String, state: AttachmentDownloadState) {
+        _uiState.value = _uiState.value.copy(
+            attachmentDownloads = _uiState.value.attachmentDownloads.toMutableMap().apply {
+                this[key] = state
+            }
+        )
+    }
 }
 
 private fun mergeMessages(existing: List<ChatMessage>, incoming: List<ChatMessage>): List<ChatMessage> {
@@ -1512,6 +1630,18 @@ private fun mergeMessages(existing: List<ChatMessage>, incoming: List<ChatMessag
         }
     }
     return dedupeMergedMessages(merged).sortedBy { it.timestamp }
+}
+
+private fun compareVersions(left: String, right: String): Int {
+    val leftParts = left.split(Regex("[^0-9]+")).filter { it.isNotBlank() }.map { it.toIntOrNull() ?: 0 }
+    val rightParts = right.split(Regex("[^0-9]+")).filter { it.isNotBlank() }.map { it.toIntOrNull() ?: 0 }
+    val size = max(leftParts.size, rightParts.size)
+    for (index in 0 until size) {
+        val leftValue = leftParts.getOrElse(index) { 0 }
+        val rightValue = rightParts.getOrElse(index) { 0 }
+        if (leftValue != rightValue) return leftValue.compareTo(rightValue)
+    }
+    return 0
 }
 
 private fun findPendingReplacementIndex(messages: List<ChatMessage>, incoming: ChatMessage): Int {

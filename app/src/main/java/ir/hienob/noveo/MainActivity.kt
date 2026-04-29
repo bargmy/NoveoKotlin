@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
                 onDownloadUpdate = viewModel::downloadUpdate,
                 onInstallUpdate = viewModel::installUpdate,
                 onCheckUpdate = { viewModel.checkForUpdate(manual = true) },
+                onSetBetaUpdatesEnabled = viewModel::setBetaUpdatesEnabled,
                 onUpdateNotificationSettings = { viewModel.updateNotificationSettings(it) },
                 onRequestBatteryOptimization = { viewModel.requestDisableBatteryOptimization() },
                 onRequestPermission = {

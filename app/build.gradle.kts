@@ -4,6 +4,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val appVersionCode = providers.gradleProperty("NOVEO_VERSION_CODE").orNull?.toIntOrNull() ?: 12
+val appVersionName = providers.gradleProperty("NOVEO_VERSION_NAME").orNull ?: "0.4.5"
+
 android {
     namespace = "ir.hienob.noveo"
     compileSdk = 35
@@ -12,8 +15,8 @@ android {
         applicationId = "ir.hienob.noveo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.4.5"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -88,6 +91,7 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
     implementation("io.coil-kt.coil3:coil-gif:3.0.4")
+    implementation("com.airbnb.android:lottie-compose:6.4.0")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 

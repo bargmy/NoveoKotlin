@@ -52,7 +52,13 @@ data class MessageFileAttachment(
     val type: String = "",
     val size: Long = 0L
 ) {
-    fun isImage(): Boolean = type.startsWith("image/") || name.endsWith(".jpg", true) || name.endsWith(".png", true) || name.endsWith(".gif", true) || name.endsWith(".webp", true)
+    fun isImage(): Boolean =
+        type.startsWith("image/") ||
+            name.endsWith(".jpg", true) ||
+            name.endsWith(".jpeg", true) ||
+            name.endsWith(".png", true) ||
+            name.endsWith(".gif", true) ||
+            name.endsWith(".webp", true)
     fun isVideo(): Boolean =
         type.startsWith("video/") ||
             name.endsWith(".mp4", true) ||
@@ -60,14 +66,24 @@ data class MessageFileAttachment(
             name.endsWith(".mov", true) ||
             name.endsWith(".ogg", true)
     fun isAudio(): Boolean = type.startsWith("audio/") || name.endsWith(".mp3", true) || name.endsWith(".m4a", true) || name.endsWith(".wav", true) || name.endsWith(".ogg", true)
+    fun isTgsSticker(): Boolean =
+        type.equals("application/x-tgsticker", true) ||
+            name.endsWith(".tgs", true) ||
+            url.contains(".tgs", true)
     fun isSticker(): Boolean {
         val lowerName = name.lowercase()
-        return lowerName == "sticker.png" ||
+        return isTgsSticker() ||
+            lowerName == "sticker.png" ||
             lowerName == "sticker.gif" ||
             lowerName == "sticker.webp" ||
             lowerName == "sticker.jpg" ||
             lowerName == "sticker.jpeg" ||
-            lowerName == "sticker.tgs"
+            url.contains("/stickers/", true)
+    }
+
+    fun downloadKey(): String {
+        val source = "${url.trim().lowercase()}|${name.trim().lowercase()}|${type.trim().lowercase()}"
+        return source.hashCode().toUInt().toString(16)
     }
 }
 
@@ -93,6 +109,7 @@ data class MessageContent(
     fun previewText(): String {
         return when {
             !text.isNullOrBlank() -> text
+            file?.isSticker() == true -> "Sticker"
             file != null -> if (file.isImage()) "Photo" else if (file.isVideo()) "Video" else "File"
             !poll.isNullOrBlank() -> "Poll"
             !theme.isNullOrBlank() -> "Theme"

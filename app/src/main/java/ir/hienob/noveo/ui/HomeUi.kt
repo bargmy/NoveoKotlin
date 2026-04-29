@@ -80,6 +80,7 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
@@ -181,6 +182,7 @@ import androidx.compose.ui.text.lerp as lerpTextStyle
 import androidx.compose.ui.util.lerp as lerpFloat
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
+import java.io.File
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -197,9 +199,16 @@ import ir.hienob.noveo.data.UserSummary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
+import kotlin.math.roundToInt
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
-private const val CLIENT_VERSION = "v0.4.5 Kotlin"
+private val CLIENT_VERSION: String
+    get() = "v${ir.hienob.noveo.BuildConfig.VERSION_NAME} Kotlin"
+
+private data class SelectedMediaAttachment(
+    val attachment: MessageFileAttachment,
+    val localPath: String
+)
 
 private fun formatLastSeen(lastSeen: Long?, strings: NoveoStrings): String {
     if (lastSeen == null || lastSeen <= 0) return strings.lastSeenRecently
@@ -340,6 +349,7 @@ internal fun HomeScreen(
     onDownloadUpdate: () -> Unit,
     onInstallUpdate: () -> Unit,
     onCheckUpdate: () -> Unit,
+    onSetBetaUpdatesEnabled: (Boolean) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     onPlayAudio: (ChatMessage) -> Unit,
@@ -366,7 +376,7 @@ internal fun HomeScreen(
     var settingsSection by rememberSaveable { mutableStateOf(SettingsSection.MENU) }
     var profileUserId by rememberSaveable { mutableStateOf<String?>(null) }
     var showGroupInfo by rememberSaveable { mutableStateOf(false) }
-    var selectedMediaAttachment by remember { mutableStateOf<MessageFileAttachment?>(null) }
+    var selectedMediaAttachment by remember { mutableStateOf<SelectedMediaAttachment?>(null) }
     var animateModalEntrance by remember { mutableStateOf(false) }
 
     val keyboardHeight = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
@@ -377,17 +387,19 @@ internal fun HomeScreen(
         }
     }
 
-    val onMediaClick = { attachment: MessageFileAttachment ->
-        if (attachment.isImage() || attachment.isVideo()) {
-            selectedMediaAttachment = attachment
+    val onMediaClick = { message: ChatMessage, attachment: MessageFileAttachment ->
+        val localPath = state.attachmentDownloads[attachment.downloadKey()]?.localPath
+        if (!localPath.isNullOrBlank() && (attachment.isImage() || attachment.isVideo())) {
+            selectedMediaAttachment = SelectedMediaAttachment(attachment = attachment, localPath = localPath)
+        } else if (attachment.isImage() || attachment.isVideo()) {
+            onDownloadFile(message)
         } else {
             val url = attachment.url.normalizeNoveoUrl()
             if (url != null) {
                 try {
                     val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
                     context.startActivity(intent)
-                } catch (e: Exception) {
-                    // Fallback or ignore
+                } catch (_: Exception) {
                 }
             }
         }
@@ -812,7 +824,8 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
 
         if (selectedMediaAttachment != null) {
             FullscreenMediaModal(
-                attachment = selectedMediaAttachment!!,
+                attachment = selectedMediaAttachment!!.attachment,
+                localPath = selectedMediaAttachment!!.localPath,
                 onDismiss = { selectedMediaAttachment = null }
             )
         }
@@ -832,6 +845,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 onDeleteAccount = onDeleteAccount,
                 onSetLanguage = onSetLanguage,
                 onCheckUpdate = onCheckUpdate,
+                onSetBetaUpdatesEnabled = onSetBetaUpdatesEnabled,
                 onUpdateNotificationSettings = onUpdateNotificationSettings,
                 onRequestBatteryOptimization = onRequestBatteryOptimization,
                 onRequestPermission = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
@@ -1207,7 +1221,7 @@ private fun ChatPane(
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
     onLoadOlder: () -> Unit,
-    onMediaClick: (MessageFileAttachment) -> Unit,
+    onMediaClick: (ChatMessage, MessageFileAttachment) -> Unit,
     onAttachFile: (android.net.Uri) -> Unit,
     onRemoveAttachment: () -> Unit,
     onOpenProfile: (String) -> Unit,
@@ -1274,8 +1288,8 @@ private fun ChatPane(
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            totalItems - lastVisibleItem > 5
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            totalItems > 0 && lastVisibleItem >= 0 && (totalItems - 1 - lastVisibleItem) >= 3
         }
     }
 
@@ -1312,6 +1326,7 @@ private fun ChatPane(
     var showAttachPopup by remember { mutableStateOf(false) }
     var showStickers by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+    val imeVisible = WindowInsets.isImeVisible
 
 
     val canLoadOlder = selectedChat?.hasMoreHistory == true && !state.loading
@@ -1320,6 +1335,12 @@ private fun ChatPane(
     LaunchedEffect(firstVisibleItemIndex) {
         if (firstVisibleItemIndex <= 2 && canLoadOlder && state.messages.isNotEmpty()) {
             onLoadOlder()
+        }
+    }
+
+    LaunchedEffect(imeVisible) {
+        if (imeVisible && showStickers) {
+            showStickers = false
         }
     }
 
@@ -1336,8 +1357,11 @@ private fun ChatPane(
         if (state.messages.isEmpty()) return@LaunchedEffect
         val newLastId = state.messages.last().id
         if (lastMessageId.value != null && newLastId != lastMessageId.value) {
-            // New message arrived
-            listState.animateScrollToItem(state.messages.lastIndex)
+            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: state.messages.lastIndex
+            val itemsFromBottom = state.messages.lastIndex - lastVisibleItem
+            if (itemsFromBottom < 3) {
+                listState.animateScrollToItem(state.messages.lastIndex)
+            }
         }
         lastMessageId.value = newLastId
     }
@@ -1810,7 +1834,7 @@ private fun MessageRow(
     hasTail: Boolean,
     isGroupChat: Boolean,
     currentUserId: String?,
-    onMediaClick: (MessageFileAttachment) -> Unit,
+    onMediaClick: (ChatMessage, MessageFileAttachment) -> Unit,
     onOpenProfile: (String) -> Unit,
     repliedMessage: ChatMessage? = null,
     onReply: () -> Unit,
@@ -2003,17 +2027,25 @@ private fun MessageRow(
                                 }
                             }
 
-                            SubcomposeAsyncImage(
-                                model = normalizedUrl,
-                                contentDescription = "sticker",
-                                modifier = Modifier.size(160.dp),
-                                contentScale = ContentScale.Fit,
-                                loading = {
-                                    Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
-                                        androidx.compose.material3.CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                            if (file.isTgsSticker()) {
+                                TgsSticker(
+                                    url = normalizedUrl,
+                                    modifier = Modifier.size(160.dp),
+                                    tint = Color.White
+                                )
+                            } else {
+                                SubcomposeAsyncImage(
+                                    model = normalizedUrl,
+                                    contentDescription = "sticker",
+                                    modifier = Modifier.size(160.dp),
+                                    contentScale = ContentScale.Fit,
+                                    loading = {
+                                        Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
+                                            androidx.compose.material3.CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
 
                             if (message.reactions.isNotEmpty()) {
                                 Spacer(Modifier.height(4.dp))
@@ -2187,8 +2219,10 @@ private fun MessageRow(
                                 } else {
                                     MessageAttachment(
                                         file = file,
+                                        downloadState = appUiState.attachmentDownloads[file.downloadKey()],
                                         ownMessage = ownMessage,
-                                        onClick = { onMediaClick(file) },
+                                        onClick = { onMediaClick(message, file) },
+                                        onDownloadClick = { onDownloadFile(message) },
                                         tgColors = tgColors
                                     )
                                 }
@@ -2387,12 +2421,18 @@ private fun PendingMessageBubble(text: String) {
 @Composable
 private fun MessageAttachment(
     file: MessageFileAttachment,
+    downloadState: ir.hienob.noveo.app.AttachmentDownloadState?,
     ownMessage: Boolean,
     onClick: () -> Unit,
+    onDownloadClick: () -> Unit,
     tgColors: TelegramThemeColors = telegramColors()
 ) {
-    val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
-    
+    val localFile = downloadState?.localPath?.let(::File)?.takeIf { it.exists() }
+    val isDownloaded = localFile != null
+    val isDownloading = downloadState?.isDownloading == true
+    val progress = downloadState?.progress ?: 0f
+    val overlayTint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
+
     if (file.isImage()) {
         Card(
             shape = RoundedCornerShape(10.dp),
@@ -2400,22 +2440,123 @@ private fun MessageAttachment(
                 .padding(bottom = 2.dp)
                 .fillMaxWidth()
                 .heightIn(max = 340.dp)
-                .clickable { normalizedUrl?.let { onClick() } },
+                .clickable { if (isDownloaded) onClick() else onDownloadClick() },
             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
         ) {
-            SubcomposeAsyncImage(
-                model = normalizedUrl,
-                contentDescription = file.name,
-                modifier = Modifier.fillMaxWidth(),
-                contentScale = ContentScale.FillWidth,
-                loading = {
-                    Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-                        androidx.compose.material3.CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp), color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingLink)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 180.dp)
+                    .background((if (ownMessage) tgColors.outgoingBubble else tgColors.incomingBubble).copy(alpha = 0.68f))
+            ) {
+                if (isDownloaded) {
+                    SubcomposeAsyncImage(
+                        model = localFile,
+                        contentDescription = file.name,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentScale = ContentScale.FillWidth,
+                        loading = {
+                            Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp), color = overlayTint)
+                            }
+                        }
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Description,
+                            contentDescription = null,
+                            tint = overlayTint.copy(alpha = 0.4f),
+                            modifier = Modifier.size(44.dp)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = file.name.ifBlank { "Image" },
+                            color = overlayTint.copy(alpha = 0.75f),
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
-            )
+                AttachmentDownloadOverlay(
+                    isVideo = false,
+                    isDownloaded = isDownloaded,
+                    isDownloading = isDownloading,
+                    progress = progress,
+                    tint = overlayTint,
+                    onDownloadClick = onDownloadClick,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+        }
+    } else if (file.isVideo()) {
+        Surface(
+            modifier = Modifier
+                .padding(bottom = 2.dp)
+                .fillMaxWidth()
+                .heightIn(min = 180.dp)
+                .clickable { if (isDownloaded) onClick() else onDownloadClick() },
+            color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.08f),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                tgColors.incomingBubble.copy(alpha = 0.85f),
+                                tgColors.chatSurface.copy(alpha = 0.95f)
+                            )
+                        )
+                    )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.PlayArrow,
+                        contentDescription = null,
+                        tint = overlayTint.copy(alpha = 0.8f),
+                        modifier = Modifier.size(44.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = file.name,
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText
+                    )
+                    Text(
+                        text = file.type.uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingText).copy(alpha = 0.6f)
+                    )
+                }
+                AttachmentDownloadOverlay(
+                    isVideo = true,
+                    isDownloaded = isDownloaded,
+                    isDownloading = isDownloading,
+                    progress = progress,
+                    tint = overlayTint,
+                    onDownloadClick = onDownloadClick,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
         }
     } else {
+        val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
         Surface(
             modifier = Modifier
                 .padding(bottom = 2.dp)
@@ -2436,7 +2577,7 @@ private fun MessageAttachment(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (file.isVideo()) Icons.Outlined.PlayArrow else Icons.Outlined.Description,
+                        imageVector = Icons.Outlined.Description,
                         contentDescription = null,
                         tint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
                     )
@@ -2458,6 +2599,77 @@ private fun MessageAttachment(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AttachmentDownloadOverlay(
+    isVideo: Boolean,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    progress: Float,
+    tint: Color,
+    onDownloadClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (isDownloaded && !isVideo) return
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = Color.Black.copy(alpha = 0.42f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(68.dp)
+                    .clickable(enabled = !isDownloading && !isDownloaded) { onDownloadClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                when {
+                    isDownloading -> DownloadProgressGlyph(progress = progress, tint = tint)
+                    isDownloaded && isVideo -> Icon(
+                        imageVector = Icons.Outlined.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(34.dp)
+                    )
+                    else -> Icon(
+                        imageVector = Icons.Outlined.Download,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+            }
+        }
+
+        if (isDownloading) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "${(progress.coerceIn(0f, 1f) * 100).roundToInt()}%",
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun DownloadProgressGlyph(progress: Float, tint: Color) {
+    val clamped = progress.coerceIn(0f, 1f)
+    Canvas(modifier = Modifier.size(34.dp)) {
+        val stroke = 5.dp.toPx()
+        val gap = (1f - clamped) * 260f
+        drawArc(
+            color = tint,
+            startAngle = -90f + (gap / 2f),
+            sweepAngle = 360f - gap,
+            useCenter = false,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
+        )
     }
 }
 
@@ -2598,6 +2810,7 @@ private fun SettingsModal(
     onDeleteAccount: (String) -> Unit,
     onSetLanguage: (String) -> Unit,
     onCheckUpdate: () -> Unit,
+    onSetBetaUpdatesEnabled: (Boolean) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     onRequestPermission: () -> Unit
@@ -2630,7 +2843,7 @@ private fun SettingsModal(
                     SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings)
                     SettingsSection.PROFILE -> SettingsProfileSection(strings, me, onUpdateProfile)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, currentTheme, onThemeChange, onRequestBatteryOptimization)
+                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, currentTheme, onThemeChange, onRequestBatteryOptimization)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection(strings)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
                     SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings, onRequestPermission)
@@ -2785,6 +2998,7 @@ private fun SettingsPreferencesSection(
     onSectionChange: (SettingsSection) -> Unit,
     onSetLanguage: (String) -> Unit,
     onCheckUpdate: () -> Unit,
+    onSetBetaUpdatesEnabled: (Boolean) -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
     onRequestBatteryOptimization: () -> Unit
@@ -2818,6 +3032,29 @@ private fun SettingsPreferencesSection(
             else -> strings.checkForUpdates
         }
         SettingsRow(updateText, Icons.Outlined.History) { onCheckUpdate() }
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSetBetaUpdatesEnabled(!state.betaUpdatesEnabled) }
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(strings.betaUpdates, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(strings.betaUpdatesBody, style = MaterialTheme.typography.bodySmall)
+                }
+                androidx.compose.material3.Switch(
+                    checked = state.betaUpdatesEnabled,
+                    onCheckedChange = onSetBetaUpdatesEnabled
+                )
+            }
+        }
 
         if (state.isBatteryOptimized) {
             Spacer(Modifier.height(8.dp))
@@ -3735,20 +3972,23 @@ private fun String?.normalizeNoveoUrl(): String? {
 
 @OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-private fun FullscreenMediaModal(attachment: MessageFileAttachment, onDismiss: () -> Unit) {
+private fun FullscreenMediaModal(attachment: MessageFileAttachment, localPath: String, onDismiss: () -> Unit) {
     val normalizedUrl = remember(attachment.url) { attachment.url.normalizeNoveoUrl() }
     val context = LocalContext.current
     val isVideo = remember(attachment) { attachment.isVideo() }
+    val mediaUri = remember(localPath, normalizedUrl) {
+        Uri.fromFile(File(localPath)).takeIf { localPath.isNotBlank() } ?: normalizedUrl?.let(Uri::parse)
+    }
 
     Surface(
         color = Color.Black,
         modifier = Modifier.fillMaxSize()
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (isVideo && normalizedUrl != null) {
+            if (isVideo && mediaUri != null) {
                 val exoPlayer = remember {
                     androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
-                        setMediaItem(androidx.media3.common.MediaItem.fromUri(android.net.Uri.parse(normalizedUrl)))
+                        setMediaItem(androidx.media3.common.MediaItem.fromUri(mediaUri))
                         prepare()
                         playWhenReady = true
                     }
@@ -3768,7 +4008,7 @@ private fun FullscreenMediaModal(attachment: MessageFileAttachment, onDismiss: (
                 )
             } else {
                 AsyncImage(
-                    model = normalizedUrl,
+                    model = File(localPath),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit
@@ -3873,52 +4113,67 @@ private fun StickerPicker(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(displayHeight),
-        color = tgColors.chatSurface
+            .height(displayHeight)
+            .navigationBarsPadding(),
+        color = tgColors.incomingBubble,
+        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
     ) {
         Column {
-            TabRow(
-                selectedTabIndex = 0,
-                containerColor = tgColors.incomingBubble,
-                contentColor = tgColors.headerIcon,
-                divider = {}
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 6.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Tab(selected = true, onClick = {}, text = { Text(strings.stickers) })
+                Surface(
+                    modifier = Modifier.width(44.dp).height(4.dp),
+                    color = tgColors.headerSubtitle.copy(alpha = 0.35f),
+                    shape = CircleShape
+                ) {}
             }
+            Text(
+                text = strings.stickers,
+                color = tgColors.headerTitle,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
             
             androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
                 columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(4),
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(stickers.size, key = { index -> stickers[index].url }) { index ->
                     val sticker = stickers[index]
                     val normalizedUrl = remember(sticker.url) { sticker.url.normalizeNoveoUrl() }
-                    Box(
+                    Surface(
                         modifier = Modifier
                             .aspectRatio(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onStickerSelected(sticker) }
-                            .background(tgColors.incomingBubble.copy(alpha = 0.5f)),
-                        contentAlignment = Alignment.Center
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onStickerSelected(sticker) },
+                        color = tgColors.chatSurface.copy(alpha = 0.72f),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
-                        if (sticker.type == "tgs") {
-                            Text(
-                                text = "TGS",
-                                color = tgColors.headerIcon,
-                                fontWeight = FontWeight.Bold
-                            )
-                        } else {
-                            AsyncImage(
-                                model = normalizedUrl,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(6.dp),
-                                contentScale = ContentScale.Fit
-                            )
+                        Box(
+                            modifier = Modifier.fillMaxSize().padding(10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (sticker.type == "tgs") {
+                                TgsSticker(
+                                    url = normalizedUrl,
+                                    modifier = Modifier.fillMaxSize(),
+                                    tint = tgColors.headerIcon
+                                )
+                            } else {
+                                AsyncImage(
+                                    model = normalizedUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
                         }
                     }
                 }
@@ -3927,7 +4182,7 @@ private fun StickerPicker(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(24.dp),
+                                .padding(28.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
