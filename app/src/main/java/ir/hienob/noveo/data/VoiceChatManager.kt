@@ -3,6 +3,7 @@ package ir.hienob.noveo.data
 import android.content.Context
 import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
+import io.livekit.android.events.collect
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
@@ -15,8 +16,6 @@ import io.livekit.android.room.track.TrackPublication
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import org.json.JSONObject
 import timber.log.Timber
 
@@ -75,51 +74,53 @@ class VoiceChatManager(
                 val r: Room = LiveKit.create(context)
                 room = r
                 
-                r.events.onEach { event ->
-                    when (event) {
-                        is RoomEvent.Disconnected -> {
-                            _state.value = VoiceChatState(connectionState = VoiceConnectionState.IDLE)
-                        }
-                        is RoomEvent.ParticipantConnected -> {
-                            updateParticipants()
-                        }
-                        is RoomEvent.ParticipantDisconnected -> {
-                            updateParticipants()
-                        }
-                        is RoomEvent.ActiveSpeakersChanged -> {
-                            val activeIds = event.speakers.mapNotNull { it.identity?.value?.toString() }
-                            _state.value = _state.value.copy(activeSpeakers = activeIds)
-                        }
-                        is RoomEvent.Reconnecting -> {
-                            _state.value = _state.value.copy(connectionState = VoiceConnectionState.RECONNECTING)
-                        }
-                        is RoomEvent.Reconnected -> {
-                            _state.value = _state.value.copy(connectionState = VoiceConnectionState.CONNECTED)
-                            updateParticipants()
-                        }
-                        is RoomEvent.TrackSubscribed -> {
-                            if (event.track is RemoteVideoTrack && event.publication.source == Track.Source.SCREEN_SHARE) {
-                                _state.value = _state.value.copy(
-                                    isScreenSharing = true,
-                                    screenShareOwnerId = event.participant.identity?.value?.toString()
-                                )
+                scope.launch {
+                    r.events.collect { event ->
+                        when (event) {
+                            is RoomEvent.Disconnected -> {
+                                _state.value = VoiceChatState(connectionState = VoiceConnectionState.IDLE)
                             }
-                            updateParticipants()
-                        }
-                        is RoomEvent.TrackUnsubscribed -> {
-                            if (event.track is RemoteVideoTrack && event.publication.source == Track.Source.SCREEN_SHARE) {
-                                 if (_state.value.screenShareOwnerId == event.participant.identity?.value?.toString()) {
-                                     _state.value = _state.value.copy(
-                                         isScreenSharing = false,
-                                         screenShareOwnerId = null
-                                     )
-                                 }
+                            is RoomEvent.ParticipantConnected -> {
+                                updateParticipants()
                             }
-                            updateParticipants()
+                            is RoomEvent.ParticipantDisconnected -> {
+                                updateParticipants()
+                            }
+                            is RoomEvent.ActiveSpeakersChanged -> {
+                                val activeIds = event.speakers.mapNotNull { it.identity?.value?.toString() }
+                                _state.value = _state.value.copy(activeSpeakers = activeIds)
+                            }
+                            is RoomEvent.Reconnecting -> {
+                                _state.value = _state.value.copy(connectionState = VoiceConnectionState.RECONNECTING)
+                            }
+                            is RoomEvent.Reconnected -> {
+                                _state.value = _state.value.copy(connectionState = VoiceConnectionState.CONNECTED)
+                                updateParticipants()
+                            }
+                            is RoomEvent.TrackSubscribed -> {
+                                if (event.track is RemoteVideoTrack && event.publication.source == Track.Source.SCREEN_SHARE) {
+                                    _state.value = _state.value.copy(
+                                        isScreenSharing = true,
+                                        screenShareOwnerId = event.participant.identity?.value?.toString()
+                                    )
+                                }
+                                updateParticipants()
+                            }
+                            is RoomEvent.TrackUnsubscribed -> {
+                                if (event.track is RemoteVideoTrack && event.publications.source == Track.Source.SCREEN_SHARE) {
+                                     if (_state.value.screenShareOwnerId == event.participant.identity?.value?.toString()) {
+                                         _state.value = _state.value.copy(
+                                             isScreenSharing = false,
+                                             screenShareOwnerId = null
+                                         )
+                                     }
+                                }
+                                updateParticipants()
+                            }
+                            else -> {}
                         }
-                        else -> {}
                     }
-                }.launchIn(scope)
+                }
 
                 r.connect(serverUrl, token)
                 
