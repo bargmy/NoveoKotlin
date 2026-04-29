@@ -2,7 +2,6 @@ package ir.hienob.noveo.data
 
 import android.content.Context
 import io.livekit.android.LiveKit
-import io.livekit.android.Room
 import io.livekit.android.room.RoomListener
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
@@ -40,7 +39,7 @@ class VoiceChatManager(
     private val api: NoveoApi,
     private val scope: CoroutineScope
 ) {
-    private var room: Room? = null
+    private var room: io.livekit.android.Room? = null
     private var localAudioTrack: LocalAudioTrack? = null
     
     private val _state = MutableStateFlow(VoiceChatState())
@@ -70,35 +69,35 @@ class VoiceChatManager(
                 val roomName = tokenPayload.optString("roomName")
                 val fetchedCallId = tokenPayload.optString("callId")
 
-                val r = LiveKit.create(context)
+                val r: io.livekit.android.Room = LiveKit.create(context)
                 room = r
                 
                 r.listener = object : RoomListener {
-                    override fun onDisconnect(room: Room, error: Exception?) {
+                    override fun onDisconnect(room: io.livekit.android.Room, error: Exception?) {
                         _state.value = VoiceChatState(connectionState = VoiceConnectionState.IDLE)
                     }
 
-                    override fun onParticipantConnected(room: Room, participant: RemoteParticipant) {
+                    override fun onParticipantConnected(room: io.livekit.android.Room, participant: RemoteParticipant) {
                         updateParticipants()
                     }
 
-                    override fun onParticipantDisconnected(room: Room, participant: RemoteParticipant) {
+                    override fun onParticipantDisconnected(room: io.livekit.android.Room, participant: RemoteParticipant) {
                         updateParticipants()
                     }
 
-                    override fun onActiveSpeakersChanged(room: Room, speakers: List<Participant>) {
+                    override fun onActiveSpeakersChanged(room: io.livekit.android.Room, speakers: List<Participant>) {
                         val activeIds = mutableListOf<String>()
-                        speakers.forEach { s ->
+                        for (s in speakers) {
                             s.identity?.value?.toString()?.let { activeIds.add(it) }
                         }
                         _state.value = _state.value.copy(activeSpeakers = activeIds)
                     }
 
-                    override fun onReconnecting(room: Room, error: Exception?) {
+                    override fun onReconnecting(room: io.livekit.android.Room, error: Exception?) {
                         _state.value = _state.value.copy(connectionState = VoiceConnectionState.RECONNECTING)
                     }
 
-                    override fun onReconnected(room: Room) {
+                    override fun onReconnected(room: io.livekit.android.Room) {
                         _state.value = _state.value.copy(connectionState = VoiceConnectionState.CONNECTED)
                         updateParticipants()
                     }
@@ -172,7 +171,7 @@ class VoiceChatManager(
     }
 
     private suspend fun applyMuteState(muted: Boolean) {
-        val r = room ?: return
+        val r: io.livekit.android.Room = room ?: return
         if (muted) {
             localAudioTrack?.let { 
                 r.localParticipant.unpublishTrack(it)
@@ -195,12 +194,15 @@ class VoiceChatManager(
 
     private fun setDeafened(nextDeafened: Boolean) {
         // In LiveKit Android, deafening usually involves muting all remote audio tracks
-        room?.remoteParticipants?.values?.forEach { participant ->
-            participant.audioTrackPublications.forEach { pub ->
-                pub.track?.let { track: Track ->
-                    if (track is RemoteAudioTrack) {
-                        // track.enabled = !nextDeafened
-                    }
+        val r: io.livekit.android.Room = room ?: return
+        val remoteParticipants = r.remoteParticipants
+        for (entry in remoteParticipants) {
+            val participant: RemoteParticipant = entry.value
+            val publications = participant.audioTrackPublications
+            for (pub in publications) {
+                val track: Track? = pub.track
+                if (track is RemoteAudioTrack) {
+                    // track.enabled = !nextDeafened
                 }
             }
         }
@@ -208,14 +210,17 @@ class VoiceChatManager(
     }
 
     private fun updateParticipants() {
-        val r = room ?: return
+        val r: io.livekit.android.Room = room ?: return
         val participantsList = mutableListOf<String>()
         
         // Include local participant
-        r.localParticipant.identity?.value?.toString()?.let { participantsList.add(it) }
+        val lp = r.localParticipant
+        lp.identity?.value?.toString()?.let { participantsList.add(it) }
         
         // Include remote participants
-        r.remoteParticipants.values.forEach { p ->
+        val remoteParticipants = r.remoteParticipants
+        for (entry in remoteParticipants) {
+            val p: RemoteParticipant = entry.value
             val identityValue = p.identity?.value?.toString()
             if (identityValue != null && !participantsList.contains(identityValue)) {
                 participantsList.add(identityValue)
