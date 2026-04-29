@@ -14,16 +14,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     env:
       APK_FOLDER: app/build/outputs/apk/release
-      DRIVE_META_NAME: .noveo-latest-apk.json
-      RCLONE_REMOTE: gdrive
-      RCLONE_DIR: NoveoKotlin
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -134,7 +134,7 @@ jobs:
           if log_file.exists():
               lines = log_file.read_text(errors="ignore").strip().splitlines()
               log_text = "\n".join(lines[-35:])[-3200:]
-          message = f"❌ Android release build failed\nrepo: {repo}\nbranch: {ref_name}\ncommit: {sha}\nrun: {run_url}"
+          message = f"Android release build failed\nrepo: {repo}\nbranch: {ref_name}\ncommit: {sha}\nrun: {run_url}"
           if log_text:
               message += f"\n\nLast log lines:\n{log_text}"
           data = urllib.parse.urlencode({"chat_id": chat_id, "text": message}).encode()
@@ -158,150 +158,250 @@ jobs:
           echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
           echo "apk_name=$(basename "$APK_PATH")" >> "$GITHUB_OUTPUT"
 
+      - name: Derive release metadata
+        id: release_meta
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+          import urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GITHUB_TOKEN"]
+          gradle_text = pathlib.Path("app/build.gradle.kts").read_text(encoding="utf-8")
+          match = re.search(r'versionName\s*=\s*"([^"]+)"', gradle_text)
+          if not match:
+              raise SystemExit("Could not find versionName in app/build.gradle.kts")
+          version = match.group(1).strip()
+
+          req = urllib.request.Request(
+              f"https://api.github.com/repos/{repo}/releases?per_page=100",
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+
+          latest_release_tag = ""
+          latest_stable_tag = ""
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  releases = json.load(resp)
+              for release in releases:
+                  if release.get("draft"):
+                      continue
+                  if not latest_release_tag:
+                      latest_release_tag = (release.get("tag_name") or "").strip()
+                  if release.get("prerelease"):
+                      continue
+                  tag_name = (release.get("tag_name") or "").strip()
+                  if re.fullmatch(r"\d+\.\d+\.\d+", tag_name):
+                      latest_stable_tag = tag_name
+                      break
+          except Exception:
+              latest_release_tag = ""
+              latest_stable_tag = ""
+
+          is_stable = version != latest_stable_tag
+          if is_stable:
+              tag = version
+              prerelease = "false"
+              release_name = f"Noveo {version}"
+          else:
+              stamp = datetime.now(ZoneInfo("Asia/Tehran")).strftime("%-m%d%H%M")
+              tag = f"{version}-{stamp}"
+              prerelease = "true"
+              release_name = f"Noveo {tag}"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"version={version}\n")
+              fh.write(f"tag={tag}\n")
+              fh.write(f"prerelease={prerelease}\n")
+              fh.write(f"release_name={release_name}\n")
+              fh.write(f"latest_release_tag={latest_release_tag}\n")
+              fh.write(f"latest_stable_tag={latest_stable_tag}\n")
+          PY
+
+      - name: Generate changelog from diff
+        id: changelog
+        shell: bash
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
+          RELEASE_PRERELEASE: ${{ steps.release_meta.outputs.prerelease }}
+          PREVIOUS_RELEASE_TAG: ${{ steps.release_meta.outputs.latest_release_tag }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          set -euo pipefail
+          PREV_TAG="${PREVIOUS_RELEASE_TAG}"
+          if [ -n "$PREV_TAG" ] && git rev-parse "$PREV_TAG^{commit}" >/dev/null 2>&1; then
+            RANGE="${PREV_TAG}..${GITHUB_SHA}"
+            PREV_LABEL="$PREV_TAG"
+          elif git rev-parse "${GITHUB_SHA}^" >/dev/null 2>&1; then
+            RANGE="${GITHUB_SHA}^..${GITHUB_SHA}"
+            PREV_LABEL="${GITHUB_SHA}^"
+          else
+            RANGE="${GITHUB_SHA}"
+            PREV_LABEL="initial build"
+          fi
+
+          {
+            echo "release_tag=${RELEASE_TAG}"
+            echo "previous_label=${PREV_LABEL}"
+            echo "range=${RANGE}"
+          } >> "$GITHUB_OUTPUT"
+
+          git log --no-merges --pretty=format:'- %s (%h)' "$RANGE" > commits.txt || true
+          git diff --name-status "$RANGE" > files.txt || true
+          export PREV_LABEL RANGE
+
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import textwrap
+          import urllib.request
+
+          release_tag = os.environ["RELEASE_TAG"]
+          release_version = os.environ["RELEASE_VERSION"]
+          prerelease = os.environ["RELEASE_PRERELEASE"] == "true"
+          previous_label = os.environ["PREV_LABEL"]
+          range_text = os.environ["RANGE"]
+          api_key = os.environ.get("GROQ_API_KEY", "").strip()
+
+          commits = pathlib.Path("commits.txt").read_text(encoding="utf-8", errors="ignore").strip()
+          files_changed = pathlib.Path("files.txt").read_text(encoding="utf-8", errors="ignore").strip()
+          if not commits:
+              commits = "- No commit messages available"
+          if not files_changed:
+              files_changed = "No file-level diff available"
+
+          fallback = textwrap.dedent(f"""\
+          Release {release_tag}
+
+          Diff since {previous_label}.
+
+          Commits:
+          {commits}
+
+          Files changed:
+          {files_changed}
+          """).strip()
+
+          if not api_key:
+              body = fallback
+          else:
+              system_prompt = (
+                  "You write concise software release notes for Android builds. "
+                  "Return plain Markdown only. Be factual, do not invent behavior, "
+                  "and summarize only what is supported by the provided diff. "
+                  "Keep the result under 900 characters so the exact same text can be reused "
+                  "for GitHub Releases and message captions."
+              )
+              user_prompt = textwrap.dedent(f"""\
+              Build type: {"pre-release" if prerelease else "release"}
+              New release tag: {release_tag}
+              App versionName: {release_version}
+              Diff range: {range_text}
+              Previous successful release: {previous_label}
+
+              Commit summaries:
+              {commits}
+
+              File diff:
+              {files_changed}
+
+              Write a compact changelog with:
+              - a one-line headline
+              - 2 to 5 short bullets
+              - no hype
+              - no unsupported claims
+              """)
+
+              payload = {
+                  "model": "openai/gpt-oss-120b",
+                  "reasoning_effort": "medium",
+                  "messages": [
+                      {"role": "system", "content": system_prompt},
+                      {"role": "user", "content": user_prompt},
+                  ],
+              }
+
+              req = urllib.request.Request(
+                  "https://api.groq.com/openai/v1/chat/completions",
+                  data=json.dumps(payload).encode("utf-8"),
+                  headers={
+                      "Authorization": f"Bearer {api_key}",
+                      "Content-Type": "application/json",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=90) as resp:
+                      response = json.load(resp)
+                  body = response["choices"][0]["message"]["content"].strip()
+                  if not body:
+                      body = fallback
+              except Exception:
+                  body = fallback
+
+          pathlib.Path("release-notes.md").write_text(body + "\n", encoding="utf-8")
+          pathlib.Path("release-caption.txt").write_text(body[:900], encoding="utf-8")
+          PY
+
+      - name: Rename APK for release
+        id: rename_apk
+        shell: bash
+        env:
+          APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          RELEASE_APK_PATH="$(dirname "$APK_PATH")/noveo-${RELEASE_TAG}.apk"
+          mv "$APK_PATH" "$RELEASE_APK_PATH"
+          echo "apk_path=$RELEASE_APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$(basename "$RELEASE_APK_PATH")" >> "$GITHUB_OUTPUT"
+
       - name: Upload APK artifact to GitHub
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
-          path: ${{ steps.find_apk.outputs.apk_path }}
+          path: ${{ steps.rename_apk.outputs.apk_path }}
           if-no-files-found: error
 
-      - name: Install rclone
-        shell: bash
-        env:
-          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
-        run: |
-          if [ -z "${RCLONE_CONFIG}" ]; then
-            echo "RCLONE_CONFIG is empty, skipping rclone install."
-            exit 0
-          fi
-          curl -fsSL https://rclone.org/install.sh | sudo bash
-
-      - name: Write rclone config from secret
-        shell: bash
-        env:
-          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
-        run: |
-          if [ -z "${RCLONE_CONFIG}" ]; then
-            echo "RCLONE_CONFIG is empty, skipping rclone config."
-            exit 0
-          fi
-          mkdir -p ~/.config/rclone
-          cat > ~/.config/rclone/rclone.conf <<'EOF'
-          ${{ secrets.RCLONE_CONFIG }}
-          EOF
-
-      - name: Upload APK to Google Drive via rclone
-        id: drive_upload
-        shell: bash
-        env:
-          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
-          APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
-          APK_NAME: ${{ steps.find_apk.outputs.apk_name }}
-          DRIVE_META_NAME: ${{ env.DRIVE_META_NAME }}
-          RCLONE_REMOTE: ${{ env.RCLONE_REMOTE }}
-          RCLONE_DIR: ${{ env.RCLONE_DIR }}
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "${RCLONE_CONFIG}" ]; then
-            echo "uploaded=false" >> "$GITHUB_OUTPUT"
-            echo "sha256=$(sha256sum "$APK_PATH" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-            echo "drive_link=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          sha256_value="$(sha256sum "$APK_PATH" | awk '{print $1}')"
-          meta_remote="${RCLONE_REMOTE}:${RCLONE_DIR}/${DRIVE_META_NAME}"
-          existing_meta=""
-          if rclone lsjson "$meta_remote" >/dev/null 2>&1; then
-            existing_meta="$(rclone cat "$meta_remote" 2>/dev/null || true)"
-          fi
-
-          existing_hash=""
-          existing_link=""
-          if [ -n "$existing_meta" ]; then
-            existing_hash="$(printf '%s' "$existing_meta" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get(\"sha256\", \"\"))' 2>/dev/null || true)"
-            existing_link="$(printf '%s' "$existing_meta" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get(\"drive_link\", \"\"))' 2>/dev/null || true)"
-          fi
-
-          if [ "$existing_hash" = "$sha256_value" ] && [ -n "$existing_link" ]; then
-            {
-              echo "uploaded=false"
-              echo "sha256=$sha256_value"
-              echo "drive_link=$existing_link"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          timestamp="$(date -u +%Y%m%d-%H%M%S)"
-          short_sha="${GITHUB_SHA:0:7}"
-          file_name="release-${GITHUB_REF_NAME}-${short_sha}-${timestamp}.apk"
-          remote_dir="${RCLONE_REMOTE}:${RCLONE_DIR}"
-          remote_apk="${remote_dir}/${file_name}"
-          drive_run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-
-          rclone mkdir "$remote_dir"
-          rclone copyto "$APK_PATH" "$remote_apk"
-          drive_link="$(rclone link "$remote_apk")"
-
-          meta_file="$(mktemp)"
-          cat > "$meta_file" <<EOF
-          {
-            "sha256": "$sha256_value",
-            "file_name": "$file_name",
-            "drive_link": "$drive_link",
-            "commit_sha": "$GITHUB_SHA",
-            "branch": "$GITHUB_REF_NAME",
-            "run_url": "$drive_run_url",
-            "uploaded_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          }
-          EOF
-
-          rclone copyto "$meta_file" "$meta_remote"
-          rm -f "$meta_file"
-
-          {
-            echo "uploaded=true"
-            echo "sha256=$sha256_value"
-            echo "drive_link=$drive_link"
-          } >> "$GITHUB_OUTPUT"
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          name: ${{ steps.release_meta.outputs.release_name }}
+          prerelease: ${{ steps.release_meta.outputs.prerelease == 'true' }}
+          body_path: release-notes.md
+          files: ${{ steps.rename_apk.outputs.apk_path }}
 
       - name: Send APK to Telegram
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.CHANNEL_ID }}
-          APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
-          APK_NAME: ${{ steps.find_apk.outputs.apk_name }}
-          REPO: ${{ github.repository }}
-          REF_NAME: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
-          RUN_ID: ${{ github.run_id }}
-          DRIVE_LINK: ${{ steps.drive_upload.outputs.drive_link }}
-          APK_HASH: ${{ steps.drive_upload.outputs.sha256 }}
+          APK_PATH: ${{ steps.rename_apk.outputs.apk_path }}
+          APK_NAME: ${{ steps.rename_apk.outputs.apk_name }}
         run: |
           if [ -z "${TELEGRAM_BOT_TOKEN}" ] || [ -z "${TELEGRAM_CHAT_ID}" ]; then
             echo "Telegram delivery is not configured, skipping."
             exit 0
           fi
 
-          SHORT_SHA="${SHA:0:7}"
-          RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
-          CAPTION=$(cat <<EOF
-          ✅ New Android APK build
-          repo: ${REPO}
-          branch: ${REF_NAME}
-          commit: ${SHORT_SHA}
-          sha256: ${APK_HASH:-unknown}
-          ${DRIVE_LINK:+drive: ${DRIVE_LINK}}
-          run: ${RUN_URL}
-          EOF
-          )
-
+          CAPTION="$(cat release-caption.txt)"
           curl --fail --silent --show-error \
             -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
             -F "chat_id=${TELEGRAM_CHAT_ID}" \
@@ -313,14 +413,8 @@ jobs:
         env:
           BALE_BOT_TOKEN: ${{ secrets.BALE_TOKEN }}
           PROXY_IP: ${{ secrets.PROXY_IP }}
-          APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
-          APK_NAME: ${{ steps.find_apk.outputs.apk_name }}
-          REPO: ${{ github.repository }}
-          REF_NAME: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
-          RUN_ID: ${{ github.run_id }}
-          DRIVE_LINK: ${{ steps.drive_upload.outputs.drive_link }}
-          APK_HASH: ${{ steps.drive_upload.outputs.sha256 }}
+          APK_PATH: ${{ steps.rename_apk.outputs.apk_path }}
+          APK_NAME: ${{ steps.rename_apk.outputs.apk_name }}
         run: |
           BALE_BOT_TOKEN_CLEAN="$(printf '%s' "${BALE_BOT_TOKEN}" | tr -d '\r\n[:space:]')"
           PROXY_IP_CLEAN="$(printf '%s' "${PROXY_IP}" | tr -d '\r\n[:space:]')"
@@ -330,16 +424,7 @@ jobs:
             exit 0
           fi
 
-          SHORT_SHA="${SHA:0:7}"
-          RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
-          CAPTION=$(cat <<EOF
-          ✅ نسخه جدید نوعو کوطلین بیلد  شد!
-          کامیت: ${SHORT_SHA}
-          هش: ${APK_HASH:-unknown}
-          گیتهاب: ${RUN_URL}
-          EOF
-          )
-
+          CAPTION="$(cat release-caption.txt)"
           RESPONSE="$(
             curl --silent --show-error \
               -X POST "http://${PROXY_IP_CLEAN}:8787/upload-apk" \
@@ -355,7 +440,3 @@ jobs:
             echo "Proxy upload failed according to response JSON." >&2
             exit 1
           fi
-
-      - name: Clean up rclone config
-        if: always()
-        run: rm -f ~/.config/rclone/rclone.conf
