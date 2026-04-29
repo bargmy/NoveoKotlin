@@ -138,6 +138,11 @@ private fun MessageContextMenu(
         stiffness = Spring.StiffnessLow
     )
 
+    val sizeSpringSpec = spring<androidx.compose.ui.unit.IntSize>(
+        dampingRatio = Spring.DampingRatioLowBouncy,
+        stiffness = Spring.StiffnessLow
+    )
+
     var animateIn by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { animateIn = true }
 
@@ -199,7 +204,7 @@ private fun MessageContextMenu(
                 shadowElevation = 8.dp,
                 modifier = Modifier
                     .width(reactionsWidth)
-                    .animateContentSize(animationSpec = springSpec)
+                    .animateContentSize(animationSpec = sizeSpringSpec)
             ) {
                 Box(modifier = Modifier.height(reactionsHeight)) {
                     if (expanded) {
@@ -260,7 +265,7 @@ private fun MessageContextMenu(
                         }
                         MenuItem(
                             label = strings.forward,
-                            icon = Icons.AutoMirrored.Outlined.ArrowForward,
+                            icon = Icons.Outlined.ArrowForward,
                             color = menuText,
                             onClick = onForward
                         )
