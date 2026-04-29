@@ -77,7 +77,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val CONTEXT_MENU_REACTIONS = listOf(
+internal val CONTEXT_MENU_REACTIONS = listOf(
     "🙏", "👍", "😭", "😍", "🥰", "🙈", "❤️", "🤔", "🤣", "😘", "😱", "💯", "👎", "🔥", "💩", "🤯",
     "💔", "☃️", "😁", "🎉", "🤷", "😇", "🎃", "🗿", "🥴", "😐", "👏", "🤬", "😢", "🤩", "🤮", "👌",
     "🕊️", "🤡", "🐳", "💘", "🌭", "⚡", "🍌", "🏆", "🤨", "🍓", "🍾", "🖕", "😈", "🤔", "😴", "🤓", "👻",
@@ -309,7 +309,7 @@ private fun MessageContextMenu(
                         )
                         
                         val file = state.message.content.file
-                        if (file != null && file.isImage()) {
+                        if (file != null && (file.isImage() || file.isTgsSticker())) {
                             ContextMenuActionItem(
                                 label = strings.addAsSticker,
                                 icon = { Icon(Icons.Outlined.Star, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
