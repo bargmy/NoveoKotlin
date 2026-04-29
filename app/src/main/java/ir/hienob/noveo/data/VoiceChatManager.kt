@@ -87,7 +87,11 @@ class VoiceChatManager(
                     }
 
                     override fun onActiveSpeakersChanged(room: Room, speakers: List<Participant>) {
-                        _state.value = _state.value.copy(activeSpeakers = speakers.mapNotNull { it.identity?.value })
+                        val activeIds = mutableListOf<String>()
+                        for (s in speakers) {
+                            s.identity?.value?.let { activeIds.add(it) }
+                        }
+                        _state.value = _state.value.copy(activeSpeakers = activeIds)
                     }
 
                     override fun onReconnecting(room: Room, error: Exception?) {
@@ -207,7 +211,13 @@ class VoiceChatManager(
 
     private fun updateParticipants() {
         val r = room ?: return
-        val ids = r.participants.values.mapNotNull { it.identity?.value }
-        _state.value = _state.value.copy(participantIds = ids.toSet().toList())
+        val participantsList = mutableListOf<String>()
+        for (p in r.participants.values) {
+            val identityValue = p.identity?.value
+            if (identityValue != null && !participantsList.contains(identityValue)) {
+                participantsList.add(identityValue)
+            }
+        }
+        _state.value = _state.value.copy(participantIds = participantsList)
     }
 }
