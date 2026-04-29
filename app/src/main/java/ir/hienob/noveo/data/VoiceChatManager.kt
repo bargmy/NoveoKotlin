@@ -208,6 +208,6 @@ class VoiceChatManager(
     private fun updateParticipants() {
         val r = room ?: return
         val ids = r.participants.values.mapNotNull { it.identity?.value }
-        _state.value = _state.value.copy(participantIds = ids.distinct())
+        _state.value = _state.value.copy(participantIds = ids.toSet().toList())
     }
 }
