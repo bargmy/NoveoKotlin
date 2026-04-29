@@ -80,6 +80,12 @@ class MainActivity : ComponentActivity() {
                 onStopAudio = { viewModel.stopAudio() },
                 onSeekAudio = { viewModel.seekAudio(it) },
                 onDownloadFile = { viewModel.downloadFile(it) },
+                onCall = { viewModel.startOutgoingCall(it) },
+                onAcceptCall = { c, i -> viewModel.acceptCall(c, i) },
+                onDeclineCall = viewModel::declineCall,
+                onLeaveCall = viewModel::leaveCall,
+                onToggleMute = viewModel::toggleMute,
+                onToggleDeafen = viewModel::toggleDeafen,
                 onCancelUpload = viewModel::cancelPendingUpload,
                 onSendSticker = { sticker -> viewModel.sendSticker(sticker) },
                 onAddSavedSticker = { message -> viewModel.addSavedStickerFromMessage(message) }

@@ -28,6 +28,10 @@ sealed class SocketEvent {
         val users: Map<String, UserSummary>,
         val messagesByChat: Map<String, List<ChatMessage>>
     ) : SocketEvent()
+    data class IncomingCall(val chatId: String, val callerId: String, val callId: String) : SocketEvent()
+    data class VoiceChatUpdate(val chatId: String?, val activeVoiceChats: JSONObject) : SocketEvent()
+    data class VoiceCallEnded(val chatId: String) : SocketEvent()
+    data class VoiceCallError(val message: String) : SocketEvent()
     data class OlderMessages(
         val chatId: String,
         val messages: List<ChatMessage>,
@@ -175,6 +179,27 @@ class ChatSocket(
                             val messages = parseChatMessageList(json.optJSONArray("messages"), chatId, combinedUsers)
                             val hasMore = json.optBoolean("hasMoreHistory", false)
                             trySend(SocketEvent.OlderMessages(chatId, messages, hasMore))
+                        }
+                        "incoming_call" -> {
+                            val chatId = json.optString("chatId")
+                            val callerId = json.optString("callerId")
+                            val callId = json.optString("callId")
+                            if (chatId.isNotBlank() && callerId.isNotBlank()) {
+                                trySend(SocketEvent.IncomingCall(chatId, callerId, callId))
+                            }
+                        }
+                        "voice_chat_update" -> {
+                            val chatId = json.optString("chatId").takeIf { it.isNotBlank() }
+                            val active = json.optJSONObject("activeVoiceChats") ?: JSONObject()
+                            trySend(SocketEvent.VoiceChatUpdate(chatId, active))
+                        }
+                        "voice_call_ended" -> {
+                            val chatId = json.optString("chatId")
+                            if (chatId.isNotBlank()) trySend(SocketEvent.VoiceCallEnded(chatId))
+                        }
+                        "voice_call_error" -> {
+                            val message = json.optString("message", "Voice call error")
+                            trySend(SocketEvent.VoiceCallError(message))
                         }
                     }
                 }

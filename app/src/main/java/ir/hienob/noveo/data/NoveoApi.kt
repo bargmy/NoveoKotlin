@@ -384,6 +384,29 @@ class NoveoApi(
         }
     }
 
+    fun getVoiceToken(session: Session, chatId: String, callId: String? = null): JSONObject {
+        val url = "https://noveo.ir:8443/voice/token".toHttpUrl()
+        val body = JSONObject()
+            .put("chatId", chatId)
+            .apply { if (callId != null) put("callId", callId) }
+            .toString()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errBody = response.body?.string().orEmpty()
+                error("Voice token fetch failed (${response.code}): $errBody")
+            }
+            val payload = JSONObject(response.body?.string().orEmpty())
+            if (!payload.optBoolean("success", false)) error(payload.optString("error", "Unable to start voice chat."))
+            return payload
+        }
+    }
+
     fun startCaptcha(session: Session?, action: String, extra: Map<String, Any> = emptyMap()): JSONObject {
         val url = "https://web.noveo.ir/puzzle.php?proxy=1&target=/captcha/start".toHttpUrl()
         val body = JSONObject().put("action", action).apply {

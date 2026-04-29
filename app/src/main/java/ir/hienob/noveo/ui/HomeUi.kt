@@ -381,6 +381,12 @@ internal fun HomeScreen(
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
     onDownloadFile: (ChatMessage) -> Unit,
+    onCall: (String) -> Unit,
+    onAcceptCall: (String, String) -> Unit,
+    onDeclineCall: () -> Unit,
+    onLeaveCall: () -> Unit,
+    onToggleMute: () -> Unit,
+    onToggleDeafen: () -> Unit,
     onCancelUpload: () -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
     onAddSavedSticker: (ChatMessage) -> Unit,
@@ -675,6 +681,7 @@ internal fun HomeScreen(
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
+                                onCall = { selectedChat?.id?.let { onCall(it) } },
                                 onCancelUpload = onCancelUpload,
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
@@ -767,6 +774,7 @@ internal fun HomeScreen(
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
+                                onCall = { selectedChat?.id?.let { onCall(it) } },
                                 onCancelUpload = onCancelUpload,
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
@@ -935,6 +943,29 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                     }
                 )
             }
+        }
+
+        // Voice Call Overlay
+        if (state.voiceChatState.connectionState != ir.hienob.noveo.data.VoiceConnectionState.IDLE) {
+            VoiceCallOverlay(
+                state = state.voiceChatState,
+                strings = strings,
+                usersById = state.usersById,
+                onLeave = onLeaveCall,
+                onToggleMute = onToggleMute,
+                onToggleDeafen = onToggleDeafen
+            )
+        }
+
+        // Incoming Call Overlay
+        state.incomingCall?.let { call ->
+            IncomingCallOverlay(
+                call = call,
+                strings = strings,
+                caller = state.usersById[call.callerId],
+                onAccept = { onAcceptCall(call.chatId, call.callId) },
+                onDecline = onDeclineCall
+            )
         }
     }
 }
@@ -1267,6 +1298,7 @@ private fun ChatPane(
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
     onDownloadFile: (ChatMessage) -> Unit,
+    onCall: () -> Unit,
     onCancelUpload: () -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
     onAddSavedSticker: (ChatMessage) -> Unit,
@@ -1567,7 +1599,7 @@ private fun ChatPane(
                     }
                 }
                 
-                HeaderIconButton(icon = Icons.Outlined.Call, onClick = {}, tint = tgColors.headerIcon)
+                HeaderIconButton(icon = Icons.Outlined.Call, onClick = onCall, tint = tgColors.headerIcon)
                 HeaderIconButton(icon = Icons.Outlined.Search, onClick = {}, tint = tgColors.headerIcon, modifier = Modifier.padding(end = 4.dp))
             }
         }
@@ -4482,3 +4514,170 @@ private fun GlobalAudioMiniPlayer(
     }
 }
 
+
+@Composable
+fun VoiceCallOverlay(
+    state: ir.hienob.noveo.data.VoiceChatState,
+    strings: NoveoStrings,
+    usersById: Map<String, UserSummary>,
+    onLeave: () -> Unit,
+    onToggleMute: () -> Unit,
+    onToggleDeafen: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.7f))
+            .clickable(enabled = false) {},
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(24.dp))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = strings.brandName + " Voice Chat",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = when(state.connectionState) {
+                    ir.hienob.noveo.data.VoiceConnectionState.CONNECTING -> "Connecting..."
+                    ir.hienob.noveo.data.VoiceConnectionState.RECONNECTING -> "Reconnecting..."
+                    ir.hienob.noveo.data.VoiceConnectionState.CONNECTED -> "Connected"
+                    else -> "Idle"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            
+            Spacer(Modifier.height(24.dp))
+            
+            // Participants
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                state.participantIds.forEach { id ->
+                    val user = usersById[id]
+                    val isSpeaking = state.activeSpeakers.contains(id)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (isSpeaking) {
+                                Surface(
+                                    modifier = Modifier.size(52.dp),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                ) {}
+                            }
+                            ProfileCircle(name = user?.username ?: "User", imageUrl = user?.avatarUrl, size = 44.dp)
+                        }
+                        Text(
+                            text = user?.username?.split(" ")?.firstOrNull() ?: "User",
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 60.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onToggleMute,
+                    modifier = Modifier.background(
+                        if (state.isMuted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        CircleShape
+                    )
+                ) {
+                    Icon(
+                        imageVector = if (state.isMuted) Icons.Outlined.Notifications else Icons.Outlined.Notifications, // Should use Mic icons if available
+                        contentDescription = "Mute",
+                        tint = if (state.isMuted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Button(
+                    onClick = onLeave,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = CircleShape,
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Leave", tint = Color.White)
+                }
+
+                IconButton(
+                    onClick = onToggleDeafen,
+                    modifier = Modifier.background(
+                        if (state.isDeafened) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        CircleShape
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Notifications, // Should use Headset icons
+                        contentDescription = "Deafen",
+                        tint = if (state.isDeafened) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun IncomingCallOverlay(
+    call: SocketEvent.IncomingCall,
+    strings: NoveoStrings,
+    caller: UserSummary?,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .clickable(enabled = false) {},
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Surface(
+            modifier = Modifier
+                .padding(top = 40.dp)
+                .fillMaxWidth(0.9f),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp,
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ProfileCircle(name = caller?.username ?: "User", imageUrl = caller?.avatarUrl, size = 48.dp)
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = caller?.username ?: "Unknown Caller", fontWeight = FontWeight.Bold)
+                    Text(text = "Incoming Voice Call", style = MaterialTheme.typography.bodySmall)
+                }
+                IconButton(onClick = onDecline, modifier = Modifier.background(MaterialTheme.colorScheme.errorContainer, CircleShape)) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Decline", tint = MaterialTheme.colorScheme.onErrorContainer)
+                }
+                Spacer(Modifier.width(8.dp))
+                IconButton(onClick = onAccept, modifier = Modifier.background(Color(0xFF4CAF50), CircleShape)) {
+                    Icon(Icons.Outlined.Call, contentDescription = "Accept", tint = Color.White)
+                }
+            }
+        }
+    }
+}

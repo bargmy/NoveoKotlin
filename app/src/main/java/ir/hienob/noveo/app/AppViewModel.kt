@@ -82,6 +82,8 @@ data class AppUiState(
     val isAudioPlaying: Boolean = false,
     val audioProgress: Float = 0f,
     val attachmentDownloads: Map<String, AttachmentDownloadState> = emptyMap(),
+    val voiceChatState: ir.hienob.noveo.data.VoiceChatState = ir.hienob.noveo.data.VoiceChatState(),
+    val incomingCall: SocketEvent.IncomingCall? = null,
     val betaUpdatesEnabled: Boolean = false,
     val doubleTapReaction: String = "❤",
     val isSendingMessage: Boolean = false
@@ -123,6 +125,7 @@ data class UpdateInfo(
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val sessionStore = SessionStore(application)
     private val api = NoveoApi()
+    private val voiceChatManager = ir.hienob.noveo.data.VoiceChatManager(application, api, viewModelScope)
     private val messageCacheByChat = mutableMapOf<String, List<ChatMessage>>()
 
     private val _uiState = MutableStateFlow(AppUiState())
@@ -149,6 +152,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             NoveoNotificationService.socketEvents.collect { event ->
                 handleSocketEvent(event)
+            }
+        }
+
+        viewModelScope.launch {
+            voiceChatManager.state.collect { state ->
+                _uiState.value = _uiState.value.copy(voiceChatState = state)
             }
         }
     }
@@ -1211,6 +1220,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 persistCachedHomeState()
             }
+            is SocketEvent.IncomingCall -> {
+                if (_uiState.value.voiceChatState.connectionState == ir.hienob.noveo.data.VoiceConnectionState.IDLE) {
+                    _uiState.value = _uiState.value.copy(incomingCall = event)
+                }
+            }
+            is SocketEvent.VoiceChatUpdate -> {
+                // Similar to voicechat.js handleServerEvent
+                val active = event.activeVoiceChats
+                val currentChatId = _uiState.value.voiceChatState.currentChatId
+                if (currentChatId != null && !active.has(currentChatId)) {
+                    // Call ended on server
+                    voiceChatManager.leaveCall()
+                }
+                refreshHomeSilently()
+            }
+            is SocketEvent.VoiceCallEnded -> {
+                if (event.chatId == _uiState.value.voiceChatState.currentChatId) {
+                    voiceChatManager.leaveCall()
+                }
+            }
+            is SocketEvent.VoiceCallError -> {
+                _uiState.value = _uiState.value.copy(error = event.message)
+            }
         }
     }
 
@@ -1565,6 +1597,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("type", "delete_account")
             .put("password", password)
         NoveoNotificationService.send(payload)
+    }
+
+    fun startOutgoingCall(chatId: String) {
+        val session = _uiState.value.session ?: return
+        voiceChatManager.joinCall(session, chatId)
+        viewModelScope.launch {
+            val payload = org.json.JSONObject()
+                .put("type", "voice_start")
+                .put("chatId", chatId)
+            NoveoNotificationService.send(payload)
+        }
+    }
+
+    fun acceptCall(chatId: String, callId: String) {
+        val session = _uiState.value.session ?: return
+        _uiState.value = _uiState.value.copy(incomingCall = null)
+        voiceChatManager.joinCall(session, chatId, callId)
+    }
+
+    fun declineCall() {
+        _uiState.value = _uiState.value.copy(incomingCall = null)
+    }
+
+    fun leaveCall() {
+        val chatId = _uiState.value.voiceChatState.currentChatId ?: return
+        voiceChatManager.leaveCall()
+        viewModelScope.launch {
+            val payload = org.json.JSONObject()
+                .put("type", "voice_leave")
+                .put("chatId", chatId)
+                .put("reason", "left")
+            NoveoNotificationService.send(payload)
+        }
+    }
+
+    fun toggleMute() {
+        voiceChatManager.toggleMute()
+    }
+
+    fun toggleDeafen() {
+        voiceChatManager.toggleDeafen()
     }
 
     fun setLanguage(code: String) {
