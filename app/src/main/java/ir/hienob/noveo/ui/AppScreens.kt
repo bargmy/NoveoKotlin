@@ -552,7 +552,7 @@ private fun CaptchaModal(
                         android.webkit.WebView(context).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            settings.userAgentString = "NoveoKotlin/0.4.0"
+                            settings.userAgentString = "NoveoKotlin/0.5.4"
 
                             
                             webViewClient = object : android.webkit.WebViewClient() {
