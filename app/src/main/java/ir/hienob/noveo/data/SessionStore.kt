@@ -62,6 +62,14 @@ class SessionStore(context: Context) {
             .apply()
     }
 
+    fun readLanguageCode(): String = prefs.getString("language_code", "en") ?: "en"
+
+    fun writeLanguageCode(code: String) {
+        prefs.edit()
+            .putString("language_code", code)
+            .apply()
+    }
+
     fun readCachedHomeState(): CachedHomeState? {
         val raw = prefs.getString("cached_home_state", null) ?: return null
         return runCatching {

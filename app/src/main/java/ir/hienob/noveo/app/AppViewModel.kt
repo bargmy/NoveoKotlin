@@ -577,13 +577,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             restoreCachedHomeState(cachedHomeState)
-            val strings = getStrings(_uiState.value.languageCode)
+            val langCode = sessionStore.readLanguageCode()
+            val strings = getStrings(langCode)
             _uiState.value = _uiState.value.copy(
                 startupState = StartupState.Home,
                 session = session,
                 loading = cachedHomeState?.chats.isNullOrEmpty(),
                 connectionTitle = if (cachedHomeState == null) strings.brandName else strings.connecting,
-                notificationSettings = notifySettings
+                notificationSettings = notifySettings,
+                languageCode = langCode
             )
             NoveoNotificationService.start(getApplication())
             loadSavedStickers(session)
@@ -1646,11 +1648,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         voiceChatManager.toggleDeafen()
     }
 
+    fun toggleMinimize() {
+        voiceChatManager.toggleMinimize()
+    }
+
     fun setLanguage(code: String) {
         val payload = org.json.JSONObject()
             .put("type", "update_profile")
             .put("languageCode", code)
         NoveoNotificationService.send(payload)
+        sessionStore.writeLanguageCode(code)
         _uiState.value = _uiState.value.copy(languageCode = code)
         viewModelScope.launch {
             delay(500)

@@ -26,6 +26,8 @@ import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.SessionStore
 import ir.hienob.noveo.data.SocketEvent
 import ir.hienob.noveo.data.UserSummary
+import ir.hienob.noveo.ui.getStrings
+import ir.hienob.noveo.ui.NoveoStrings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -127,8 +129,13 @@ class NoveoNotificationService : LifecycleService() {
                 "Calls",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), null)
+                val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                setSound(ringtoneUri, android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build())
                 enableVibration(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             notificationManager.createNotificationChannel(callsChannel)
         }
@@ -256,13 +263,15 @@ class NoveoNotificationService : LifecycleService() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val caller = knownUsers[event.callerId]
         val callerName = caller?.username ?: "Unknown Caller"
+        
+        val strings = getStrings(sessionStore.readLanguageCode())
 
         val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             putExtra("chatId", event.chatId)
             putExtra("callId", event.callId)
             putExtra("callerId", event.callerId)
-            putExtra("action", "accept_call")
+            putExtra("action", "view_call")
         }
         val fullScreenPendingIntent = PendingIntent.getActivity(this, 10, fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
@@ -284,16 +293,17 @@ class NoveoNotificationService : LifecycleService() {
 
         val notification = NotificationCompat.Builder(this, NotificationChannels.CALLS)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Incoming Voice Call")
+            .setContentTitle(strings.incomingCall)
             .setContentText(callerName)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setFullScreenIntent(fullScreenPendingIntent, true)
             .setAutoCancel(true)
             .setOngoing(true)
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
-            .addAction(0, "Decline", declinePendingIntent)
-            .addAction(0, "Accept", acceptPendingIntent)
+            .setVibrate(longArrayOf(0, 500, 500, 500))
+            .addAction(0, strings.decline, declinePendingIntent)
+            .addAction(0, strings.accept, acceptPendingIntent)
             .build()
 
         notificationManager.notify(CALL_NOTIFICATION_ID, notification)

@@ -86,6 +86,7 @@ class MainActivity : ComponentActivity() {
                 onLeaveCall = viewModel::leaveCall,
                 onToggleMute = viewModel::toggleMute,
                 onToggleDeafen = viewModel::toggleDeafen,
+                onToggleMinimize = viewModel::toggleMinimize,
                 onCancelUpload = viewModel::cancelPendingUpload,
                 onSendSticker = { sticker -> viewModel.sendSticker(sticker) },
                 onAddSavedSticker = { message -> viewModel.addSavedStickerFromMessage(message) }
