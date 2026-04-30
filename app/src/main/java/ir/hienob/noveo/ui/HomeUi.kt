@@ -650,9 +650,11 @@ internal fun HomeScreen(
                                 onResumeAudio = onResumeAudio,
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
+                                onToggleMute = onToggleMute,
+                                onToggleMinimize = onToggleMinimize,
+                                onLeaveCall = onLeaveCall,
                                 modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
+                                )                        } else {
                             ChatPane(
                                 state = state,
                                 compact = true,
@@ -691,6 +693,9 @@ internal fun HomeScreen(
                                 onCancelUpload = { selectedChat?.id?.let { onCancelUpload(it) } },
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
+                                onToggleMute = onToggleMute,
+                                onToggleMinimize = onToggleMinimize,
+                                onLeaveCall = onLeaveCall,
                                 lastKeyboardHeight = lastKeyboardHeight
                             )
                         }
@@ -733,6 +738,9 @@ internal fun HomeScreen(
                         onResumeAudio = onResumeAudio,
                         onStopAudio = onStopAudio,
                         onSeekAudio = onSeekAudio,
+                        onToggleMute = onToggleMute,
+                        onToggleMinimize = onToggleMinimize,
+                        onLeaveCall = onLeaveCall,
                         modifier = Modifier.width(360.dp).fillMaxHeight()
                     )
                     AnimatedContent(
@@ -784,6 +792,9 @@ internal fun HomeScreen(
                                 onCancelUpload = { selectedChat?.id?.let { onCancelUpload(it) } },
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
+                                onToggleMute = onToggleMute,
+                                onToggleMinimize = onToggleMinimize,
+                                onLeaveCall = onLeaveCall,
                                 lastKeyboardHeight = lastKeyboardHeight,
                                 modifier = Modifier.weight(1f)
                                 )
@@ -952,26 +963,16 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
         }
 
         // Voice Call Overlay
-        if (state.voiceChatState.connectionState != ir.hienob.noveo.data.VoiceConnectionState.IDLE) {
-            if (state.voiceChatState.isMinimized) {
-                VoiceChatTray(
-                    state = state.voiceChatState,
-                    strings = strings,
-                    onExpand = onToggleMinimize,
-                    onLeave = onLeaveCall,
-                    onToggleMute = onToggleMute
-                )
-            } else {
-                VoiceCallOverlay(
-                    state = state.voiceChatState,
-                    strings = strings,
-                    usersById = state.usersById,
-                    onLeave = onLeaveCall,
-                    onToggleMute = onToggleMute,
-                    onToggleDeafen = onToggleDeafen,
-                    onMinimize = onToggleMinimize
-                )
-            }
+        if (state.voiceChatState.connectionState != ir.hienob.noveo.data.VoiceConnectionState.IDLE && !state.voiceChatState.isMinimized) {
+            VoiceCallOverlay(
+                state = state.voiceChatState,
+                strings = strings,
+                usersById = state.usersById,
+                onLeave = onLeaveCall,
+                onToggleMute = onToggleMute,
+                onToggleDeafen = onToggleDeafen,
+                onMinimize = onToggleMinimize
+            )
         }
 
         // Incoming Call Overlay
@@ -1011,6 +1012,9 @@ private fun SidebarPane(
     onResumeAudio: () -> Unit,
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
+    onToggleMute: () -> Unit,
+    onToggleMinimize: () -> Unit,
+    onLeaveCall: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val tgColors = telegramColors()
@@ -1035,6 +1039,17 @@ private fun SidebarPane(
                     onResume = onResumeAudio,
                     onStop = onStopAudio,
                     onSeek = onSeekAudio,
+                    tgColors = tgColors
+                )
+            }
+
+            if (state.voiceChatState.connectionState != ir.hienob.noveo.data.VoiceConnectionState.IDLE && state.voiceChatState.isMinimized) {
+                VoiceChatTray(
+                    state = state.voiceChatState,
+                    strings = strings,
+                    onExpand = onToggleMinimize,
+                    onLeave = onLeaveCall,
+                    onToggleMute = onToggleMute,
                     tgColors = tgColors
                 )
             }
@@ -1319,6 +1334,9 @@ private fun ChatPane(
     onCancelUpload: () -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
     onAddSavedSticker: (ChatMessage) -> Unit,
+    onToggleMute: () -> Unit,
+    onToggleMinimize: () -> Unit,
+    onLeaveCall: () -> Unit,
     lastKeyboardHeight: Dp = 300.dp,
     modifier: Modifier = Modifier
 ) {
@@ -1463,6 +1481,12 @@ private fun ChatPane(
     val messagesMap = remember(state.messages) { state.messages.associateBy { it.id } }
     val density = LocalDensity.current
 
+    val hasAudio = state.currentAudioMessage != null
+    val hasVoice = state.voiceChatState.connectionState != ir.hienob.noveo.data.VoiceConnectionState.IDLE && state.voiceChatState.isMinimized
+    val hasPinned = selectedChat?.pinnedMessage != null
+    
+    val topPadding = 56.dp + (if (hasAudio) 48.dp else 0.dp) + (if (hasVoice) 48.dp else 0.dp) + (if (hasPinned) 48.dp else 0.dp) + 8.dp
+
     Box(modifier = modifier.fillMaxSize().background(tgColors.chatSurface)) {
         // 1. Messages Layer
         LazyColumn(
@@ -1470,7 +1494,7 @@ private fun ChatPane(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 8.dp, 
-                top = if (selectedChat?.pinnedMessage != null) 114.dp else 64.dp, 
+                top = topPadding, 
                 end = 8.dp, 
                 bottom = 90.dp
             ),
@@ -1635,9 +1659,23 @@ private fun ChatPane(
             }
         }
 
+        if (hasVoice) {
+            val voiceOffset = 56.dp + (if (hasAudio) 48.dp else 0.dp)
+            Box(modifier = Modifier.padding(top = voiceOffset)) {
+                VoiceChatTray(
+                    state = state.voiceChatState,
+                    strings = strings,
+                    onExpand = onToggleMinimize,
+                    onLeave = onLeaveCall,
+                    onToggleMute = onToggleMute,
+                    tgColors = tgColors
+                )
+            }
+        }
+
         // 2.1 Pinned Message Bar
         selectedChat?.pinnedMessage?.let { pinned ->
-            val pinnedOffset = if (state.currentAudioMessage != null) 104.dp else 56.dp
+            val pinnedOffset = 56.dp + (if (hasAudio) 48.dp else 0.dp) + (if (hasVoice) 48.dp else 0.dp)
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -4771,83 +4809,61 @@ fun VoiceChatTray(
     strings: NoveoStrings,
     onExpand: () -> Unit,
     onLeave: () -> Unit,
-    onToggleMute: () -> Unit
+    onToggleMute: () -> Unit,
+    tgColors: TelegramThemeColors = telegramColors()
 ) {
-    Box(
+    Surface(
+        color = tgColors.chatSurface,
         modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = 16.dp),
-        contentAlignment = Alignment.BottomCenter
+            .fillMaxWidth()
+            .height(48.dp)
+            .clickable { onExpand() },
+        shadowElevation = 2.dp
     ) {
-        Surface(
+        Row(
             modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxWidth()
-                .height(64.dp)
-                .clip(RoundedCornerShape(32.dp))
-                .clickable { onExpand() },
-            color = MaterialTheme.colorScheme.primaryContainer,
-            tonalElevation = 8.dp,
-            shadowElevation = 8.dp
+                .fillMaxSize()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+            IconButton(
+                onClick = onToggleMute,
+                modifier = Modifier.size(32.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Surface(
-                        modifier = Modifier.size(40.dp),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                    ) {}
-                    Icon(
-                        Icons.Outlined.Mic,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                
-                Spacer(Modifier.width(16.dp))
-                
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = strings.activeCall,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Text(
-                        text = if (state.isMuted) strings.muted else strings.micOn,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                    )
-                }
-                
-                IconButton(
-                    onClick = onToggleMute,
-                    modifier = Modifier.background(
-                        if (state.isMuted) MaterialTheme.colorScheme.errorContainer else Color.Transparent,
-                        CircleShape
-                    )
-                ) {
-                    Icon(
-                        if (state.isMuted) Icons.Outlined.MicOff else Icons.Outlined.Mic,
-                        contentDescription = null,
-                        tint = if (state.isMuted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-                
-                IconButton(
-                    onClick = onLeave,
-                    modifier = Modifier.background(MaterialTheme.colorScheme.error.copy(alpha = 0.1f), CircleShape)
-                ) {
-                    Icon(
-                        Icons.Outlined.Close,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
+                Icon(
+                    imageVector = if (state.isMuted) Icons.Outlined.MicOff else Icons.Outlined.Mic,
+                    contentDescription = null,
+                    tint = if (state.isMuted) MaterialTheme.colorScheme.error else tgColors.headerIcon
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = strings.activeCall,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = tgColors.headerTitle,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (state.isMuted) strings.muted else strings.micOn,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = tgColors.headerSubtitle,
+                    maxLines = 1
+                )
+            }
+
+            IconButton(onClick = onLeave, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.Outlined.Close,
+                    contentDescription = null,
+                    tint = tgColors.headerSubtitle
+                )
             }
         }
     }

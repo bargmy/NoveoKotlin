@@ -24,7 +24,7 @@ data class VoiceChatState(
     val currentChatId: String? = null,
     val currentCallId: String? = null,
     val currentRoomName: String? = null,
-    val isMuted: Boolean = false,
+    val isMuted: Boolean = true,
     val isDeafened: Boolean = false,
     val isMinimized: Boolean = false,
     val activeSpeakers: List<String> = emptyList(),
@@ -132,11 +132,7 @@ class VoiceChatManager(
                     currentChatId = chatId
                 )
 
-                // Enable audio by default (unmuted)
-                scope.launch {
-                    delay(500) // Small delay to ensure local participant is ready
-                    applyMuteState(false)
-                }
+                // Stay muted by default
                 updateParticipants()
 
             } catch (e: Exception) {
@@ -190,7 +186,7 @@ class VoiceChatManager(
     }
 
     private fun setDeafened(nextDeafened: Boolean) {
-        // In LiveKit Android, deafening usually involves muting all remote audio tracks
+        // In LiveKit Android, deafening involves muting all remote audio tracks
         val r: Room = room ?: return
         val remoteParticipants = r.remoteParticipants
         for (participant in remoteParticipants.values) {
@@ -198,7 +194,7 @@ class VoiceChatManager(
             for (pubPair in publications) {
                 val track = pubPair.second
                 if (track is RemoteAudioTrack) {
-                    // track.enabled = !nextDeafened
+                    track.enabled = !nextDeafened
                 }
             }
         }
