@@ -155,7 +155,13 @@ class NoveoNotificationService : LifecycleService() {
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or 
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            } else {
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            }
+            startForeground(1, notification, type)
         } else {
             startForeground(1, notification)
         }
@@ -305,8 +311,22 @@ class NoveoNotificationService : LifecycleService() {
 
         val fullScreenPendingIntent = PendingIntent.getActivity(this, 10, fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        // We remove the explicit "Accept" and "Decline" actions from the notification 
-        // to move away from "notification-based" calls.
+        val acceptIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("chatId", event.chatId)
+            putExtra("callId", event.callId)
+            putExtra("callerId", event.callerId)
+            putExtra("action", "accept_call")
+        }
+        val acceptPendingIntent = PendingIntent.getActivity(this, 11, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val declineIntent = Intent(this, NotificationActionReceiver::class.java).apply {
+            action = "ir.hienob.noveo.ACTION_DECLINE_CALL"
+            putExtra("chatId", event.chatId)
+            putExtra("callId", event.callId)
+        }
+        val declinePendingIntent = PendingIntent.getBroadcast(this, 12, declineIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
         val notification = NotificationCompat.Builder(this, "calls_v3")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(strings.incomingCall)
@@ -317,6 +337,8 @@ class NoveoNotificationService : LifecycleService() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setOngoing(true)
+            .addAction(0, "Accept", acceptPendingIntent)
+            .addAction(0, "Decline", declinePendingIntent)
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
             .setVibrate(longArrayOf(0, 500, 500, 500))
             .build()

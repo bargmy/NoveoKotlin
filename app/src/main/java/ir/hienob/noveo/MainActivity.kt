@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
 import android.os.Build
 import android.content.Context
+import android.provider.Settings
 
 class MainActivity : ComponentActivity() {
     private val viewModel: AppViewModel by viewModels()
@@ -27,25 +28,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val micPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.toggleMute()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
-            keyguardManager.requestDismissKeyguard(this, null)
-        } else {
-            @Suppress("DEPRECATION")
-            window.addFlags(
-                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-            )
+        // Request notification permission on first launch
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val sharedPrefs = getSharedPreferences("noveo_prefs", Context.MODE_PRIVATE)
+            val asked = sharedPrefs.getBoolean("notif_permission_asked", false)
+            if (!asked) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                sharedPrefs.edit().putBoolean("notif_permission_asked", true).apply()
+            }
         }
-        
-        handleIntent(intent)
+
         setContent {
             val state by viewModel.uiState.collectAsState()
             NoveoRoot(
@@ -88,7 +91,13 @@ class MainActivity : ComponentActivity() {
                 onRequestBatteryOptimization = { viewModel.requestDisableBatteryOptimization() },
                 onRequestPermission = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        if (shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+                            openNotificationSettings()
+                        } else {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    } else {
+                        openNotificationSettings()
                     }
                 },
                 onPlayAudio = { viewModel.playAudio(it) },
@@ -97,11 +106,29 @@ class MainActivity : ComponentActivity() {
                 onStopAudio = { viewModel.stopAudio() },
                 onSeekAudio = { viewModel.seekAudio(it) },
                 onDownloadFile = { viewModel.downloadFile(it) },
-                onCall = { viewModel.startOutgoingCall(it) },
-                onAcceptCall = { c, i -> viewModel.acceptCall(c, i) },
+                onCall = { chatId ->
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        viewModel.startOutgoingCall(chatId)
+                    } else {
+                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                },
+                onAcceptCall = { c, i ->
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        viewModel.acceptCall(c, i)
+                    } else {
+                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                },
                 onDeclineCall = viewModel::declineCall,
                 onLeaveCall = viewModel::leaveCall,
-                onToggleMute = viewModel::toggleMute,
+                onToggleMute = {
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        viewModel.toggleMute()
+                    } else {
+                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                },
                 onToggleDeafen = viewModel::toggleDeafen,
                 onToggleMinimize = viewModel::toggleMinimize,
                 onCancelUpload = viewModel::cancelPendingUpload,
@@ -138,6 +165,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun openNotificationSettings() {
+        val intent = Intent().apply {
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
+                    action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                }
+                else -> {
+                    action = "android.settings.APP_NOTIFICATION_SETTINGS"
+                    putExtra("app_package", packageName)
+                    putExtra("app_uid", applicationInfo.uid)
+                }
+            }
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
     }
 }
 
