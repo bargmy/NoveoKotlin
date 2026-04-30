@@ -16,6 +16,8 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.ProcessLifecycleOwner
 import ir.hienob.noveo.MainActivity
 import ir.hienob.noveo.R
+import android.media.RingtoneManager
+import android.net.Uri
 import ir.hienob.noveo.core.notifications.NotificationChannels
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSocket
@@ -42,6 +44,7 @@ class NoveoNotificationService : LifecycleService() {
     private var socketJob: Job? = null
     
     companion object {
+        private const val CALL_NOTIFICATION_ID = 1001
         private val _socketEvents = MutableSharedFlow<SocketEvent>(extraBufferCapacity = 100)
         val socketEvents = _socketEvents.asSharedFlow()
         
@@ -105,12 +108,29 @@ class NoveoNotificationService : LifecycleService() {
     private fun setupForeground() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
+            val serviceChannel = NotificationChannel(
                 NotificationChannels.SERVICE,
                 "Background Service",
                 NotificationManager.IMPORTANCE_LOW
             )
-            notificationManager.createNotificationChannel(channel)
+            notificationManager.createNotificationChannel(serviceChannel)
+            
+            val messagesChannel = NotificationChannel(
+                NotificationChannels.MESSAGES,
+                "Messages",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            notificationManager.createNotificationChannel(messagesChannel)
+            
+            val callsChannel = NotificationChannel(
+                NotificationChannels.CALLS,
+                "Calls",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), null)
+                enableVibration(true)
+            }
+            notificationManager.createNotificationChannel(callsChannel)
         }
 
         val notification = NotificationCompat.Builder(this, NotificationChannels.SERVICE)
@@ -130,20 +150,32 @@ class NoveoNotificationService : LifecycleService() {
                 try {
                     socket.connect(session) { knownUsers }.collect { event ->
                         _socketEvents.emit(event)
-                        if (event is SocketEvent.NewMessage && !isAppInForeground) {
-                            if (event.message.senderId == activeSession?.userId) return@collect
-                            val settings = sessionStore.readNotificationSettings()
-                            if (settings.enabled) {
-                                val shouldNotify = when (event.message.chatType) {
-                                    "private" -> settings.dms
-                                    "group" -> settings.groups
-                                    "channel" -> settings.channels
-                                    else -> true
-                                }
-                                if (shouldNotify) {
-                                    showNotification(event.message)
+                        when (event) {
+                            is SocketEvent.NewMessage -> {
+                                if (!isAppInForeground && event.message.senderId != activeSession?.userId) {
+                                    val settings = sessionStore.readNotificationSettings()
+                                    if (settings.enabled) {
+                                        val shouldNotify = when (event.message.chatType) {
+                                            "private" -> settings.dms
+                                            "group" -> settings.groups
+                                            "channel" -> settings.channels
+                                            else -> true
+                                        }
+                                        if (shouldNotify) {
+                                            showNotification(event.message)
+                                        }
+                                    }
                                 }
                             }
+                            is SocketEvent.IncomingCall -> {
+                                if (!isAppInForeground) {
+                                    showCallNotification(event)
+                                }
+                            }
+                            is SocketEvent.VoiceCallEnded -> {
+                                cancelCallNotification()
+                            }
+                            else -> {}
                         }
                     }
                 } catch (error: Throwable) {
@@ -168,15 +200,6 @@ class NoveoNotificationService : LifecycleService() {
     private fun showNotification(message: ChatMessage) {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NotificationChannels.MESSAGES,
-                "Messages",
-                NotificationManager.IMPORTANCE_HIGH
-            )
-            notificationManager.createNotificationChannel(channel)
-        }
-
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             putExtra("chatId", message.chatId)
@@ -227,6 +250,58 @@ class NoveoNotificationService : LifecycleService() {
             .build()
 
         notificationManager.notify(message.chatId.hashCode(), notification)
+    }
+
+    private fun showCallNotification(event: SocketEvent.IncomingCall) {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val caller = knownUsers[event.callerId]
+        val callerName = caller?.username ?: "Unknown Caller"
+
+        val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra("chatId", event.chatId)
+            putExtra("callId", event.callId)
+            putExtra("callerId", event.callerId)
+            putExtra("action", "accept_call")
+        }
+        val fullScreenPendingIntent = PendingIntent.getActivity(this, 10, fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val acceptIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra("chatId", event.chatId)
+            putExtra("callId", event.callId)
+            putExtra("callerId", event.callerId)
+            putExtra("action", "accept_call")
+        }
+        val acceptPendingIntent = PendingIntent.getActivity(this, 11, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val declineIntent = Intent(this, NotificationActionReceiver::class.java).apply {
+            action = "ir.hienob.noveo.ACTION_DECLINE_CALL"
+            putExtra("chatId", event.chatId)
+            putExtra("callId", event.callId)
+        }
+        val declinePendingIntent = PendingIntent.getBroadcast(this, 12, declineIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val notification = NotificationCompat.Builder(this, NotificationChannels.CALLS)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Incoming Voice Call")
+            .setContentText(callerName)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .setAutoCancel(true)
+            .setOngoing(true)
+            .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
+            .addAction(0, "Decline", declinePendingIntent)
+            .addAction(0, "Accept", acceptPendingIntent)
+            .build()
+
+        notificationManager.notify(CALL_NOTIFICATION_ID, notification)
+    }
+
+    private fun cancelCallNotification() {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(CALL_NOTIFICATION_ID)
     }
 
     override fun onDestroy() {
