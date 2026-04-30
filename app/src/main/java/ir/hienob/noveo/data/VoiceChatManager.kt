@@ -26,6 +26,7 @@ data class VoiceChatState(
     val currentRoomName: String? = null,
     val isMuted: Boolean = false,
     val isDeafened: Boolean = false,
+    val isMinimized: Boolean = false,
     val activeSpeakers: List<String> = emptyList(),
     val participantIds: List<String> = emptyList(),
     val isScreenSharing: Boolean = false,
@@ -132,7 +133,10 @@ class VoiceChatManager(
                 )
 
                 // Enable audio by default (unmuted)
-                applyMuteState(false)
+                scope.launch {
+                    delay(500) // Small delay to ensure local participant is ready
+                    applyMuteState(false)
+                }
                 updateParticipants()
 
             } catch (e: Exception) {
@@ -157,6 +161,10 @@ class VoiceChatManager(
             val nextMuted = !_state.value.isMuted
             applyMuteState(nextMuted)
         }
+    }
+
+    fun toggleMinimize() {
+        _state.value = _state.value.copy(isMinimized = !_state.value.isMinimized)
     }
 
     private suspend fun applyMuteState(muted: Boolean) {
