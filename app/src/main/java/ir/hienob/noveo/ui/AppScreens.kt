@@ -343,61 +343,75 @@ fun NoveoRoot(
                         onDismiss = onCaptchaDismiss
                     )
                 }
-                when (state.startupState) {
-                    StartupState.Splash -> ConnectingShell(strings.brandName)
-                    StartupState.Onboarding -> OnboardingScreen(strings, onDismissOnboarding)
-                    StartupState.Auth -> AuthScreen(strings, state, onAuthMode, onStartRegisterCaptcha, onAuthSubmit)
-                    StartupState.Home -> HomeScreen(
-                        state = state,
-                        onOpenChat = onOpenChat,
-                        onStartDirectChat = onStartDirectChat,
-                        onStartCreateChat = onStartCreateChat,
-                        onSearchPublic = onSearchPublic,
-                        onBackToChats = onBackToChats,
-                        onSend = onSend,
-                        onTyping = onTyping,
-                        onLogout = onLogout,
-                        onAttachFile = onAttachFile,
-                        onRemoveAttachment = onRemoveAttachment,
-                        onUpdateProfile = onUpdateProfile,
-                        onLoadOlder = onLoadOlder,
-                        onReply = onReply,
-                        onEditMessage = onEditMessage,
-                        onForwardMessage = onForwardMessage,
-                        onForwardConfirm = onForwardConfirm,
-                        onToggleReaction = onToggleReaction,
-                        onDeleteMessage = onDeleteMessage,
-                        onPinMessage = onPinMessage,
-                        onChangePassword = onChangePassword,
-                        onDeleteAccount = onDeleteAccount,
-                        onSetLanguage = onSetLanguage,
-                        onDismissUpdate = onDismissUpdate,
-                        onDownloadUpdate = onDownloadUpdate,
-                        onInstallUpdate = onInstallUpdate,
-                        onCheckUpdate = onCheckUpdate,
-                        onSetBetaUpdatesEnabled = onSetBetaUpdatesEnabled,
-                        onSetDoubleTapReaction = onSetDoubleTapReaction,
-                        onUpdateNotificationSettings = onUpdateNotificationSettings,
-                        onRequestBatteryOptimization = onRequestBatteryOptimization,
-                        onPlayAudio = onPlayAudio,
-                        onPauseAudio = onPauseAudio,
-                        onResumeAudio = onResumeAudio,
-                        onStopAudio = onStopAudio,
-                        onSeekAudio = onSeekAudio,
-                        onDownloadFile = onDownloadFile,
-                        onCall = onCall,
-                        onAcceptCall = onAcceptCall,
-                        onDeclineCall = onDeclineCall,
-                        onLeaveCall = onLeaveCall,
-                        onToggleMute = onToggleMute,
-                        onToggleDeafen = onToggleDeafen,
-                        onToggleMinimize = onToggleMinimize,
-                        onCancelUpload = onCancelUpload,
-                        onSendSticker = onSendSticker,
-                        onAddSavedSticker = onAddSavedSticker,
-                        currentTheme = currentTheme,
-                        onThemeChange = { currentTheme = it }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when (state.startupState) {
+                        StartupState.Splash -> ConnectingShell(strings.brandName)
+                        StartupState.Onboarding -> OnboardingScreen(strings, onDismissOnboarding)
+                        StartupState.Auth -> AuthScreen(strings, state, onAuthMode, onStartRegisterCaptcha, onAuthSubmit)
+                        StartupState.Home -> HomeScreen(
+                            state = state,
+                            onOpenChat = onOpenChat,
+                            onStartDirectChat = onStartDirectChat,
+                            onStartCreateChat = onStartCreateChat,
+                            onSearchPublic = onSearchPublic,
+                            onBackToChats = onBackToChats,
+                            onSend = onSend,
+                            onTyping = onTyping,
+                            onLogout = onLogout,
+                            onAttachFile = onAttachFile,
+                            onRemoveAttachment = onRemoveAttachment,
+                            onUpdateProfile = onUpdateProfile,
+                            onLoadOlder = onLoadOlder,
+                            onReply = onReply,
+                            onEditMessage = onEditMessage,
+                            onForwardMessage = onForwardMessage,
+                            onForwardConfirm = onForwardConfirm,
+                            onToggleReaction = onToggleReaction,
+                            onDeleteMessage = onDeleteMessage,
+                            onPinMessage = onPinMessage,
+                            onChangePassword = onChangePassword,
+                            onDeleteAccount = onDeleteAccount,
+                            onSetLanguage = onSetLanguage,
+                            onDismissUpdate = onDismissUpdate,
+                            onDownloadUpdate = onDownloadUpdate,
+                            onInstallUpdate = onInstallUpdate,
+                            onCheckUpdate = onCheckUpdate,
+                            onSetBetaUpdatesEnabled = onSetBetaUpdatesEnabled,
+                            onSetDoubleTapReaction = onSetDoubleTapReaction,
+                            onUpdateNotificationSettings = onUpdateNotificationSettings,
+                            onRequestBatteryOptimization = onRequestBatteryOptimization,
+                            onPlayAudio = onPlayAudio,
+                            onPauseAudio = onPauseAudio,
+                            onResumeAudio = onResumeAudio,
+                            onStopAudio = onStopAudio,
+                            onSeekAudio = onSeekAudio,
+                            onDownloadFile = onDownloadFile,
+                            onCall = onCall,
+                            onAcceptCall = onAcceptCall,
+                            onDeclineCall = onDeclineCall,
+                            onLeaveCall = onLeaveCall,
+                            onToggleMute = onToggleMute,
+                            onToggleDeafen = onToggleDeafen,
+                            onToggleMinimize = onToggleMinimize,
+                            onCancelUpload = onCancelUpload,
+                            onSendSticker = onSendSticker,
+                            onAddSavedSticker = onAddSavedSticker,
+                            currentTheme = currentTheme,
+                            onThemeChange = { currentTheme = it }
                         )
+                    }
+
+                    // Global Incoming Call Overlay
+                    state.incomingCall?.let { call ->
+                        IncomingCallOverlay(
+                            call = call,
+                            strings = strings,
+                            caller = state.usersById[call.callerId],
+                            onAccept = { onAcceptCall(call.chatId, call.callId) },
+                            onDecline = onDeclineCall
+                        )
+                    }
+                }
                 }
             }
         }
