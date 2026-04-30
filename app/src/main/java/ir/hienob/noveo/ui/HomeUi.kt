@@ -4734,68 +4734,77 @@ fun IncomingCallOverlay(
     onAccept: () -> Unit,
     onDecline: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = false) {},
-        contentAlignment = Alignment.Center
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color.Black
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .wrapContentHeight(),
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 12.dp,
-            shadowElevation = 12.dp
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Blurred-like background (using a dark semi-transparent overlay over the avatar)
+            if (caller?.avatarUrl != null) {
+                AsyncImage(
+                    model = caller.avatarUrl.normalizeNoveoUrl(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().alpha(0.3f),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            
             Column(
-                modifier = Modifier.padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(vertical = 64.dp, horizontal = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                ProfileCircle(name = caller?.username ?: "User", imageUrl = caller?.avatarUrl, size = 80.dp)
-                Spacer(Modifier.height(24.dp))
-                Text(
-                    text = caller?.username ?: "Unknown Caller",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = strings.incomingCall,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                
-                Spacer(Modifier.height(40.dp))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    ProfileCircle(name = caller?.username ?: "User", imageUrl = caller?.avatarUrl, size = 120.dp)
+                    Spacer(Modifier.height(32.dp))
+                    Text(
+                        text = caller?.username ?: "Unknown Caller",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        color = Color.White
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = strings.incomingCall,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         IconButton(
                             onClick = onDecline,
                             modifier = Modifier
-                                .size(64.dp)
-                                .background(MaterialTheme.colorScheme.error, CircleShape)
+                                .size(72.dp)
+                                .background(Color(0xFFF44336), CircleShape)
                         ) {
-                            Icon(Icons.Outlined.Close, contentDescription = strings.decline, tint = Color.White, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Outlined.Close, contentDescription = strings.decline, tint = Color.White, modifier = Modifier.size(36.dp))
                         }
-                        Text(text = strings.decline, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+                        Spacer(Modifier.height(12.dp))
+                        Text(text = strings.decline, style = MaterialTheme.typography.bodyLarge, color = Color.White)
                     }
                     
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         IconButton(
                             onClick = onAccept,
                             modifier = Modifier
-                                .size(64.dp)
+                                .size(72.dp)
                                 .background(Color(0xFF4CAF50), CircleShape)
                         ) {
-                            Icon(Icons.Outlined.Call, contentDescription = strings.accept, tint = Color.White, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Outlined.Call, contentDescription = strings.accept, tint = Color.White, modifier = Modifier.size(36.dp))
                         }
-                        Text(text = strings.accept, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+                        Spacer(Modifier.height(12.dp))
+                        Text(text = strings.accept, style = MaterialTheme.typography.bodyLarge, color = Color.White)
                     }
                 }
             }

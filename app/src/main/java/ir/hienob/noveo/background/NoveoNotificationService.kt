@@ -107,6 +107,11 @@ class NoveoNotificationService : LifecycleService() {
         }
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+        return START_STICKY
+    }
+
     private fun setupForeground() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -147,7 +152,11 @@ class NoveoNotificationService : LifecycleService() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        startForeground(1, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(1, notification)
+        }
     }
 
     private fun connectSocket(session: Session) {
@@ -175,6 +184,8 @@ class NoveoNotificationService : LifecycleService() {
                                 }
                             }
                             is SocketEvent.IncomingCall -> {
+                                // Always show call notification in background, 
+                                // and even in foreground if we want to ensure visibility
                                 if (!isAppInForeground) {
                                     showCallNotification(event)
                                 }
@@ -260,6 +271,16 @@ class NoveoNotificationService : LifecycleService() {
     }
 
     private fun showCallNotification(event: SocketEvent.IncomingCall) {
+        // Wake up screen
+        val powerManager = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val wakeLock = powerManager.newWakeLock(
+            android.os.PowerManager.FULL_WAKE_LOCK or
+                    android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                    android.os.PowerManager.ON_AFTER_RELEASE,
+            "Noveo:IncomingCall"
+        )
+        wakeLock.acquire(10000)
+
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val caller = knownUsers[event.callerId]
         val callerName = caller?.username ?: "Unknown Caller"
