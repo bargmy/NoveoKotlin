@@ -393,7 +393,8 @@ internal fun HomeScreen(
     onLeaveCall: () -> Unit,
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
-    onCancelUpload: () -> Unit,
+    onToggleMinimize: () -> Unit,
+    onCancelUpload: (String) -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
     onAddSavedSticker: (ChatMessage) -> Unit,
     currentTheme: ThemePreset,
@@ -953,14 +954,25 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
 
         // Voice Call Overlay
         if (state.voiceChatState.connectionState != ir.hienob.noveo.data.VoiceConnectionState.IDLE) {
-            VoiceCallOverlay(
-                state = state.voiceChatState,
-                strings = strings,
-                usersById = state.usersById,
-                onLeave = onLeaveCall,
-                onToggleMute = onToggleMute,
-                onToggleDeafen = onToggleDeafen
-            )
+            if (state.voiceChatState.isMinimized) {
+                VoiceChatTray(
+                    state = state.voiceChatState,
+                    strings = strings,
+                    onExpand = onToggleMinimize,
+                    onLeave = onLeaveCall,
+                    onToggleMute = onToggleMute
+                )
+            } else {
+                VoiceCallOverlay(
+                    state = state.voiceChatState,
+                    strings = strings,
+                    usersById = state.usersById,
+                    onLeave = onLeaveCall,
+                    onToggleMute = onToggleMute,
+                    onToggleDeafen = onToggleDeafen,
+                    onMinimize = onToggleMinimize
+                )
+            }
         }
 
         // Incoming Call Overlay
@@ -4529,7 +4541,8 @@ fun VoiceCallOverlay(
     usersById: Map<String, UserSummary>,
     onLeave: () -> Unit,
     onToggleMute: () -> Unit,
-    onToggleDeafen: () -> Unit
+    onToggleDeafen: () -> Unit,
+    onMinimize: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -4545,17 +4558,30 @@ fun VoiceCallOverlay(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = strings.brandName + " Voice Chat",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onMinimize) {
+                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = strings.minimize)
+                }
+                
+                Text(
+                    text = strings.voiceChat,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(Modifier.width(48.dp)) // To balance the minimize button
+            }
+            
             Spacer(Modifier.height(8.dp))
             Text(
                 text = when(state.connectionState) {
-                    ir.hienob.noveo.data.VoiceConnectionState.CONNECTING -> "Connecting..."
-                    ir.hienob.noveo.data.VoiceConnectionState.RECONNECTING -> "Reconnecting..."
-                    ir.hienob.noveo.data.VoiceConnectionState.CONNECTED -> "Connected"
+                    ir.hienob.noveo.data.VoiceConnectionState.CONNECTING -> strings.connecting
+                    ir.hienob.noveo.data.VoiceConnectionState.RECONNECTING -> strings.connecting
+                    ir.hienob.noveo.data.VoiceConnectionState.CONNECTED -> strings.online
                     else -> "Idle"
                 },
                 style = MaterialTheme.typography.bodyMedium,
@@ -4614,13 +4640,13 @@ fun VoiceCallOverlay(
                     ) {
                         Icon(
                             imageVector = if (state.isMuted) Icons.Outlined.MicOff else Icons.Outlined.Mic,
-                            contentDescription = if (state.isMuted) "Unmute" else "Mute",
+                            contentDescription = if (state.isMuted) strings.micOn else strings.muted,
                             tint = if (state.isMuted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(28.dp)
                         )
                     }
                     Text(
-                        text = if (state.isMuted) "Muted" else "Mic On",
+                        text = if (state.isMuted) strings.muted else strings.micOn,
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.padding(top = 4.dp)
                     )
@@ -4632,7 +4658,7 @@ fun VoiceCallOverlay(
                     shape = CircleShape,
                     modifier = Modifier.size(64.dp)
                 ) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Leave", tint = Color.White, modifier = Modifier.size(32.dp))
+                    Icon(Icons.Outlined.Close, contentDescription = strings.leave, tint = Color.White, modifier = Modifier.size(32.dp))
                 }
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -4647,13 +4673,13 @@ fun VoiceCallOverlay(
                     ) {
                         Icon(
                             imageVector = if (state.isDeafened) Icons.Outlined.HeadsetOff else Icons.Outlined.Headset,
-                            contentDescription = if (state.isDeafened) "Undeafen" else "Deafen",
+                            contentDescription = if (state.isDeafened) strings.audioOn else strings.deafened,
                             tint = if (state.isDeafened) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.size(28.dp)
                         )
                     }
                     Text(
-                        text = if (state.isDeafened) "Deafened" else "Audio On",
+                        text = if (state.isDeafened) strings.deafened else strings.audioOn,
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.padding(top = 4.dp)
                     )
@@ -4700,7 +4726,7 @@ fun IncomingCallOverlay(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "Incoming Voice Call",
+                    text = strings.incomingCall,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -4718,9 +4744,9 @@ fun IncomingCallOverlay(
                                 .size(64.dp)
                                 .background(MaterialTheme.colorScheme.error, CircleShape)
                         ) {
-                            Icon(Icons.Outlined.Close, contentDescription = "Decline", tint = Color.White, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Outlined.Close, contentDescription = strings.decline, tint = Color.White, modifier = Modifier.size(32.dp))
                         }
-                        Text(text = "Decline", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+                        Text(text = strings.decline, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
                     }
                     
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -4730,10 +4756,98 @@ fun IncomingCallOverlay(
                                 .size(64.dp)
                                 .background(Color(0xFF4CAF50), CircleShape)
                         ) {
-                            Icon(Icons.Outlined.Call, contentDescription = "Accept", tint = Color.White, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Outlined.Call, contentDescription = strings.accept, tint = Color.White, modifier = Modifier.size(32.dp))
                         }
-                        Text(text = "Accept", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+                        Text(text = strings.accept, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun VoiceChatTray(
+    state: ir.hienob.noveo.data.VoiceChatState,
+    strings: NoveoStrings,
+    onExpand: () -> Unit,
+    onLeave: () -> Unit,
+    onToggleMute: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = 16.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Surface(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxWidth()
+                .height(64.dp)
+                .clip(RoundedCornerShape(32.dp))
+                .clickable { onExpand() },
+            color = MaterialTheme.colorScheme.primaryContainer,
+            tonalElevation = 8.dp,
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Surface(
+                        modifier = Modifier.size(40.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                    ) {}
+                    Icon(
+                        Icons.Outlined.Mic,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                
+                Spacer(Modifier.width(16.dp))
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = strings.activeCall,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = if (state.isMuted) strings.muted else strings.micOn,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+                
+                IconButton(
+                    onClick = onToggleMute,
+                    modifier = Modifier.background(
+                        if (state.isMuted) MaterialTheme.colorScheme.errorContainer else Color.Transparent,
+                        CircleShape
+                    )
+                ) {
+                    Icon(
+                        if (state.isMuted) Icons.Outlined.MicOff else Icons.Outlined.Mic,
+                        contentDescription = null,
+                        tint = if (state.isMuted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                
+                IconButton(
+                    onClick = onLeave,
+                    modifier = Modifier.background(MaterialTheme.colorScheme.error.copy(alpha = 0.1f), CircleShape)
+                ) {
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }
