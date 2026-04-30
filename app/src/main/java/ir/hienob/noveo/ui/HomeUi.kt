@@ -797,13 +797,14 @@ internal fun HomeScreen(
                                 onCancelUpload = { selectedChat?.id?.let { onCancelUpload(it) } },
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
+                                onHandleClick = onHandleClick,
+                                onJoinChat = onJoinChat,
                                 onToggleMute = onToggleMute,
                                 onToggleMinimize = onToggleMinimize,
                                 onLeaveCall = onLeaveCall,
                                 lastKeyboardHeight = lastKeyboardHeight,
                                 modifier = Modifier.weight(1f)
-                                )
-                        }
+                                )                        }
                     }
                 }
             }
@@ -1915,6 +1916,7 @@ private fun ChatPane(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .clickable { onJoinChat(selectedChat.id) },
                 color = tgColors.chatSurface,
                 shadowElevation = 8.dp
@@ -1922,7 +1924,6 @@ private fun ChatPane(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = WindowInsets.navigationBarsPadding().asPaddingValues().calculateBottomPadding())
                         .height(54.dp),
                     contentAlignment = Alignment.Center
                 ) {
