@@ -400,17 +400,6 @@ fun NoveoRoot(
                             onThemeChange = { currentTheme = it }
                         )
                     }
-
-                    // Global Incoming Call Overlay
-                    state.incomingCall?.let { call ->
-                        IncomingCallOverlay(
-                            call = call,
-                            strings = strings,
-                            caller = state.usersById[call.callerId],
-                            onAccept = { onAcceptCall(call.chatId, call.callId) },
-                            onDecline = onDeclineCall
-                        )
-                    }
                 }
             }
         }

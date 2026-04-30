@@ -48,8 +48,19 @@ class IncomingCallActivity : ComponentActivity() {
         val chatId = intent.getStringExtra("chatId") ?: ""
         val callId = intent.getStringExtra("callId") ?: ""
         val callerId = intent.getStringExtra("callerId") ?: ""
+        val action = intent.getStringExtra("action")
 
         if (chatId.isEmpty() || callId.isEmpty()) {
+            finish()
+            return
+        }
+
+        if (action == "accept") {
+            viewModel.acceptCall(chatId, callId)
+            val mainIntent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            startActivity(mainIntent)
             finish()
             return
         }

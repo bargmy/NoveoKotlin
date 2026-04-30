@@ -158,11 +158,16 @@ class MainActivity : ComponentActivity() {
         if (chatId != null) {
             viewModel.openChat(chatId)
             if (callId != null && callerId != null) {
-                if (action == "accept_call") {
-                    viewModel.acceptCall(chatId, callId)
-                } else {
-                    viewModel.showIncomingCall(chatId, callId, callerId)
+                val callIntent = Intent(this, IncomingCallActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    putExtra("chatId", chatId)
+                    putExtra("callId", callId)
+                    putExtra("callerId", callerId)
+                    if (action == "accept_call") {
+                        putExtra("action", "accept")
+                    }
                 }
+                startActivity(callIntent)
             }
         }
     }

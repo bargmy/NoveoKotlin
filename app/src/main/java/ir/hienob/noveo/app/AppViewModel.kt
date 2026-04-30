@@ -1629,7 +1629,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun declineCall() {
+        val call = _uiState.value.incomingCall ?: return
         _uiState.value = _uiState.value.copy(incomingCall = null)
+        viewModelScope.launch {
+            val payload = org.json.JSONObject()
+                .put("type", "voice_leave")
+                .put("chatId", call.chatId)
+                .put("callId", call.callId)
+                .put("reason", "declined")
+            NoveoNotificationService.send(payload)
+        }
     }
 
     fun leaveCall() {

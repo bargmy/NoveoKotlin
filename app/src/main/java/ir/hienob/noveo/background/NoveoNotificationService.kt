@@ -210,11 +210,8 @@ class NoveoNotificationService : LifecycleService() {
                                 }
                             }
                             is SocketEvent.IncomingCall -> {
-                                // Always show call notification in background, 
-                                // and even in foreground if we want to ensure visibility
-                                if (!isAppInForeground) {
-                                    showCallNotification(event)
-                                }
+                                // Always show call notification to ensure consistency
+                                showCallNotification(event)
                             }
                             is SocketEvent.VoiceCallEnded -> {
                                 cancelCallNotification()
@@ -329,12 +326,12 @@ class NoveoNotificationService : LifecycleService() {
 
         val fullScreenPendingIntent = PendingIntent.getActivity(this, 10, fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        val acceptIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        val acceptIntent = Intent(this, IncomingCallActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             putExtra("chatId", event.chatId)
             putExtra("callId", event.callId)
             putExtra("callerId", event.callerId)
-            putExtra("action", "accept_call")
+            putExtra("action", "accept")
         }
         val acceptPendingIntent = PendingIntent.getActivity(this, 11, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
