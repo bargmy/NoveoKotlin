@@ -57,6 +57,10 @@ class NoveoNotificationService : LifecycleService() {
         private var activeSession: Session? = null
         private var instance: NoveoNotificationService? = null
         
+        private var _voiceChatManager: ir.hienob.noveo.data.VoiceChatManager? = null
+        val voiceChatManager: ir.hienob.noveo.data.VoiceChatManager?
+            get() = _voiceChatManager
+
         // Track known users in service for notification name resolution
         private val knownUsers = mutableMapOf<String, ir.hienob.noveo.data.UserSummary>()
 
@@ -86,6 +90,7 @@ class NoveoNotificationService : LifecycleService() {
         super.onCreate()
         instance = this
         sessionStore = SessionStore(this)
+        _voiceChatManager = ir.hienob.noveo.data.VoiceChatManager.getInstance(this, ir.hienob.noveo.data.NoveoApi())
         setupForeground()
         
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : LifecycleEventObserver {

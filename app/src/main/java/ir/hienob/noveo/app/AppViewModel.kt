@@ -125,7 +125,11 @@ data class UpdateInfo(
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val sessionStore = SessionStore(application)
     private val api = NoveoApi()
-    private val voiceChatManager = ir.hienob.noveo.data.VoiceChatManager(application, api, viewModelScope)
+    private val voiceChatManager = ir.hienob.noveo.data.VoiceChatManager.getInstance(
+        application, 
+        api, 
+        viewModelScope // This will be the scope if service isn't running, but service should be running.
+    )
     private val messageCacheByChat = mutableMapOf<String, List<ChatMessage>>()
 
     private val _uiState = MutableStateFlow(AppUiState())

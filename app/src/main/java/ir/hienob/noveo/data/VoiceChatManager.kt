@@ -39,9 +39,23 @@ enum class VoiceConnectionState {
 
 class VoiceChatManager(
     private val context: Context,
-    private val api: NoveoApi,
-    private val scope: CoroutineScope
+    private val api: NoveoApi
 ) {
+    private val scope = (context.applicationContext as ir.hienob.noveo.NoveoApplication).applicationScope
+
+    companion object {
+        @Volatile
+        private var instance: VoiceChatManager? = null
+
+        fun getInstance(context: Context, api: NoveoApi): VoiceChatManager {
+            return instance ?: synchronized(this) {
+                instance ?: VoiceChatManager(context.applicationContext, api).also { instance = it }
+            }
+        }
+        
+        fun getExisting(): VoiceChatManager? = instance
+    }
+
     private var room: Room? = null
     private var localAudioTrack: LocalAudioTrack? = null
     

@@ -157,7 +157,14 @@ class MainActivity : ComponentActivity() {
 
         if (chatId != null) {
             viewModel.openChat(chatId)
-            if (callId != null && callerId != null) {
+            
+            // Only launch IncomingCallActivity if we aren't already in a call 
+            // and this is a fresh incoming call intent
+            val currentCall = viewModel.uiState.value.voiceChatState
+            val isAlreadyInThisCall = currentCall.currentCallId == callId && 
+                                     currentCall.connectionState != ir.hienob.noveo.data.VoiceConnectionState.IDLE
+
+            if (callId != null && callerId != null && !isAlreadyInThisCall) {
                 val callIntent = Intent(this, IncomingCallActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                     putExtra("chatId", chatId)
@@ -169,6 +176,11 @@ class MainActivity : ComponentActivity() {
                 }
                 startActivity(callIntent)
             }
+            
+            // Clear intent extras to prevent re-handling on configuration changes or re-entry
+            intent.removeExtra("callId")
+            intent.removeExtra("callerId")
+            intent.removeExtra("action")
         }
     }
 

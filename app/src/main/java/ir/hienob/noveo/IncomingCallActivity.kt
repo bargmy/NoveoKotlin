@@ -45,30 +45,16 @@ class IncomingCallActivity : ComponentActivity() {
             WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON
         )
 
-        val chatId = intent.getStringExtra("chatId") ?: ""
-        val callId = intent.getStringExtra("callId") ?: ""
-        val callerId = intent.getStringExtra("callerId") ?: ""
-        val action = intent.getStringExtra("action")
-
-        if (chatId.isEmpty() || callId.isEmpty()) {
-            finish()
-            return
-        }
-
-        if (action == "accept") {
-            viewModel.acceptCall(chatId, callId)
-            val mainIntent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            startActivity(mainIntent)
-            finish()
-            return
-        }
+        handleIntent(intent)
 
         setContent {
             val state by viewModel.uiState.collectAsState()
             val strings = getStrings(state.languageCode)
             
+            val chatId = intent.getStringExtra("chatId") ?: ""
+            val callId = intent.getStringExtra("callId") ?: ""
+            val callerId = intent.getStringExtra("callerId") ?: ""
+
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     IncomingCallOverlay(
@@ -76,12 +62,7 @@ class IncomingCallActivity : ComponentActivity() {
                         strings = strings,
                         caller = state.usersById[callerId],
                         onAccept = {
-                            viewModel.acceptCall(chatId, callId)
-                            val mainIntent = Intent(this, MainActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                            }
-                            startActivity(mainIntent)
-                            finish()
+                            acceptAndReturn()
                         },
                         onDecline = {
                             viewModel.declineCall()
@@ -94,12 +75,45 @@ class IncomingCallActivity : ComponentActivity() {
         
         // Listen for call end to finish activity
         lifecycleScope.launch {
+            val chatId = intent.getStringExtra("chatId") ?: ""
             NoveoNotificationService.socketEvents.collect { event ->
                 if (event is SocketEvent.VoiceCallEnded && event.chatId == chatId) {
                     finish()
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        val chatId = intent?.getStringExtra("chatId") ?: ""
+        val callId = intent?.getStringExtra("callId") ?: ""
+        val action = intent?.getStringExtra("action")
+
+        if (chatId.isEmpty() || callId.isEmpty()) return
+
+        if (action == "accept") {
+            acceptAndReturn()
+        }
+    }
+
+    private fun acceptAndReturn() {
+        val chatId = intent.getStringExtra("chatId") ?: ""
+        val callId = intent.getStringExtra("callId") ?: ""
+        if (chatId.isNotEmpty() && callId.isNotEmpty()) {
+            viewModel.acceptCall(chatId, callId)
+        }
+        
+        val mainIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+        }
+        startActivity(mainIntent)
+        finish()
     }
 
     override fun onDestroy() {
