@@ -158,6 +158,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             voiceChatManager.state.collect { state ->
                 _uiState.value = _uiState.value.copy(voiceChatState = state)
+                
+                // Update background service foreground type based on call state
+                val isCallActive = state.connectionState == ir.hienob.noveo.data.VoiceConnectionState.CONNECTED
+                NoveoNotificationService.updateCallActive(isCallActive)
             }
         }
     }

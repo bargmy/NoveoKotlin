@@ -76,6 +76,10 @@ class NoveoNotificationService : LifecycleService() {
                 context.startService(intent)
             }
         }
+
+        fun updateCallActive(active: Boolean) {
+            instance?.updateForegroundType(active)
+        }
     }
 
     override fun onCreate() {
@@ -155,11 +159,25 @@ class NoveoNotificationService : LifecycleService() {
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or 
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            } else {
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(1, notification)
+        }
+    }
+
+    fun updateForegroundType(isCallActive: Boolean) {
+        val notification = NotificationCompat.Builder(this, NotificationChannels.SERVICE)
+            .setContentTitle("Noveo is running")
+            .setContentText(if (isCallActive) "Active call in progress" else "Listening for messages")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            var type = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            if (isCallActive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // Only add microphone type if a call is active
+                type = type or android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             }
             startForeground(1, notification, type)
         } else {
