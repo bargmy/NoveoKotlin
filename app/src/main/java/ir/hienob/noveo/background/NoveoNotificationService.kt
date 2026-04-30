@@ -288,12 +288,11 @@ class NoveoNotificationService : LifecycleService() {
         
         val strings = getStrings(sessionStore.readLanguageCode())
 
-        val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
+        val fullScreenIntent = Intent(this, IncomingCallActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             putExtra("chatId", event.chatId)
             putExtra("callId", event.callId)
             putExtra("callerId", event.callerId)
-            putExtra("action", "view_call")
         }
         
         // Force start activity immediately to bypass notification buttons
