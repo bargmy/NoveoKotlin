@@ -390,7 +390,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(doubleTapReaction = reaction)
     }
 
-    fun cancelPendingUpload() {
+    fun cancelPendingUpload(chatId: String) {
         activeUploadController?.cancel()
         activeUploadJob?.cancel()
         val attachment = _uiState.value.pendingAttachment
