@@ -127,8 +127,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val api = NoveoApi()
     private val voiceChatManager = ir.hienob.noveo.data.VoiceChatManager.getInstance(
         application, 
-        api, 
-        viewModelScope // This will be the scope if service isn't running, but service should be running.
+        api
     )
     private val messageCacheByChat = mutableMapOf<String, List<ChatMessage>>()
 
