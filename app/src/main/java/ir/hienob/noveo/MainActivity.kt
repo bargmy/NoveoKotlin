@@ -133,7 +133,9 @@ class MainActivity : ComponentActivity() {
                 onToggleMinimize = viewModel::toggleMinimize,
                 onCancelUpload = viewModel::cancelPendingUpload,
                 onSendSticker = { sticker -> viewModel.sendSticker(sticker) },
-                onAddSavedSticker = { message -> viewModel.addSavedStickerFromMessage(message) }
+                onAddSavedSticker = { message -> viewModel.addSavedStickerFromMessage(message) },
+                onHandleClick = viewModel::openHandle,
+                onJoinChat = viewModel::joinChat
             )
         }
     }

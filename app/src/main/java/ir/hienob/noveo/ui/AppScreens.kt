@@ -295,10 +295,12 @@ fun NoveoRoot(
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
     onToggleMinimize: () -> Unit,
-    onCancelUpload: (String) -> Unit,
-    onSendSticker: (SavedSticker) -> Unit,
-    onAddSavedSticker: (ChatMessage) -> Unit
-) {
+    onCancelUpload: (String) -> Unit = {},
+    onSendSticker: (SavedSticker) -> Unit = {},
+    onAddSavedSticker: (ChatMessage) -> Unit = {},
+    onHandleClick: (String) -> Unit = {},
+    onJoinChat: (String) -> Unit = {}
+    ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current
     val prefs = remember(context) { context.getSharedPreferences("noveo_ui", Context.MODE_PRIVATE) }
@@ -396,6 +398,8 @@ fun NoveoRoot(
                             onCancelUpload = onCancelUpload,
                             onSendSticker = onSendSticker,
                             onAddSavedSticker = onAddSavedSticker,
+                            onHandleClick = onHandleClick,
+                            onJoinChat = onJoinChat,
                             currentTheme = currentTheme,
                             onThemeChange = { currentTheme = it }
                         )

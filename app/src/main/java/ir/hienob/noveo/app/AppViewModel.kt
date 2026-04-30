@@ -736,6 +736,71 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun openHandle(handle: String) {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            try {
+                // First check if we already have a chat with this handle
+                val existingChat = _uiState.value.chats.firstOrNull { it.handle == handle }
+                if (existingChat != null) {
+                    openChat(existingChat.id)
+                    return@launch
+                }
+                
+                // Then check users
+                val existingUser = _uiState.value.usersById.values.firstOrNull { it.handle == handle }
+                if (existingUser != null) {
+                    openDirectChat(existingUser.id)
+                    return@launch
+                }
+                
+                // Resolve handle via API
+                val response = withContext(Dispatchers.IO) { api.resolveHandle(session, handle) }
+                if (response.optBoolean("success", false)) {
+                    val chatId = response.optString("chatId")
+                    val userId = response.optString("userId")
+                    
+                    if (chatId.isNotBlank()) {
+                        // It's a group/channel
+                        val chatJson = response.optJSONObject("chat")
+                        if (chatJson != null) {
+                            val chat = parseChat(chatJson, _uiState.value.usersById, session.userId)
+                            _uiState.value = _uiState.value.copy(
+                                chats = (_uiState.value.chats.filter { it.id != chat.id } + chat).sortedByDescending { it.lastMessageTimestamp }
+                            )
+                            openChat(chat.id)
+                        }
+                    } else if (userId.isNotBlank()) {
+                        // It's a user
+                        val userJson = response.optJSONObject("user")
+                        if (userJson != null) {
+                            val user = parseUser(userJson)
+                            _uiState.value = _uiState.value.copy(
+                                usersById = _uiState.value.usersById + (user.id to user)
+                            )
+                            openDirectChat(user.id)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun joinChat(chatId: String) {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { api.joinChat(session, chatId) }
+                loadHomeData()
+                openChat(chatId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun onCaptchaTokenReceived(token: String) {
         val info = _uiState.value.captchaInfo ?: return
         dismissCaptcha()

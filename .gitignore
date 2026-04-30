@@ -8,3 +8,4 @@ server_no_captcha_creation.py
 
 .gemini/
 gha-creds-*.json
+web_refrence/

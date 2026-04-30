@@ -73,6 +73,36 @@ class NoveoApi(
         }
     }
 
+    fun joinChat(session: Session, chatId: String) {
+        val url = "https://noveo.ir:8443/chat/join".toHttpUrl()
+        val body = JSONObject().put("chatId", chatId).toString()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Join failed (${response.code})")
+        }
+    }
+
+    fun resolveHandle(session: Session, handle: String): JSONObject {
+        val url = "https://noveo.ir:8443/chat/resolve-handle".toHttpUrl().newBuilder()
+            .addQueryParameter("handle", handle)
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Handle resolve failed (${response.code})")
+            return JSONObject(response.body?.string().orEmpty())
+        }
+    }
+
     fun uploadFile(
         session: Session,
         fileData: ByteArray,

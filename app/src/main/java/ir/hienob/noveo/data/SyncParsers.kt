@@ -9,6 +9,24 @@ internal data class SyncSnapshot(
     val history: JSONObject
 )
 
+internal fun parseUser(item: JSONObject, onlineIds: Set<String> = emptySet()): UserSummary {
+    val userId = item.optString("userId").sanitizeServerString().ifBlank { item.optString("id").sanitizeServerString() }
+    return UserSummary(
+        id = userId,
+        username = item.optString("username").sanitizeServerString().ifBlank { item.optString("name").sanitizeServerString().ifBlank { "Unknown" } },
+        avatarUrl = resolveAssetUrl(item, "avatarUrl", "avatar", "photo", "image")?.takeIf { it.isNotBlank() },
+        handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
+        bio = item.optString("bio").sanitizeServerString(),
+        isOnline = onlineIds.contains(userId) || item.optBoolean("online", false),
+        isVerified = item.optBoolean("isVerified", false),
+        profileSkin = parseProfileSkin(item.optJSONObject("profileSkin")),
+        starsBalance = item.optDouble("starsBalance", 0.0),
+        languageCode = item.optString("languageCode").sanitizeServerString().ifBlank { "en" },
+        lastSeen = item.optLong("lastSeen", item.optLong("last_seen", 0L)).takeIf { it > 0 },
+        joinedAt = item.optLong("joinedAt", item.optLong("createdAt", 0L)).takeIf { it > 0 }
+    )
+}
+
 internal fun parseUsers(payload: JSONObject): Pair<Map<String, UserSummary>, Set<String>> {
     val onlineIds = mutableSetOf<String>()
     val onlineArray = payload.optJSONArray("online") ?: JSONArray()
@@ -20,22 +38,8 @@ internal fun parseUsers(payload: JSONObject): Pair<Map<String, UserSummary>, Set
     val usersArray = payload.optJSONArray("users") ?: JSONArray()
     for (index in 0 until usersArray.length()) {
         val item = usersArray.optJSONObject(index) ?: continue
-        val userId = item.optString("userId").sanitizeServerString()
-        if (userId.isBlank()) continue
-        users[userId] = UserSummary(
-            id = userId,
-            username = item.optString("username").sanitizeServerString().ifBlank { "Unknown" },
-            avatarUrl = resolveAssetUrl(item, "avatarUrl", "avatar", "photo", "image")?.takeIf { it.isNotBlank() },
-            handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
-            bio = item.optString("bio").sanitizeServerString(),
-            isOnline = onlineIds.contains(userId),
-            isVerified = item.optBoolean("isVerified", false),
-            profileSkin = parseProfileSkin(item.optJSONObject("profileSkin")),
-            starsBalance = item.optDouble("starsBalance", 0.0),
-            languageCode = item.optString("languageCode").sanitizeServerString().ifBlank { "en" },
-            lastSeen = item.optLong("lastSeen", item.optLong("last_seen", 0L)).takeIf { it > 0 },
-            joinedAt = item.optLong("joinedAt", item.optLong("createdAt", 0L)).takeIf { it > 0 }
-        )
+        val user = parseUser(item, onlineIds)
+        users[user.id] = user
     }
     return users to onlineIds
 }

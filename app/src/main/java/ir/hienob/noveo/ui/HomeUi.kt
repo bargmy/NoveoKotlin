@@ -397,6 +397,8 @@ internal fun HomeScreen(
     onCancelUpload: (String) -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
     onAddSavedSticker: (ChatMessage) -> Unit,
+    onHandleClick: (String) -> Unit,
+    onJoinChat: (String) -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
     onForwardConfirm: (ChatMessage, String) -> Unit = { _, _ -> }
@@ -1213,6 +1215,76 @@ private fun SidebarHeader(
     }
 }
 
+private fun formatDuration(seconds: Int, strings: NoveoStrings): String {
+    val mins = seconds / 60
+    val secs = seconds % 60
+    return if (mins > 0) {
+        "${localizeDigits(mins.toString(), strings.languageCode)}m ${localizeDigits(secs.toString(), strings.languageCode)}s"
+    } else {
+        "${localizeDigits(secs.toString(), strings.languageCode)}s"
+    }
+}
+
+@Composable
+private fun CallLogView(
+    callLogJson: String,
+    strings: NoveoStrings,
+    ownMessage: Boolean,
+    tgColors: TelegramThemeColors
+) {
+    val log = remember(callLogJson) { runCatching { org.json.JSONObject(callLogJson) }.getOrNull() } ?: return
+    val type = log.optString("type")
+    val duration = log.optInt("duration", 0)
+    
+    val icon = when (type) {
+        "outgoing" -> Icons.Outlined.Call
+        "missed" -> Icons.Outlined.ErrorOutline
+        "cancelled" -> Icons.Outlined.Close
+        "declined" -> Icons.Outlined.Close
+        else -> Icons.Outlined.Call
+    }
+    
+    val label = when (type) {
+        "outgoing" -> strings.outgoingCall
+        "missed" -> strings.missedCall
+        "cancelled" -> strings.cancelledCall
+        "declined" -> strings.declinedCall
+        else -> strings.incomingCall
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
+        Icon(
+            imageVector = icon, 
+            contentDescription = null, 
+            tint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink, 
+            modifier = Modifier.size(20.dp).graphicsLayer {
+                if (type == "outgoing") {
+                    rotationZ = 45f
+                } else if (type == "incoming") {
+                    rotationZ = 225f
+                }
+            }
+        )
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(
+                label, 
+                fontWeight = FontWeight.Bold, 
+                color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText,
+                fontSize = 15.sp
+            )
+            if (duration > 0) {
+                Text(
+                    formatDuration(duration, strings), 
+                    style = MaterialTheme.typography.labelSmall, 
+                    color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingText).copy(alpha = 0.7f),
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun VerifiedIcon(modifier: Modifier = Modifier) {
     Box(
@@ -1832,6 +1904,30 @@ private fun ChatPane(
                     }
                 }
             }
+        } else if (selectedChat.chatType != "private" && !selectedChat.memberIds.contains(currentUserId)) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .clickable { onJoinChat(selectedChat.id) },
+                color = tgColors.chatSurface,
+                shadowElevation = 8.dp
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = WindowInsets.navigationBarsPadding().asPaddingValues().calculateBottomPadding())
+                        .height(54.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        strings.join.uppercase(),
+                        color = tgColors.incomingLink,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp
+                    )
+                }
+            }
         }
         
         if (showAttachPopup) {
@@ -2341,6 +2437,12 @@ private fun MessageRow(
                                     )
                                 }
                             }
+                            
+                            val callLog = message.content.callLog
+                            if (!callLog.isNullOrBlank()) {
+                                CallLogView(callLog, strings, ownMessage, tgColors)
+                            }
+
                             val caption = message.content.text
 
                             if (!caption.isNullOrBlank()) {
@@ -2348,7 +2450,8 @@ private fun MessageRow(
                                 Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 4.dp)) {
                                     MarkdownText(
                                         text = caption,
-                                        color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText
+                                        color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText,
+                                        onHandleClick = onHandleClick
                                     )
                                 }
                             }
@@ -2479,35 +2582,85 @@ private fun ReplyPreview(message: ChatMessage, onCancel: () -> Unit) {
 }
 
 @Composable
-private fun MarkdownText(text: String, color: Color = MaterialTheme.colorScheme.onSurface) {
+private fun MarkdownText(
+    text: String, 
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    onHandleClick: ((String) -> Unit)? = null
+) {
+    val handleColor = if (color == MaterialTheme.colorScheme.onSurface) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.95f)
     val annotated = remember(text) {
         buildAnnotatedString {
             var index = 0
-            var bold = false
             while (index < text.length) {
-                val markerIndex = text.indexOf("**", startIndex = index)
-                if (markerIndex == -1) {
-                    withStyle(if (bold) SpanStyle(fontWeight = FontWeight.Bold) else SpanStyle()) {
-                        append(text.substring(index))
-                    }
+                val nextMarker = text.indexOf("**", index)
+                val nextHandle = text.indexOf("@", index)
+                
+                val markers = mutableListOf<Pair<Int, String>>()
+                if (nextMarker != -1) markers.add(nextMarker to "**")
+                if (nextHandle != -1) markers.add(nextHandle to "@")
+                
+                val nearest = markers.minByOrNull { it.first }
+                
+                if (nearest == null) {
+                    append(text.substring(index))
                     break
                 }
-                if (markerIndex > index) {
-                    withStyle(if (bold) SpanStyle(fontWeight = FontWeight.Bold) else SpanStyle()) {
-                        append(text.substring(index, markerIndex))
+                
+                if (nearest.first > index) {
+                    append(text.substring(index, nearest.first))
+                }
+                
+                if (nearest.second == "**") {
+                    val endBold = text.indexOf("**", nearest.first + 2)
+                    if (endBold != -1) {
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                            append(text.substring(nearest.first + 2, endBold))
+                        }
+                        index = endBold + 2
+                    } else {
+                        append("**")
+                        index = nearest.first + 2
+                    }
+                } else if (nearest.second == "@") {
+                    var endHandle = nearest.first + 1
+                    while (endHandle < text.length && (text[endHandle].isLetterOrDigit() || text[endHandle] == '_')) {
+                        endHandle++
+                    }
+                    if (endHandle > nearest.first + 1) {
+                        val handle = text.substring(nearest.first + 1, endHandle)
+                        pushStringAnnotation("handle", handle)
+                        withStyle(SpanStyle(color = handleColor, fontWeight = FontWeight.SemiBold)) {
+                            append("@$handle")
+                        }
+                        pop()
+                        index = endHandle
+                    } else {
+                        append("@")
+                        index = nearest.first + 1
                     }
                 }
-                bold = !bold
-                index = markerIndex + 2
             }
         }
     }
-    Text(
-        annotated,
-        color = color,
-        fontSize = 16.sp,
-        lineHeight = 20.sp
-    )
+
+    if (onHandleClick != null) {
+        androidx.compose.foundation.text.ClickableText(
+            text = annotated,
+            style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
+            onClick = { offset ->
+                annotated.getStringAnnotations("handle", offset, offset).firstOrNull()?.let {
+                    onHandleClick(it.item)
+                }
+            }
+        )
+    } else {
+        Text(
+            annotated,
+            color = color,
+            fontSize = 16.sp,
+            lineHeight = 20.sp
+        )
+    }
 }
 
 @Composable
