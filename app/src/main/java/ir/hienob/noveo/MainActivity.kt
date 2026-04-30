@@ -104,8 +104,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        intent?.getStringExtra("chatId")?.let { chatId ->
+        val chatId = intent?.getStringExtra("chatId")
+        val callId = intent?.getStringExtra("callId")
+        val callerId = intent?.getStringExtra("callerId")
+        val action = intent?.getStringExtra("action")
+
+        if (chatId != null) {
             viewModel.openChat(chatId)
+            if (callId != null && callerId != null) {
+                if (action == "accept_call") {
+                    viewModel.acceptCall(chatId, callId)
+                } else {
+                    viewModel.showIncomingCall(chatId, callId, callerId)
+                }
+            }
         }
     }
 }
