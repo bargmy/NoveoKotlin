@@ -20,6 +20,9 @@ import androidx.compose.ui.Modifier
 import ir.hienob.noveo.background.NoveoNotificationService
 import ir.hienob.noveo.data.SocketEvent
 
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+
 class IncomingCallActivity : ComponentActivity() {
     private val viewModel: AppViewModel by viewModels()
 
@@ -79,7 +82,7 @@ class IncomingCallActivity : ComponentActivity() {
         }
         
         // Listen for call end to finish activity
-        androidx.lifecycle.lifecycleScope.launchWhenStarted {
+        lifecycleScope.launch {
             NoveoNotificationService.socketEvents.collect { event ->
                 if (event is SocketEvent.VoiceCallEnded && event.chatId == chatId) {
                     finish()
