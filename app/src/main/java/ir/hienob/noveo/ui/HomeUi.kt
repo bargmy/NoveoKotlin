@@ -57,6 +57,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.WindowInsets
@@ -91,6 +92,10 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.Headset
+import androidx.compose.material.icons.outlined.HeadsetOff
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.MicOff
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Person
@@ -4597,17 +4602,27 @@ fun VoiceCallOverlay(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = onToggleMute,
-                    modifier = Modifier.background(
-                        if (state.isMuted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
-                        CircleShape
-                    )
-                ) {
-                    Icon(
-                        imageVector = if (state.isMuted) Icons.Outlined.Notifications else Icons.Outlined.Notifications, // Should use Mic icons if available
-                        contentDescription = "Mute",
-                        tint = if (state.isMuted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = onToggleMute,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(
+                                if (state.isMuted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            imageVector = if (state.isMuted) Icons.Outlined.MicOff else Icons.Outlined.Mic,
+                            contentDescription = if (state.isMuted) "Unmute" else "Mute",
+                            tint = if (state.isMuted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    Text(
+                        text = if (state.isMuted) "Muted" else "Mic On",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
 
@@ -4615,22 +4630,32 @@ fun VoiceCallOverlay(
                     onClick = onLeave,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     shape = CircleShape,
-                    modifier = Modifier.size(56.dp)
+                    modifier = Modifier.size(64.dp)
                 ) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Leave", tint = Color.White)
+                    Icon(Icons.Outlined.Close, contentDescription = "Leave", tint = Color.White, modifier = Modifier.size(32.dp))
                 }
 
-                IconButton(
-                    onClick = onToggleDeafen,
-                    modifier = Modifier.background(
-                        if (state.isDeafened) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
-                        CircleShape
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Notifications, // Should use Headset icons
-                        contentDescription = "Deafen",
-                        tint = if (state.isDeafened) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = onToggleDeafen,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(
+                                if (state.isDeafened) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            imageVector = if (state.isDeafened) Icons.Outlined.HeadsetOff else Icons.Outlined.Headset,
+                            contentDescription = if (state.isDeafened) "Undeafen" else "Deafen",
+                            tint = if (state.isDeafened) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    Text(
+                        text = if (state.isDeafened) "Deafened" else "Audio On",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
             }
@@ -4649,35 +4674,66 @@ fun IncomingCallOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f))
+            .background(Color.Black.copy(alpha = 0.6f))
             .clickable(enabled = false) {},
-        contentAlignment = Alignment.TopCenter
+        contentAlignment = Alignment.Center
     ) {
         Surface(
             modifier = Modifier
-                .padding(top = 40.dp)
-                .fillMaxWidth(0.9f),
-            shape = RoundedCornerShape(24.dp),
+                .fillMaxWidth(0.85f)
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp,
-            shadowElevation = 8.dp
+            tonalElevation = 12.dp,
+            shadowElevation = 12.dp
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                ProfileCircle(name = caller?.username ?: "User", imageUrl = caller?.avatarUrl, size = 48.dp)
-                Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = caller?.username ?: "Unknown Caller", fontWeight = FontWeight.Bold)
-                    Text(text = "Incoming Voice Call", style = MaterialTheme.typography.bodySmall)
-                }
-                IconButton(onClick = onDecline, modifier = Modifier.background(MaterialTheme.colorScheme.errorContainer, CircleShape)) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Decline", tint = MaterialTheme.colorScheme.onErrorContainer)
-                }
-                Spacer(Modifier.width(8.dp))
-                IconButton(onClick = onAccept, modifier = Modifier.background(Color(0xFF4CAF50), CircleShape)) {
-                    Icon(Icons.Outlined.Call, contentDescription = "Accept", tint = Color.White)
+                ProfileCircle(name = caller?.username ?: "User", imageUrl = caller?.avatarUrl, size = 80.dp)
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = caller?.username ?: "Unknown Caller",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Incoming Voice Call",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                Spacer(Modifier.height(40.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = onDecline,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(MaterialTheme.colorScheme.error, CircleShape)
+                        ) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Decline", tint = Color.White, modifier = Modifier.size(32.dp))
+                        }
+                        Text(text = "Decline", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+                    }
+                    
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = onAccept,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(Color(0xFF4CAF50), CircleShape)
+                        ) {
+                            Icon(Icons.Outlined.Call, contentDescription = "Accept", tint = Color.White, modifier = Modifier.size(32.dp))
+                        }
+                        Text(text = "Accept", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+                    }
                 }
             }
         }
