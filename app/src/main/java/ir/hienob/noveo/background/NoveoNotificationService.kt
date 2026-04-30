@@ -296,29 +296,17 @@ class NoveoNotificationService : LifecycleService() {
             putExtra("action", "view_call")
         }
         
-        // Aggressively start activity if screen is locked/off (best effort)
-        if (!powerManager.isInteractive) {
+        // Force start activity immediately to bypass notification buttons
+        try {
             startActivity(fullScreenIntent)
+        } catch (e: Exception) {
+            // Fallback to fullScreenIntent in notification if direct start fails
         }
 
         val fullScreenPendingIntent = PendingIntent.getActivity(this, 10, fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        val acceptIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-            putExtra("chatId", event.chatId)
-            putExtra("callId", event.callId)
-            putExtra("callerId", event.callerId)
-            putExtra("action", "accept_call")
-        }
-        val acceptPendingIntent = PendingIntent.getActivity(this, 11, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
-        val declineIntent = Intent(this, NotificationActionReceiver::class.java).apply {
-            action = "ir.hienob.noveo.ACTION_DECLINE_CALL"
-            putExtra("chatId", event.chatId)
-            putExtra("callId", event.callId)
-        }
-        val declinePendingIntent = PendingIntent.getBroadcast(this, 12, declineIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
+        // We remove the explicit "Accept" and "Decline" actions from the notification 
+        // to move away from "notification-based" calls.
         val notification = NotificationCompat.Builder(this, "calls_v3")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(strings.incomingCall)
@@ -331,8 +319,6 @@ class NoveoNotificationService : LifecycleService() {
             .setOngoing(true)
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
             .setVibrate(longArrayOf(0, 500, 500, 500))
-            .addAction(0, strings.decline, declinePendingIntent)
-            .addAction(0, strings.accept, acceptPendingIntent)
             .build()
 
         notificationManager.notify(CALL_NOTIFICATION_ID, notification)
