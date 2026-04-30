@@ -294,7 +294,8 @@ fun NoveoRoot(
     onLeaveCall: () -> Unit,
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
-    onCancelUpload: () -> Unit,
+    onToggleMinimize: () -> Unit,
+    onCancelUpload: (String) -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
     onAddSavedSticker: (ChatMessage) -> Unit
 ) {
@@ -390,6 +391,7 @@ fun NoveoRoot(
                         onLeaveCall = onLeaveCall,
                         onToggleMute = onToggleMute,
                         onToggleDeafen = onToggleDeafen,
+                        onToggleMinimize = onToggleMinimize,
                         onCancelUpload = onCancelUpload,
                         onSendSticker = onSendSticker,
                         onAddSavedSticker = onAddSavedSticker,

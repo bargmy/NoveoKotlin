@@ -643,9 +643,8 @@ internal fun HomeScreen(
                                     settingsSection = SettingsSection.SUBSCRIPTION
                                     showSettingsModal = true
                                 },
-                                onOpenProfile = { profileUserId = it },
-                                onDismissUpdate = onDismissUpdate,
-                                onDownloadUpdate = onDownloadUpdate,
+                                onOpenProfile = { userId -> profileUserId = userId },
+                                onDismissUpdate = onDismissUpdate,                                onDownloadUpdate = onDownloadUpdate,
                                 onInstallUpdate = onInstallUpdate,
                                 onPauseAudio = onPauseAudio,
                                 onResumeAudio = onResumeAudio,
@@ -689,7 +688,7 @@ internal fun HomeScreen(
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
                                 onCall = { selectedChat?.id?.let { onCall(it) } },
-                                onCancelUpload = onCancelUpload,
+                                onCancelUpload = { selectedChat?.id?.let { onCancelUpload(it) } },
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
                                 lastKeyboardHeight = lastKeyboardHeight
@@ -726,7 +725,7 @@ internal fun HomeScreen(
                             settingsSection = SettingsSection.SUBSCRIPTION
                             showSettingsModal = true
                         },
-                        onOpenProfile = { profileUserId = it },
+                        onOpenProfile = { userId -> profileUserId = userId },
                         onDismissUpdate = onDismissUpdate,
                         onDownloadUpdate = onDownloadUpdate,
                         onInstallUpdate = onInstallUpdate,
@@ -782,7 +781,7 @@ internal fun HomeScreen(
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
                                 onCall = { selectedChat?.id?.let { onCall(it) } },
-                                onCancelUpload = onCancelUpload,
+                                onCancelUpload = { selectedChat?.id?.let { onCancelUpload(it) } },
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
                                 lastKeyboardHeight = lastKeyboardHeight,
