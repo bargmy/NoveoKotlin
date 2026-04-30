@@ -56,6 +56,19 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     nm.cancel(chatId.hashCode())
                 }
             }
+            "ir.hienob.noveo.ACTION_DECLINE_CALL" -> {
+                val callId = intent.getStringExtra("callId")
+                val payload = JSONObject()
+                    .put("type", "voice_leave")
+                    .put("chatId", chatId)
+                    .put("callId", callId)
+                    .put("reason", "declined")
+                NoveoNotificationService.send(payload)
+                
+                // Clear notification
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.cancel(1001) // CALL_NOTIFICATION_ID
+            }
         }
     }
 }

@@ -1616,6 +1616,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         voiceChatManager.joinCall(session, chatId, callId)
     }
 
+    fun showIncomingCall(chatId: String, callId: String, callerId: String) {
+        _uiState.value = _uiState.value.copy(
+            incomingCall = SocketEvent.IncomingCall(chatId, callerId, callId)
+        )
+    }
+
     fun declineCall() {
         _uiState.value = _uiState.value.copy(incomingCall = null)
     }
