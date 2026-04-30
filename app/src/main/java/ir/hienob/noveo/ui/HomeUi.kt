@@ -1620,6 +1620,7 @@ private fun ChatPane(
                     onSeekAudio = onSeekAudio,
                     doubleTapReaction = state.doubleTapReaction,
                     onDownloadFile = onDownloadFile,
+                    onHandleClick = onHandleClick,
                     appUiState = state,
                     isHighlighted = highlightedMessageId == message.id,
                     tgColors = tgColors
