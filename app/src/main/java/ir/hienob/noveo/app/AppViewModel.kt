@@ -14,6 +14,14 @@ import ir.hienob.noveo.data.ChatSummary
 import ir.hienob.noveo.data.MessageContent
 import ir.hienob.noveo.data.MessageFileAttachment
 import ir.hienob.noveo.data.NoveoApi
+import ir.hienob.noveo.data.parseChat
+import ir.hienob.noveo.data.parseUser
+import ir.hienob.noveo.data.parseMessageContent
+import ir.hienob.noveo.data.parseChatMessage
+import ir.hienob.noveo.data.parseMessagesByChat
+import ir.hienob.noveo.data.parseRealtimeMessage
+import ir.hienob.noveo.data.parseChatMessageList
+import ir.hienob.noveo.data.parseReactions
 import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.data.SavedSticker
 import ir.hienob.noveo.data.Session
@@ -766,7 +774,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (chatJson != null) {
                             val chat = parseChat(chatJson, _uiState.value.usersById, session.userId)
                             _uiState.value = _uiState.value.copy(
-                                chats = (_uiState.value.chats.filter { it.id != chat.id } + chat).sortedByDescending { it.lastMessageTimestamp }
+                                chats = (_uiState.value.chats.filter { it.id != chat.id } + chat).sortedByDescending { c: ChatSummary -> c.lastMessageTimestamp }
                             )
                             openChat(chat.id)
                         }
@@ -793,7 +801,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { api.joinChat(session, chatId) }
-                loadHomeData()
+                refreshHomeSilently()
                 openChat(chatId)
             } catch (e: Exception) {
                 e.printStackTrace()

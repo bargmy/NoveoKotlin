@@ -9,7 +9,7 @@ internal data class SyncSnapshot(
     val history: JSONObject
 )
 
-internal fun parseUser(item: JSONObject, onlineIds: Set<String> = emptySet()): UserSummary {
+fun parseUser(item: JSONObject, onlineIds: Set<String> = emptySet()): UserSummary {
     val userId = item.optString("userId").sanitizeServerString().ifBlank { item.optString("id").sanitizeServerString() }
     return UserSummary(
         id = userId,
@@ -55,65 +55,66 @@ private fun parseProfileSkin(json: JSONObject?): ProfileSkin? {
     )
 }
 
+fun parseChat(item: JSONObject, usersById: Map<String, UserSummary>, selfUserId: String): ChatSummary {
+    val chatId = item.optString("chatId").sanitizeServerString()
+        .ifBlank { item.optString("chat_id").sanitizeServerString() }
+        .ifBlank { item.optString("id").sanitizeServerString() }
+    val memberIds = parseStringList(item.optJSONArray("members"))
+    val messages = item.optJSONArray("messages") ?: JSONArray()
+    
+    // Calculate unread count based on seenBy array as per web logic
+    val unreadCount = (0 until messages.length()).count { i ->
+        val msg = messages.optJSONObject(i) ?: return@count false
+        val senderId = msg.optString("senderId").ifBlank { msg.optString("sender") }
+        if (senderId == selfUserId) return@count false
+        val seenBy = parseStringList(msg.optJSONArray("seenBy"))
+        !seenBy.contains(selfUserId)
+    }
+
+    val lastMsg = if (messages.length() > 0) messages.optJSONObject(messages.length() - 1) else null
+    val preview = if (lastMsg != null) {
+        parseMessageContent(lastMsg.opt("content")).previewText()
+    } else {
+        ""
+    }
+    val lastTimestamp = lastMsg?.optLong("timestamp", 0L) ?: 0L
+
+    val chatType = item.optString("chatType", item.optString("type", "private")).sanitizeServerString()
+    val ownerId = item.optString("ownerId").sanitizeServerString().takeIf { it.isNotBlank() }
+    val pinnedMessageObj = item.optJSONObject("pinnedMessage")
+    val pinnedMessage = if (pinnedMessageObj != null) parseChatMessage(pinnedMessageObj, chatId, usersById) else null
+    
+    val permissions = item.optJSONObject("permissions")
+    val canChat = when (chatType) {
+        "channel" -> ownerId == selfUserId
+        "group" -> permissions?.optBoolean("canSendMessages", true) ?: true
+        else -> true
+    }
+
+    return ChatSummary(
+        id = chatId,
+        chatType = chatType,
+        title = resolveChatTitle(item, usersById, memberIds, selfUserId),
+        avatarUrl = resolveChatAvatar(item, usersById, memberIds, selfUserId),
+        lastMessagePreview = preview,
+        lastMessageTimestamp = lastTimestamp,
+        unreadCount = unreadCount,
+        memberIds = memberIds,
+        handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
+        isVerified = item.optBoolean("isVerified", false),
+        ownerId = ownerId,
+        canChat = canChat,
+        hasMoreHistory = item.optBoolean("hasMoreHistory", false),
+        pinnedMessage = pinnedMessage
+    )
+}
+
 internal fun parseChats(payload: JSONObject, usersById: Map<String, UserSummary>, selfUserId: String): List<ChatSummary> {
     val chatsArray = payload.optJSONArray("chats") ?: JSONArray()
     return buildList {
         for (index in 0 until chatsArray.length()) {
             val item = chatsArray.optJSONObject(index) ?: continue
-            val chatId = item.optString("chatId").sanitizeServerString()
-                .ifBlank { item.optString("chat_id").sanitizeServerString() }
-                .ifBlank { item.optString("id").sanitizeServerString() }
-            if (chatId.isBlank()) continue
-            val memberIds = parseStringList(item.optJSONArray("members"))
-            val messages = item.optJSONArray("messages") ?: JSONArray()
-            
-            // Calculate unread count based on seenBy array as per web logic
-            val unreadCount = (0 until messages.length()).count { i ->
-                val msg = messages.optJSONObject(i) ?: return@count false
-                val senderId = msg.optString("senderId").ifBlank { msg.optString("sender") }
-                if (senderId == selfUserId) return@count false
-                val seenBy = parseStringList(msg.optJSONArray("seenBy"))
-                !seenBy.contains(selfUserId)
-            }
-
-            val lastMsg = if (messages.length() > 0) messages.optJSONObject(messages.length() - 1) else null
-            val preview = if (lastMsg != null) {
-                parseMessageContent(lastMsg.opt("content")).previewText()
-            } else {
-                ""
-            }
-            val lastTimestamp = lastMsg?.optLong("timestamp", 0L) ?: 0L
-
-            val chatType = item.optString("chatType", item.optString("type", "private")).sanitizeServerString()
-            val ownerId = item.optString("ownerId").sanitizeServerString().takeIf { it.isNotBlank() }
-            val pinnedMessageObj = item.optJSONObject("pinnedMessage")
-            val pinnedMessage = if (pinnedMessageObj != null) parseChatMessage(pinnedMessageObj, chatId, usersById) else null
-            
-            val permissions = item.optJSONObject("permissions")
-            val canChat = when (chatType) {
-                "channel" -> ownerId == selfUserId
-                "group" -> permissions?.optBoolean("canSendMessages", true) ?: true
-                else -> true
-            }
-
-            add(
-                ChatSummary(
-                    id = chatId,
-                    chatType = chatType,
-                    title = resolveChatTitle(item, usersById, memberIds, selfUserId),
-                    avatarUrl = resolveChatAvatar(item, usersById, memberIds, selfUserId),
-                    lastMessagePreview = preview,
-                    lastMessageTimestamp = lastTimestamp,
-                    unreadCount = unreadCount,
-                    memberIds = memberIds,
-                    handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
-                    isVerified = item.optBoolean("isVerified", false),
-                    ownerId = ownerId,
-                    canChat = canChat,
-                    hasMoreHistory = item.optBoolean("hasMoreHistory", false),
-                    pinnedMessage = pinnedMessage
-                )
-            )
+            add(parseChat(item, usersById, selfUserId))
         }
     }
 }
