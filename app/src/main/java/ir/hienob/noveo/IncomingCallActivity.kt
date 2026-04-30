@@ -19,12 +19,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import ir.hienob.noveo.background.NoveoNotificationService
 import ir.hienob.noveo.data.SocketEvent
+import android.app.NotificationManager
 
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
 class IncomingCallActivity : ComponentActivity() {
     private val viewModel: AppViewModel by viewModels()
+
+    private fun cancelCallNotification() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(1001) // CALL_NOTIFICATION_ID
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,9 +68,11 @@ class IncomingCallActivity : ComponentActivity() {
                         strings = strings,
                         caller = state.usersById[callerId],
                         onAccept = {
+                            cancelCallNotification()
                             acceptAndReturn()
                         },
                         onDecline = {
+                            cancelCallNotification()
                             viewModel.declineCall()
                             finish()
                         }
@@ -103,6 +111,7 @@ class IncomingCallActivity : ComponentActivity() {
     }
 
     private fun acceptAndReturn() {
+        cancelCallNotification()
         val chatId = intent.getStringExtra("chatId") ?: ""
         val callId = intent.getStringExtra("callId") ?: ""
         if (chatId.isNotEmpty() && callId.isNotEmpty()) {
