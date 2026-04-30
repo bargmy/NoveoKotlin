@@ -412,7 +412,6 @@ fun NoveoRoot(
                         )
                     }
                 }
-                }
             }
         }
     }

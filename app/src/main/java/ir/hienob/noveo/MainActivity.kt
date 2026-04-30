@@ -13,6 +13,7 @@ import ir.hienob.noveo.ui.NoveoRoot
 import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
 import android.os.Build
+import android.content.Context
 
 class MainActivity : ComponentActivity() {
     private val viewModel: AppViewModel by viewModels()
