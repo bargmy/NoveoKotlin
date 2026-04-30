@@ -174,6 +174,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -695,6 +696,8 @@ internal fun HomeScreen(
                                 onCancelUpload = { selectedChat?.id?.let { onCancelUpload(it) } },
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
+                                onHandleClick = onHandleClick,
+                                onJoinChat = onJoinChat,
                                 onToggleMute = onToggleMute,
                                 onToggleMinimize = onToggleMinimize,
                                 onLeaveCall = onLeaveCall,
@@ -1395,6 +1398,8 @@ private fun ChatPane(
     onCancelUpload: () -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
     onAddSavedSticker: (ChatMessage) -> Unit,
+    onHandleClick: (String) -> Unit,
+    onJoinChat: (String) -> Unit,
     onToggleMute: () -> Unit,
     onToggleMinimize: () -> Unit,
     onLeaveCall: () -> Unit,
@@ -2052,6 +2057,7 @@ private fun MessageRow(
     onSeekAudio: (Float) -> Unit,
     doubleTapReaction: String,
     onDownloadFile: (ChatMessage) -> Unit,
+    onHandleClick: (String) -> Unit,
     appUiState: AppUiState,
     isHighlighted: Boolean = false,
     tgColors: TelegramThemeColors = telegramColors()
