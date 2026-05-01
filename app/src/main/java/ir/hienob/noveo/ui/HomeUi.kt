@@ -152,6 +152,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
@@ -2141,6 +2143,24 @@ private fun MessageRow(
             .fillMaxWidth()
             .padding(top = if (showSenderInfo) 10.dp else 0.dp)
             .padding(bottom = if (hasTail) 6.dp else 0.dp)
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { bubbleBounds?.let(onOpenContextMenu) },
+                onDoubleClick = { onToggleReaction(message.id, doubleTapReaction) },
+                onLongClick = { bubbleBounds?.let(onOpenContextMenu) }
+            )
+            .graphicsLayer {
+                translationY = animOffsetY.value
+                translationX = animOffsetX.value + swipeOffset.value
+                alpha = animAlpha.value
+                scaleX = animScale.value
+                scaleY = animScale.value
+                transformOrigin = TransformOrigin(if (ownMessage) 1f else 0f, 1f)
+            }
+    ) {
+        val bubbleModifier = Modifier
+            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
             .pointerInput(message.id) {
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { change, dragAmount ->
@@ -2171,22 +2191,7 @@ private fun MessageRow(
                     }
                 )
             }
-            .combinedClickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = { bubbleBounds?.let(onOpenContextMenu) },
-                onDoubleClick = { onToggleReaction(message.id, doubleTapReaction) },
-                onLongClick = { bubbleBounds?.let(onOpenContextMenu) }
-            )
-            .graphicsLayer {
-                translationY = animOffsetY.value
-                translationX = animOffsetX.value + swipeOffset.value
-                alpha = animAlpha.value
-                scaleX = animScale.value
-                scaleY = animScale.value
-                transformOrigin = TransformOrigin(if (ownMessage) 1f else 0f, 1f)
-            }
-    ) {
+
         BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
             if (!ownMessage) {
@@ -2217,9 +2222,7 @@ private fun MessageRow(
                     val file = message.content.file!!
                     val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
                     Box(
-                        modifier = Modifier
-                            .padding(vertical = 4.dp)
-                            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
+                        modifier = bubbleModifier.padding(vertical = 4.dp)
                     ) {
                         Column(horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start) {
                             if (repliedMessage != null) {
@@ -2343,9 +2346,8 @@ private fun MessageRow(
                     }
                 } else {
                     Surface(
-                        modifier = Modifier
-                            .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f)
-                            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() },
+                        modifier = bubbleModifier
+                            .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f),
                         shape = TelegramBubbleShape(
                             isOutgoing = ownMessage,
                             hasTail = hasTail,
@@ -2646,10 +2648,10 @@ private fun MarkdownText(
                         endHandle++
                     }
                     if (endHandle > nearest.first + 1) {
-                        val handle = text.substring(nearest.first + 1, endHandle)
+                        val handle = text.substring(nearest.first, endHandle) // Include the @
                         pushStringAnnotation("handle", handle)
                         withStyle(SpanStyle(color = handleColor, fontWeight = FontWeight.SemiBold)) {
-                            append("@$handle")
+                            append(handle)
                         }
                         pop()
                         index = endHandle
@@ -2668,19 +2670,26 @@ private fun MarkdownText(
             style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
             onTextLayout = { layoutResult.value = it },
             modifier = Modifier.pointerInput(annotated, onHandleClick) {
-                awaitEachGesture {
-                    val down = awaitFirstDown()
-                    val layout = layoutResult.value ?: return@awaitEachGesture
-                    val offset = down.position
-                    val position = layout.getOffsetForPosition(offset)
-                    val annotation = annotated.getStringAnnotations("handle", position, position).firstOrNull()
-                    
-                    if (annotation != null) {
-                        down.consume()
-                        val up = waitForUpOrCancellation()
-                        if (up != null) {
-                            up.consume()
-                            onHandleClick(annotation.item)
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull() ?: continue
+                        if (event.type == PointerEventType.Press) {
+                            val layout = layoutResult.value ?: continue
+                            val position = layout.getOffsetForPosition(change.position)
+                            val annotation = annotated.getStringAnnotations("handle", position, position).firstOrNull()
+                            
+                            if (annotation != null) {
+                                // IT IS A HANDLE. Consume the event to prevent parent from opening context menu.
+                                change.consume()
+                                
+                                // Wait for release
+                                val up = waitForUpOrCancellation()
+                                if (up != null) {
+                                    up.consume()
+                                    onHandleClick(annotation.item)
+                                }
+                            }
                         }
                     }
                 }

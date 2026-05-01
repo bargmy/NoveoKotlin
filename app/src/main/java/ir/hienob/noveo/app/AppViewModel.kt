@@ -746,24 +746,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openHandle(handle: String) {
         val session = _uiState.value.session ?: return
+        val normalizedHandle = handle.lowercase().removePrefix("@")
         viewModelScope.launch {
             try {
                 // First check if we already have a chat with this handle
-                val existingChat = _uiState.value.chats.firstOrNull { it.handle == handle }
+                val existingChat = _uiState.value.chats.firstOrNull { it.handle?.lowercase()?.removePrefix("@") == normalizedHandle }
                 if (existingChat != null) {
                     openChat(existingChat.id)
                     return@launch
                 }
                 
                 // Then check users
-                val existingUser = _uiState.value.usersById.values.firstOrNull { it.handle == handle }
+                val existingUser = _uiState.value.usersById.values.firstOrNull { it.handle?.lowercase()?.removePrefix("@") == normalizedHandle }
                 if (existingUser != null) {
                     openDirectChat(existingUser.id)
                     return@launch
                 }
                 
-                // Resolve handle via API
-                val response = withContext(Dispatchers.IO) { api.resolveHandle(session, handle) }
+                // Resolve handle via API - pass the original or with @ if needed, but the API usually handles both
+                val response = withContext(Dispatchers.IO) { api.resolveHandle(session, if (handle.startsWith("@")) handle else "@$handle") }
                 if (response.optBoolean("success", false)) {
                     val chatId = response.optString("chatId")
                     val userId = response.optString("userId")
