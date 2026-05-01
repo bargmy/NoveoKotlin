@@ -108,11 +108,6 @@ data class MessageContent(
 ) {
     fun previewText(): String {
         return when {
-            !text.isNullOrBlank() -> text
-            file?.isSticker() == true -> "Sticker"
-            file != null -> if (file.isImage()) "Photo" else if (file.isVideo()) "Video" else "File"
-            !poll.isNullOrBlank() -> "Poll"
-            !theme.isNullOrBlank() -> "Theme"
             !callLog.isNullOrBlank() -> {
                 try {
                     val log = org.json.JSONObject(callLog)
@@ -129,6 +124,11 @@ data class MessageContent(
                     "Voice Call"
                 }
             }
+            !text.isNullOrBlank() -> text
+            file?.isSticker() == true -> "Sticker"
+            file != null -> if (file.isImage()) "Photo" else if (file.isVideo()) "Video" else "File"
+            !poll.isNullOrBlank() -> "Poll"
+            !theme.isNullOrBlank() -> "Theme"
             forwardedInfo != null -> "Forwarded message"
             else -> ""
         }

@@ -23,6 +23,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -2038,6 +2039,7 @@ private fun ChatPane(
 }
 
 @OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageRow(
     strings: NoveoStrings,
@@ -2323,9 +2325,9 @@ private fun MessageRow(
                             .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f)
                             .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
                             .combinedClickable(
-                                onClick = { bubbleBounds?.let(onOpenContextMenu) },
-                                onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
-                                onLongClick = { bubbleBounds?.let(onOpenContextMenu) }
+                                onClick = { val b = bubbleBounds; if (b != null) onOpenContextMenu(b) },
+                                onDoubleClick = { onToggleReaction(message.id, doubleTapReaction) },
+                                onLongClick = { val b = bubbleBounds; if (b != null) onOpenContextMenu(b) }
                             ),
                         shape = TelegramBubbleShape(
                             isOutgoing = ownMessage,
