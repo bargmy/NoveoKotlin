@@ -3828,6 +3828,25 @@ private fun GroupInfoModal(
                                     })
                                 }
                                 InfoItem(label = strings.type, value = chat.chatType.replaceFirstChar { it.uppercase() })
+                                
+                                val isMember = chat.memberIds.contains(state.session?.userId)
+                                if (!isMember || chat.chatType != "private") {
+                                    Spacer(Modifier.height(8.dp))
+                                    Button(
+                                        onClick = { 
+                                            if (isMember) {
+                                                onClose()
+                                                // It's already joined, just close info and show chat
+                                            } else {
+                                                onJoinChat(chat.id)
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text(if (isMember) strings.open else strings.join)
+                                    }
+                                }
                             }
                         }
 

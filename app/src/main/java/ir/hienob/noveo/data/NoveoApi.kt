@@ -348,9 +348,9 @@ class NoveoApi(
         })
     }
 
-    fun searchPublicUsers(session: Session, query: String): List<UserSummary> {
+    fun searchPublicUsers(session: Session, query: String): Pair<List<UserSummary>, List<ChatSummary>> {
         val normalizedQuery = query.trim()
-        if (normalizedQuery.length < 2) return emptyList()
+        if (normalizedQuery.length < 2) return emptyPair()
         val url = "https://noveo.ir:8443/user/public-search".toHttpUrl().newBuilder()
             .addQueryParameter("q", normalizedQuery)
             .build()
@@ -363,29 +363,40 @@ class NoveoApi(
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("Public search failed (${response.code})")
             val payload = JSONObject(response.body?.string().orEmpty().ifBlank { "{}" })
-            val usersArray = when {
+            val dataArray = when {
                 payload.optJSONArray("users") != null -> payload.optJSONArray("users")
                 payload.optJSONArray("results") != null -> payload.optJSONArray("results")
                 payload.optJSONArray("data") != null -> payload.optJSONArray("data")
                 else -> JSONArray()
             }
-            return (0 until usersArray.length()).mapNotNull { index ->
-                usersArray.optJSONObject(index)?.let { user ->
-                    val id = user.optString("userId").ifBlank { user.optString("id") }
-                    if (id.isBlank()) return@let null
-                    UserSummary(
-                        id = id,
-                        username = user.optString("username").ifBlank { user.optString("name").ifBlank { id } },
-                        avatarUrl = user.optString("avatarUrl").ifBlank { null },
-                        handle = user.optString("handle").ifBlank { null },
-                        bio = user.optString("bio", ""),
-                        isOnline = user.optBoolean("online", false),
-                        isVerified = user.optBoolean("isVerified", false)
-                    )
+            
+            val users = mutableListOf<UserSummary>()
+            val chats = mutableListOf<ChatSummary>()
+            
+            for (i in 0 until dataArray.length()) {
+                val item = dataArray.optJSONObject(i) ?: continue
+                val userId = item.optString("userId").ifBlank { item.optString("id") }
+                val chatId = item.optString("chatId")
+                
+                if (chatId.isNotBlank() || item.optString("chatType").isNotBlank()) {
+                    chats.add(parseChat(item, emptyMap(), session.userId))
+                } else if (userId.isNotBlank()) {
+                    users.add(UserSummary(
+                        id = userId,
+                        username = item.optString("username").ifBlank { item.optString("name").ifBlank { userId } },
+                        avatarUrl = item.optString("avatarUrl").ifBlank { null },
+                        handle = item.optString("handle").ifBlank { null },
+                        bio = item.optString("bio", ""),
+                        isOnline = item.optBoolean("online", false),
+                        isVerified = item.optBoolean("isVerified", false)
+                    ))
                 }
             }
+            return users to chats
         }
     }
+    
+    private fun <A, B> emptyPair(): Pair<List<A>, List<B>> = emptyList<A>() to emptyList<B>()
 
     fun checkForUpdate(): JSONObject? {
         val url = "https://noveo.ir/update.json".toHttpUrl()

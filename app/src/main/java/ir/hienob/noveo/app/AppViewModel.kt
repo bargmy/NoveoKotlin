@@ -484,6 +484,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (info.isDownloading || info.isDownloaded) return
 
         viewModelScope.launch(Dispatchers.IO) {
+            // Re-check inside to prevent races from rapid clicks
+            if (_uiState.value.updateInfo?.isDownloading == true) return@launch
+            
             _uiState.value = _uiState.value.copy(
                 updateInfo = info.copy(isDownloading = true, downloadProgress = 0f)
             )
@@ -526,6 +529,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }.onFailure {
+                it.printStackTrace()
                 withContext(Dispatchers.Main) {
                     _uiState.value = _uiState.value.copy(
                         updateInfo = _uiState.value.updateInfo?.copy(isDownloading = false),
@@ -572,6 +576,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 clipData = ClipData.newRawUri("", uri)
             }
             context.startActivity(intent)
+            
+            // Clean up old update files except the current one
+            viewModelScope.launch(Dispatchers.IO) {
+                delay(5000)
+                context.filesDir.listFiles { _, name -> 
+                    name.startsWith("update-") && name.endsWith(".apk") && !name.contains(info.version)
+                }?.forEach { it.delete() }
+            }
         }.onFailure {
             _uiState.value = _uiState.value.copy(error = "Installation failed: ${it.message}")
         }
@@ -752,18 +764,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // First check if we already have a chat with this handle
                 val existingChat = _uiState.value.chats.firstOrNull { it.handle?.lowercase()?.removePrefix("@") == normalizedHandle }
                 if (existingChat != null) {
-                    openChat(existingChat.id)
-                    return@launch
+                    if (existingChat.chatType == "private") {
+                        val recipientId = existingChat.memberIds.firstOrNull { it != session.userId }
+                        if (recipientId != null) {
+                            _uiState.value = _uiState.value.copy(directRecipientId = recipientId)
+                            return@launch
+                        }
+                    } else {
+                        // For groups/channels, always show the profile instead of opening chat directly
+                        _uiState.value = _uiState.value.copy(selectedChatId = existingChat.id)
+                        return@launch
+                    }
                 }
                 
                 // Then check users
                 val existingUser = _uiState.value.usersById.values.firstOrNull { it.handle?.lowercase()?.removePrefix("@") == normalizedHandle }
                 if (existingUser != null) {
-                    openDirectChat(existingUser.id)
+                    _uiState.value = _uiState.value.copy(directRecipientId = existingUser.id)
                     return@launch
                 }
                 
-                // Resolve handle via API - pass the original or with @ if needed, but the API usually handles both
+                // Resolve handle via API
                 val response = withContext(Dispatchers.IO) { api.resolveHandle(session, if (handle.startsWith("@")) handle else "@$handle") }
                 if (response.optBoolean("success", false)) {
                     val chatId = response.optString("chatId")
@@ -775,9 +796,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (chatJson != null) {
                             val chat = parseChat(chatJson, _uiState.value.usersById, session.userId)
                             _uiState.value = _uiState.value.copy(
-                                chats = (_uiState.value.chats.filter { it.id != chat.id } + chat).sortedByDescending { c: ChatSummary -> c.lastMessageTimestamp }
+                                chats = (_uiState.value.chats.filter { it.id != chat.id } + chat).sortedByDescending { c: ChatSummary -> c.lastMessageTimestamp },
+                                selectedChatId = chat.id
                             )
-                            openChat(chat.id)
                         }
                     } else if (userId.isNotBlank()) {
                         // It's a user
@@ -785,9 +806,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (userJson != null) {
                             val user = parseUser(userJson)
                             _uiState.value = _uiState.value.copy(
-                                usersById = _uiState.value.usersById + (user.id to user)
+                                usersById = _uiState.value.usersById + (user.id to user),
+                                directRecipientId = user.id
                             )
-                            openDirectChat(user.id)
                         }
                     }
                 }
@@ -1643,12 +1664,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (normalized.length < 2) return
         viewModelScope.launch {
             runCatching {
-                val foundUsers = withContext(Dispatchers.IO) { api.searchPublicUsers(session, normalized) }
-                if (foundUsers.isNotEmpty()) {
-                    _uiState.value = _uiState.value.copy(
-                        usersById = _uiState.value.usersById + foundUsers.associateBy { it.id }
-                    )
-                }
+                val (foundUsers, foundChats) = withContext(Dispatchers.IO) { api.searchPublicUsers(session, normalized) }
+                _uiState.value = _uiState.value.copy(
+                    usersById = _uiState.value.usersById + foundUsers.associateBy { it.id },
+                    chats = (_uiState.value.chats + foundChats).distinctBy { it.id }.sortedByDescending { it.lastMessageTimestamp }
+                )
             }
         }
     }
