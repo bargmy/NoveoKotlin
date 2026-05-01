@@ -113,7 +113,22 @@ data class MessageContent(
             file != null -> if (file.isImage()) "Photo" else if (file.isVideo()) "Video" else "File"
             !poll.isNullOrBlank() -> "Poll"
             !theme.isNullOrBlank() -> "Theme"
-            !callLog.isNullOrBlank() -> "Call"
+            !callLog.isNullOrBlank() -> {
+                try {
+                    val log = org.json.JSONObject(callLog)
+                    val type = log.optString("type")
+                    when (type) {
+                        "outgoing" -> "Outgoing Call"
+                        "incoming" -> "Incoming Call"
+                        "missed" -> "Missed Call"
+                        "cancelled" -> "Cancelled Call"
+                        "declined" -> "Declined Call"
+                        else -> "Voice Call"
+                    }
+                } catch (e: Exception) {
+                    "Voice Call"
+                }
+            }
             forwardedInfo != null -> "Forwarded message"
             else -> ""
         }

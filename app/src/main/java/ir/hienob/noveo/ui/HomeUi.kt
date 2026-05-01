@@ -23,6 +23,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
@@ -2117,44 +2118,34 @@ private fun MessageRow(
             .padding(top = if (showSenderInfo) 10.dp else 0.dp)
             .padding(bottom = if (hasTail) 6.dp else 0.dp)
             .pointerInput(message.id) {
-                coroutineScope {
-                    launch {
-                        detectTapGestures(
-                            onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
-                            onLongPress = { bubbleBounds?.let(onOpenContextMenu) }
-                        )
-                    }
-                    launch {
-                        detectHorizontalDragGestures(
-                            onHorizontalDrag = { change, dragAmount ->
-                                change.consume()
-                                if (dragAmount < 0) { // Only swipe left
-                                    val current = swipeOffset.value
-                                    val target = (current + dragAmount).coerceIn(-100f, 0f)
-                                    if (current > -60f && target <= -60f) {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    }
-                                    scope.launch {
-                                        swipeOffset.snapTo(target)
-                                    }
-                                }
-                            },
-                            onDragEnd = {
-                                if (swipeOffset.value < -60f) {
-                                    onReply()
-                                }
-                                scope.launch {
-                                    swipeOffset.animateTo(0f, tween(200))
-                                }
-                            },
-                            onDragCancel = {
-                                scope.launch {
-                                    swipeOffset.animateTo(0f, tween(200))
-                                }
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        if (dragAmount < 0) { // Only swipe left
+                            val current = swipeOffset.value
+                            val target = (current + dragAmount).coerceIn(-100f, 0f)
+                            if (current > -60f && target <= -60f) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             }
-                        )
+                            scope.launch {
+                                swipeOffset.snapTo(target)
+                            }
+                        }
+                    },
+                    onDragEnd = {
+                        if (swipeOffset.value < -60f) {
+                            onReply()
+                        }
+                        scope.launch {
+                            swipeOffset.animateTo(0f, tween(200))
+                        }
+                    },
+                    onDragCancel = {
+                        scope.launch {
+                            swipeOffset.animateTo(0f, tween(200))
+                        }
                     }
-                }
+                )
             }
             .graphicsLayer {
                 translationY = animOffsetY.value
@@ -2327,32 +2318,28 @@ private fun MessageRow(
                         }
                     }
                 } else {
-                    Box(
+                    Surface(
                         modifier = Modifier
+                            .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f)
                             .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
-                            .pointerInput(message.id) {
-                                detectTapGestures(
-                                    onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
-                                    onLongPress = { bubbleBounds?.let(onOpenContextMenu) }
-                                )
-                            }
-                    ) {
-                        Surface(
-                            modifier = Modifier
-                                .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f),
-                            shape = TelegramBubbleShape(
-                                isOutgoing = ownMessage,
-                                hasTail = hasTail,
-                                cornerRadius = with(LocalDensity.current) { 16.dp.toPx() }
+                            .combinedClickable(
+                                onClick = { bubbleBounds?.let(onOpenContextMenu) },
+                                onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
+                                onLongClick = { bubbleBounds?.let(onOpenContextMenu) }
                             ),
-                            color = when {
-                                ownMessage && isHighlighted -> tgColors.outgoingBubbleSelected
-                                ownMessage -> tgColors.outgoingBubble
-                                isHighlighted -> tgColors.incomingBubbleSelected
-                                else -> tgColors.incomingBubble
-                            },
-                            shadowElevation = 0.5.dp
-                        ) {
+                        shape = TelegramBubbleShape(
+                            isOutgoing = ownMessage,
+                            hasTail = hasTail,
+                            cornerRadius = with(LocalDensity.current) { 16.dp.toPx() }
+                        ),
+                        color = when {
+                            ownMessage && isHighlighted -> tgColors.outgoingBubbleSelected
+                            ownMessage -> tgColors.outgoingBubble
+                            isHighlighted -> tgColors.incomingBubbleSelected
+                            else -> tgColors.incomingBubble
+                        },
+                        shadowElevation = 0.5.dp
+                    ) {
                         val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
                         Column(modifier = Modifier.padding(if (hasVisualMedia) 3.dp else 6.dp).padding(horizontal = 4.dp)) {
                             if (!ownMessage && isGroupChat && showSenderInfo) {
