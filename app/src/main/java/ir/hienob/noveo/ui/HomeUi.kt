@@ -1242,6 +1242,7 @@ private fun CallLogView(
     
     val icon = when (type) {
         "outgoing" -> Icons.Outlined.Call
+        "incoming" -> Icons.Outlined.Call
         "missed" -> Icons.Outlined.ErrorOutline
         "cancelled" -> Icons.Outlined.Close
         "declined" -> Icons.Outlined.Close
@@ -1250,6 +1251,7 @@ private fun CallLogView(
     
     val label = when (type) {
         "outgoing" -> strings.outgoingCall
+        "incoming" -> strings.incomingCall
         "missed" -> strings.missedCall
         "cancelled" -> strings.cancelledCall
         "declined" -> strings.declinedCall
@@ -2325,30 +2327,32 @@ private fun MessageRow(
                         }
                     }
                 } else {
-                    Surface(
+                    Box(
                         modifier = Modifier
-                            .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f)
                             .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
                             .pointerInput(message.id) {
                                 detectTapGestures(
-                                    onTap = { bubbleBounds?.let(onOpenContextMenu) },
                                     onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
                                     onLongPress = { bubbleBounds?.let(onOpenContextMenu) }
                                 )
-                            },
-                        shape = TelegramBubbleShape(
-                            isOutgoing = ownMessage,
-                            hasTail = hasTail,
-                            cornerRadius = with(LocalDensity.current) { 16.dp.toPx() }
-                        ),
-                        color = when {
-                            ownMessage && isHighlighted -> tgColors.outgoingBubbleSelected
-                            ownMessage -> tgColors.outgoingBubble
-                            isHighlighted -> tgColors.incomingBubbleSelected
-                            else -> tgColors.incomingBubble
-                        },
-                        shadowElevation = 0.5.dp
+                            }
                     ) {
+                        Surface(
+                            modifier = Modifier
+                                .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f),
+                            shape = TelegramBubbleShape(
+                                isOutgoing = ownMessage,
+                                hasTail = hasTail,
+                                cornerRadius = with(LocalDensity.current) { 16.dp.toPx() }
+                            ),
+                            color = when {
+                                ownMessage && isHighlighted -> tgColors.outgoingBubbleSelected
+                                ownMessage -> tgColors.outgoingBubble
+                                isHighlighted -> tgColors.incomingBubbleSelected
+                                else -> tgColors.incomingBubble
+                            },
+                            shadowElevation = 0.5.dp
+                        ) {
                         val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
                         Column(modifier = Modifier.padding(if (hasVisualMedia) 3.dp else 6.dp).padding(horizontal = 4.dp)) {
                             if (!ownMessage && isGroupChat && showSenderInfo) {
