@@ -2038,8 +2038,7 @@ private fun ChatPane(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun MessageRow(
     strings: NoveoStrings,
@@ -2534,7 +2533,6 @@ private fun MessageRow(
             }
         }
     }
-}
 }
 }
 
