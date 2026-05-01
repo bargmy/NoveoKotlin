@@ -111,13 +111,13 @@ data class MessageContent(
             !callLog.isNullOrBlank() -> {
                 try {
                     val log = org.json.JSONObject(callLog)
-                    val type = log.optString("type")
+                    val type = log.optString("type").ifBlank { log.optString("status") }
                     when (type) {
                         "outgoing" -> "Outgoing Call"
                         "incoming" -> "Incoming Call"
                         "missed" -> "Missed Call"
-                        "cancelled" -> "Cancelled Call"
-                        "declined" -> "Declined Call"
+                        "cancelled", "canceled" -> "Cancelled Call"
+                        "declined", "rejected" -> "Declined Call"
                         else -> "Voice Call"
                     }
                 } catch (e: Exception) {
