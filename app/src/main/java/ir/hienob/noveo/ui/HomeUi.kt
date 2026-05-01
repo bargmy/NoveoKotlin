@@ -924,7 +924,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 GroupInfoModal(
                     chat = chat,
                     strings = strings,
-                    usersById = state.usersById,
+                    state = state,
                     onOpenProfile = { userId -> 
                         profileUserId = userId
                         showGroupInfo = false
@@ -934,6 +934,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                         showGroupInfo = false
                         animateModalEntrance = false
                     },
+                    onJoinChat = onJoinChat,
                     animateEntrance = animateModalEntrance
                 )
             }
@@ -3773,11 +3774,13 @@ private fun InfoItem(label: String, value: String, onClick: (() -> Unit)? = null
 private fun GroupInfoModal(
     chat: ChatSummary, 
     strings: NoveoStrings, 
-    usersById: Map<String, UserSummary>, 
+    state: AppUiState,
     onOpenProfile: (String) -> Unit,
     onClose: () -> Unit,
+    onJoinChat: (String) -> Unit,
     animateEntrance: Boolean = false
 ) {
+    val usersById = state.usersById
     val chatTitle = remember(chat.title, strings) {
         if (chat.title == "Saved Messages") strings.savedMessages
         else chat.title.ifBlank { strings.chatInfo }
