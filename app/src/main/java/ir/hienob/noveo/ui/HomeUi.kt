@@ -4287,9 +4287,14 @@ private fun SeenByModal(
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
                 items(seenUsers) { user ->
                     ContactRow(
-                        strings = strings,
                         user = user,
-                        onClick = {
+                        strings = strings,
+                        existingChat = null,
+                        onMessage = {
+                            onClose()
+                            onOpenProfile(user.id)
+                        },
+                        onOpenProfile = {
                             onClose()
                             onOpenProfile(user.id)
                         }
