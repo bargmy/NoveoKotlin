@@ -2074,7 +2074,8 @@ private fun MessageRow(
 ) {
     val haptic = LocalHapticFeedback.current
     val isSystem = message.senderId == "system"
-    if (isSystem) {
+    val isCallLog = !message.content.callLog.isNullOrBlank()
+    if (isSystem && !isCallLog) {
         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
             Surface(
                 color = tgColors.chatSurface.copy(alpha = 0.45f),
