@@ -2445,7 +2445,7 @@ private fun MessageRow(
 
                             val caption = message.content.text
 
-                            if (!caption.isNullOrBlank()) {
+                            if (!caption.isNullOrBlank() && !(callLog != null && caption.equals("Call", ignoreCase = true))) {
                                 if (message.content.file != null) Spacer(Modifier.height(4.dp))
                                 Box(modifier = Modifier.padding(horizontal = if (hasVisualMedia) 6.dp else 4.dp)) {
                                     MarkdownText(

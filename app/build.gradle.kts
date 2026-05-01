@@ -4,8 +4,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val appVersionCode = providers.gradleProperty("NOVEO_VERSION_CODE").orNull?.toIntOrNull() ?: 18
-val appVersionName = providers.gradleProperty("NOVEO_VERSION_NAME").orNull ?: "0.6.0"
+val appVersionCode = (providers.gradleProperty("NOVEO_VERSION_CODE").orNull?.toIntOrNull() ?: 18) + 1
+val appVersionName = "0.6.1"
 
 android {
     namespace = "ir.hienob.noveo"
