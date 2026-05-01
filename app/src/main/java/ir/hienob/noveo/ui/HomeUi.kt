@@ -1494,6 +1494,7 @@ private fun ChatPane(
     var highlightedMessageId by remember { mutableStateOf<String?>(null) }
     var contextMenuState by remember { mutableStateOf<MessageContextMenuState?>(null) }
     var contextMenuExpanded by remember { mutableStateOf(false) }
+    var showSeenByMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var showAttachPopup by remember { mutableStateOf(false) }
     var showStickers by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
@@ -2029,6 +2030,11 @@ private fun ChatPane(
                         contextMenuExpanded = false
                         onDownloadFile(menuState.message)
                     },
+                    onSeenBy = {
+                        contextMenuState = null
+                        contextMenuExpanded = false
+                        showSeenByMessage = menuState.message
+                    },
                     onAddAsSticker = {
                         contextMenuState = null
                         contextMenuExpanded = false
@@ -2036,6 +2042,18 @@ private fun ChatPane(
                     },
                     strings = strings,
                     modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        ModalHost(visible = showSeenByMessage != null, onDismiss = { showSeenByMessage = null }) {
+            showSeenByMessage?.let { msg ->
+                SeenByModal(
+                    strings = strings,
+                    message = msg,
+                    usersById = state.usersById,
+                    onClose = { showSeenByMessage = null },
+                    onOpenProfile = onOpenProfile
                 )
             }
         }
@@ -4222,6 +4240,63 @@ private fun HeaderIconButton(
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = null, tint = tint)
+    }
+}
+
+@Composable
+private fun SeenByModal(
+    strings: NoveoStrings,
+    message: ChatMessage,
+    usersById: Map<String, UserSummary>,
+    onClose: () -> Unit,
+    onOpenProfile: (String) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().heightIn(max = 500.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 4.dp
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = strings.seenBy,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                ) {
+                    Icon(Icons.Outlined.Close, contentDescription = null)
+                }
+            }
+            
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            
+            val seenUsers = remember(message.seenBy, usersById) {
+                message.seenBy.mapNotNull { usersById[it] }
+            }
+            
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(seenUsers) { user ->
+                    ContactRow(
+                        strings = strings,
+                        user = user,
+                        onClick = {
+                            onClose()
+                            onOpenProfile(user.id)
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 

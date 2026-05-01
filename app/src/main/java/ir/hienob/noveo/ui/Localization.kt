@@ -154,6 +154,7 @@ data class NoveoStrings(
     val copyText: String = "Copy Text",
     val forward: String = "Forward",
     val download: String = "Download",
+    val seenBy: String = "Seen by",
     val reactions: String = "Reactions",
     val selectSource: String = "Select Source",
     val incomingCall: String = "Incoming Call",

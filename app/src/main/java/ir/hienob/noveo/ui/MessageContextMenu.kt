@@ -37,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
@@ -107,6 +108,7 @@ internal fun MessageContextMenuOverlay(
     onPin: () -> Unit,
     onForward: () -> Unit,
     onDownload: () -> Unit,
+    onSeenBy: () -> Unit,
     onAddAsSticker: () -> Unit,
     strings: NoveoStrings,
     modifier: Modifier = Modifier
@@ -138,6 +140,7 @@ internal fun MessageContextMenuOverlay(
             onPin = onPin,
             onForward = onForward,
             onDownload = onDownload,
+            onSeenBy = onSeenBy,
             onAddAsSticker = onAddAsSticker,
             strings = strings
         )
@@ -159,6 +162,7 @@ private fun MessageContextMenu(
     onPin: () -> Unit,
     onForward: () -> Unit,
     onDownload: () -> Unit,
+    onSeenBy: () -> Unit,
     onAddAsSticker: () -> Unit,
     strings: NoveoStrings
 ) {
@@ -307,6 +311,15 @@ private fun MessageContextMenu(
                             textColor = menuText,
                             onClick = onForward
                         )
+
+                        if (state.message.seenBy.isNotEmpty()) {
+                            ContextMenuActionItem(
+                                label = strings.seenBy,
+                                icon = { Icon(Icons.Outlined.Check, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                                textColor = menuText,
+                                onClick = onSeenBy
+                            )
+                        }
                         
                         val file = state.message.content.file
                         if (file != null && (file.isImage() || file.isTgsSticker())) {
