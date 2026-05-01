@@ -2537,7 +2537,6 @@ private fun MessageRow(
                                             tint = tgColors.outgoingTime
                                         )
                                     }
-                                    }
                                 }
                             }
                         }
@@ -2546,6 +2545,7 @@ private fun MessageRow(
             }
         }
     }
+}
 }
 }
 
