@@ -274,7 +274,7 @@ internal fun parseMessageContent(raw: Any?): MessageContent {
         file = file,
         poll = payload.optJSONObject("poll")?.toString(),
         theme = payload.optJSONObject("theme")?.toString(),
-        callLog = payload.optJSONObject("callLog")?.toString(),
+        callLog = payload.optJSONObject("callLog")?.toString() ?: payload.optString("callLog").takeIf { it.isNotBlank() },
         forwardedInfo = forwardedInfo,
         replyToId = payload.optString("replyToId").sanitizeServerString().takeIf { it.isNotBlank() }
     )

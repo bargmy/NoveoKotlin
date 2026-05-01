@@ -173,6 +173,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.SpanStyle
@@ -1239,15 +1243,15 @@ private fun CallLogView(
     tgColors: TelegramThemeColors
 ) {
     val log = remember(callLogJson) { runCatching { org.json.JSONObject(callLogJson) }.getOrNull() } ?: return
-    val type = log.optString("type")
-    val duration = log.optInt("duration", 0)
+    val type = log.optString("type").ifBlank { log.optString("status") }
+    val duration = if (log.has("duration")) log.optInt("duration", 0) else log.optInt("durationSeconds", 0)
     
     val icon = when (type) {
         "outgoing" -> Icons.Outlined.Call
         "incoming" -> Icons.Outlined.Call
         "missed" -> Icons.Outlined.ErrorOutline
-        "cancelled" -> Icons.Outlined.Close
-        "declined" -> Icons.Outlined.Close
+        "cancelled", "canceled" -> Icons.Outlined.Close
+        "declined", "rejected" -> Icons.Outlined.Close
         else -> Icons.Outlined.Call
     }
     
@@ -1255,8 +1259,8 @@ private fun CallLogView(
         "outgoing" -> strings.outgoingCall
         "incoming" -> strings.incomingCall
         "missed" -> strings.missedCall
-        "cancelled" -> strings.cancelledCall
-        "declined" -> strings.declinedCall
+        "cancelled", "canceled" -> strings.cancelledCall
+        "declined", "rejected" -> strings.declinedCall
         else -> strings.incomingCall
     }
 
@@ -1456,7 +1460,7 @@ private fun ChatPane(
             val layoutInfo = listState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
             val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            totalItems > 0 && lastVisibleItem >= 0 && (totalItems - 1 - lastVisibleItem) >= 3
+            totalItems > 0 && lastVisibleItem >= 0 && (totalItems - 1 - lastVisibleItem) >= 10
         }
     }
 
@@ -1526,7 +1530,7 @@ private fun ChatPane(
         if (lastMessageId.value != null && newLastId != lastMessageId.value) {
             val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: state.messages.lastIndex
             val itemsFromBottom = state.messages.lastIndex - lastVisibleItem
-            if (itemsFromBottom < 3) {
+            if (itemsFromBottom < 10) {
                 listState.animateScrollToItem(state.messages.lastIndex)
             }
         }
@@ -2148,6 +2152,13 @@ private fun MessageRow(
                     }
                 )
             }
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { bubbleBounds?.let(onOpenContextMenu) },
+                onDoubleClick = { onToggleReaction(message.id, doubleTapReaction) },
+                onLongClick = { bubbleBounds?.let(onOpenContextMenu) }
+            )
             .graphicsLayer {
                 translationY = animOffsetY.value
                 translationX = animOffsetX.value + swipeOffset.value
@@ -2190,13 +2201,6 @@ private fun MessageRow(
                         modifier = Modifier
                             .padding(vertical = 4.dp)
                             .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
-                            .pointerInput(message.id) {
-                                detectTapGestures(
-                                    onTap = { bubbleBounds?.let(onOpenContextMenu) },
-                                    onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
-                                    onLongPress = { bubbleBounds?.let(onOpenContextMenu) }
-                                )
-                            }
                     ) {
                         Column(horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start) {
                             if (repliedMessage != null) {
@@ -2322,12 +2326,7 @@ private fun MessageRow(
                     Surface(
                         modifier = Modifier
                             .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f)
-                            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
-                            .combinedClickable(
-                                onClick = { val b = bubbleBounds; if (b != null) onOpenContextMenu(b) },
-                                onDoubleClick = { onToggleReaction(message.id, doubleTapReaction) },
-                                onLongClick = { val b = bubbleBounds; if (b != null) onOpenContextMenu(b) }
-                            ),
+                            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() },
                         shape = TelegramBubbleShape(
                             isOutgoing = ownMessage,
                             hasTail = hasTail,
@@ -2588,6 +2587,7 @@ private fun MarkdownText(
     onHandleClick: ((String) -> Unit)? = null
 ) {
     val handleColor = if (color == MaterialTheme.colorScheme.onSurface) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.95f)
+    val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
     val annotated = remember(text) {
         buildAnnotatedString {
             var index = 0
@@ -2644,12 +2644,26 @@ private fun MarkdownText(
     }
 
     if (onHandleClick != null) {
-        androidx.compose.foundation.text.ClickableText(
+        Text(
             text = annotated,
             style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
-            onClick = { offset ->
-                annotated.getStringAnnotations("handle", offset, offset).firstOrNull()?.let {
-                    onHandleClick(it.item)
+            onTextLayout = { layoutResult.value = it },
+            modifier = Modifier.pointerInput(annotated, onHandleClick) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    val layout = layoutResult.value ?: return@awaitEachGesture
+                    val offset = down.position
+                    val position = layout.getOffsetForPosition(offset)
+                    val annotation = annotated.getStringAnnotations("handle", position, position).firstOrNull()
+                    
+                    if (annotation != null) {
+                        down.consume()
+                        val up = waitForUpOrCancellation()
+                        if (up != null) {
+                            up.consume()
+                            onHandleClick(annotation.item)
+                        }
+                    }
                 }
             }
         )
