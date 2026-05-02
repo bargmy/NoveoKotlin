@@ -708,9 +708,11 @@ internal fun HomeScreen(
                                 onAttachFile = onAttachFile,
                                 onRemoveAttachment = onRemoveAttachment,
                                 onOpenProfile = onOpenProfile,
-                                onOpenGroupInfo = { chatId -> 
-                                    infoChatId = chatId
-                                    animateModalEntrance = true
+                                onOpenGroupInfo = { 
+                                    selectedChat?.id?.let {
+                                        infoChatId = it
+                                        animateModalEntrance = true
+                                    }
                                 },
                                 onReply = { onReply(it) },
                                 onEditMessage = onEditMessage,
@@ -811,9 +813,11 @@ internal fun HomeScreen(
                                 onAttachFile = onAttachFile,
                                 onRemoveAttachment = onRemoveAttachment,
                                 onOpenProfile = onOpenProfile,
-                                onOpenGroupInfo = { chatId -> 
-                                    infoChatId = chatId
-                                    animateModalEntrance = true
+                                onOpenGroupInfo = { 
+                                    selectedChat?.id?.let {
+                                        infoChatId = it
+                                        animateModalEntrance = true
+                                    }
                                 },
                                 onReply = { onReply(it) },
                                 onEditMessage = onEditMessage,

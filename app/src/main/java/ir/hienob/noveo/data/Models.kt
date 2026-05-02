@@ -106,6 +106,12 @@ data class ForwardedInfo(
     val originalTs: Long
 )
 
+data class InlineKeyboardButton(
+    val text: String,
+    val callbackData: String? = null,
+    val url: String? = null
+)
+
 data class MessageContent(
     val text: String? = null,
     val file: MessageFileAttachment? = null,
@@ -117,16 +123,7 @@ data class MessageContent(
     val inlineKeyboard: List<List<InlineKeyboardButton>> = emptyList()
 ) {
     fun previewText(): String {
-...
-    }
-}
-
-data class InlineKeyboardButton(
-    val text: String,
-    val callbackData: String? = null,
-    val url: String? = null
-)
-
+        return when {
             !callLog.isNullOrBlank() -> {
                 try {
                     val log = org.json.JSONObject(callLog)
@@ -228,5 +225,3 @@ inline fun <T, R : Comparable<R>> Iterable<T>.sortedBy(crossinline selector: (T)
 inline fun <T, R : Comparable<R>> Sequence<T>.sortedBy(crossinline selector: (T) -> R?): Sequence<T> {
     return this.sortedWith(compareBy(selector))
 }
-
-
