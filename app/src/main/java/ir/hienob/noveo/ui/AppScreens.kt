@@ -299,7 +299,8 @@ fun NoveoRoot(
     onSendSticker: (SavedSticker) -> Unit = {},
     onAddSavedSticker: (ChatMessage) -> Unit = {},
     onHandleClick: (String) -> Unit = {},
-    onJoinChat: (String) -> Unit = {}
+    onJoinChat: (String) -> Unit = {},
+    onClearNavigationSignal: () -> Unit = {}
     ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current
@@ -400,6 +401,7 @@ fun NoveoRoot(
                             onAddSavedSticker = onAddSavedSticker,
                             onHandleClick = onHandleClick,
                             onJoinChat = onJoinChat,
+                            onClearNavigationSignal = onClearNavigationSignal,
                             currentTheme = currentTheme,
                             onThemeChange = { currentTheme = it }
                         )

@@ -408,6 +408,7 @@ internal fun HomeScreen(
     onAddSavedSticker: (ChatMessage) -> Unit,
     onHandleClick: (String) -> Unit,
     onJoinChat: (String) -> Unit,
+    onClearNavigationSignal: () -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
     onForwardConfirm: (ChatMessage, String) -> Unit = { _, _ -> }
@@ -426,6 +427,11 @@ internal fun HomeScreen(
     var showGroupInfo by rememberSaveable { mutableStateOf(false) }
     var selectedMediaAttachment by remember { mutableStateOf<SelectedMediaAttachment?>(null) }
     var animateModalEntrance by remember { mutableStateOf(false) }
+
+    val onOpenProfile = { userId: String ->
+        profileUserId = userId
+        animateModalEntrance = true
+    }
 
     val keyboardHeight = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     var lastKeyboardHeight by remember { mutableStateOf(300.dp) }
@@ -458,6 +464,23 @@ internal fun HomeScreen(
     
     LaunchedEffect(state.forwardingMessage) {
         showForwardPicker = state.forwardingMessage != null
+    }
+
+    LaunchedEffect(state.pendingProfileId) {
+        state.pendingProfileId?.let {
+            profileUserId = it
+            animateModalEntrance = true
+            onClearNavigationSignal()
+        }
+    }
+
+    LaunchedEffect(state.pendingGroupInfoId) {
+        state.pendingGroupInfoId?.let {
+            onOpenChat(it)
+            showGroupInfo = true
+            animateModalEntrance = true
+            onClearNavigationSignal()
+        }
     }
 
     val isAnyModalVisible = showContactsModal || showCreateModal || showSettingsModal ||
@@ -654,8 +677,14 @@ internal fun HomeScreen(
                                     settingsSection = SettingsSection.SUBSCRIPTION
                                     showSettingsModal = true
                                 },
-                                onOpenProfile = { userId -> profileUserId = userId },
-                                onDismissUpdate = onDismissUpdate,                                onDownloadUpdate = onDownloadUpdate,
+                                onOpenProfile = onOpenProfile,
+                                onOpenGroupInfo = { chatId ->
+                                    onOpenChat(chatId)
+                                    showGroupInfo = true
+                                    animateModalEntrance = true
+                                },
+                                onDismissUpdate = onDismissUpdate,
+                                onDownloadUpdate = onDownloadUpdate,
                                 onInstallUpdate = onInstallUpdate,
                                 onPauseAudio = onPauseAudio,
                                 onResumeAudio = onResumeAudio,
@@ -743,8 +772,14 @@ internal fun HomeScreen(
                             settingsSection = SettingsSection.SUBSCRIPTION
                             showSettingsModal = true
                         },
-                        onOpenProfile = { userId -> profileUserId = userId },
+                        onOpenProfile = onOpenProfile,
+                        onOpenGroupInfo = { chatId ->
+                            onOpenChat(chatId)
+                            showGroupInfo = true
+                            animateModalEntrance = true
+                        },
                         onDismissUpdate = onDismissUpdate,
+
                         onDownloadUpdate = onDownloadUpdate,
                         onInstallUpdate = onInstallUpdate,
                         onPauseAudio = onPauseAudio,
@@ -1009,6 +1044,7 @@ private fun SidebarPane(
     onOpenSettings: () -> Unit,
     onOpenStars: () -> Unit,
     onOpenProfile: (String) -> Unit,
+    onOpenGroupInfo: (String) -> Unit,
     onDismissUpdate: () -> Unit,
     onDownloadUpdate: () -> Unit,
     onInstallUpdate: () -> Unit,
@@ -1075,7 +1111,8 @@ private fun SidebarPane(
                     users = users,
                     onOpenChat = onOpenChat,
                     onOpenContacts = onOpenContacts,
-                    onOpenProfile = onOpenProfile
+                    onOpenProfile = onOpenProfile,
+                    onOpenGroupInfo = onOpenGroupInfo
                 )
             } else {
                 ChatListContent(state = state, strings = strings, chats = chats, onOpenChat = onOpenChat)
@@ -1091,7 +1128,8 @@ private fun SearchResultsList(
     users: List<UserSummary>,
     onOpenChat: (String) -> Unit,
     onOpenContacts: () -> Unit,
-    onOpenProfile: (String) -> Unit
+    onOpenProfile: (String) -> Unit,
+    onOpenGroupInfo: (String) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1101,7 +1139,18 @@ private fun SearchResultsList(
         if (chats.isNotEmpty()) {
             item { Text(strings.newChat, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp), color = MaterialTheme.colorScheme.primary) }
             items(chats) { chat ->
-                ChatRow(chat = chat, strings = strings, selected = false, onClick = { onOpenChat(chat.id) })
+                ChatRow(
+                    chat = chat, 
+                    strings = strings, 
+                    selected = false, 
+                    onClick = { 
+                        if (chat.chatType == "private") {
+                            onOpenChat(chat.id)
+                        } else {
+                            onOpenGroupInfo(chat.id)
+                        }
+                    }
+                )
             }
         }
         if (users.isNotEmpty()) {

@@ -83,6 +83,8 @@ data class AppUiState(
     val captchaInfo: CaptchaInfo? = null,
     val pendingAttachment: PendingAttachment? = null,
     val directRecipientId: String? = null,
+    val pendingProfileId: String? = null,
+    val pendingGroupInfoId: String? = null,
     val editingMessage: ChatMessage? = null,
     val forwardingMessage: ChatMessage? = null,
     val savedStickers: List<SavedSticker> = emptyList(),
@@ -767,12 +769,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (existingChat.chatType == "private") {
                         val recipientId = existingChat.memberIds.firstOrNull { it != session.userId }
                         if (recipientId != null) {
-                            _uiState.value = _uiState.value.copy(directRecipientId = recipientId)
+                            _uiState.value = _uiState.value.copy(pendingProfileId = recipientId)
                             return@launch
                         }
                     } else {
-                        // For groups/channels, always show the profile instead of opening chat directly
-                        _uiState.value = _uiState.value.copy(selectedChatId = existingChat.id)
+                        // For groups/channels, show the profile instead of opening chat directly
+                        _uiState.value = _uiState.value.copy(pendingGroupInfoId = existingChat.id)
                         return@launch
                     }
                 }
@@ -780,7 +782,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // Then check users
                 val existingUser = _uiState.value.usersById.values.firstOrNull { it.handle?.lowercase()?.removePrefix("@") == normalizedHandle }
                 if (existingUser != null) {
-                    _uiState.value = _uiState.value.copy(directRecipientId = existingUser.id)
+                    _uiState.value = _uiState.value.copy(pendingProfileId = existingUser.id)
                     return@launch
                 }
                 
@@ -796,8 +798,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (chatJson != null) {
                             val chat = parseChat(chatJson, _uiState.value.usersById, session.userId)
                             _uiState.value = _uiState.value.copy(
-                                chats = (_uiState.value.chats.filter { it.id != chat.id } + chat).sortedByDescending { c: ChatSummary -> c.lastMessageTimestamp },
-                                selectedChatId = chat.id
+                                chats = (_uiState.value.chats.filter { it.id != chat.id } + chat).sortedByDescending { it.lastMessageTimestamp },
+                                pendingGroupInfoId = chat.id
                             )
                         }
                     } else if (userId.isNotBlank()) {
@@ -807,7 +809,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             val user = parseUser(userJson)
                             _uiState.value = _uiState.value.copy(
                                 usersById = _uiState.value.usersById + (user.id to user),
-                                directRecipientId = user.id
+                                pendingProfileId = user.id
                             )
                         }
                     }
@@ -816,6 +818,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 e.printStackTrace()
             }
         }
+    }
+
+    fun clearNavigationSignal() {
+        _uiState.value = _uiState.value.copy(
+            pendingProfileId = null,
+            pendingGroupInfoId = null
+        )
     }
 
     fun joinChat(chatId: String) {

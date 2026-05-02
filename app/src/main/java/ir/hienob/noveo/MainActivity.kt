@@ -135,7 +135,8 @@ class MainActivity : ComponentActivity() {
                 onSendSticker = { sticker -> viewModel.sendSticker(sticker) },
                 onAddSavedSticker = { message -> viewModel.addSavedStickerFromMessage(message) },
                 onHandleClick = viewModel::openHandle,
-                onJoinChat = viewModel::joinChat
+                onJoinChat = viewModel::joinChat,
+                onClearNavigationSignal = viewModel::clearNavigationSignal
             )
         }
     }
