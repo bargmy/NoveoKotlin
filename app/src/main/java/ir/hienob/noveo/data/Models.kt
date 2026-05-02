@@ -53,18 +53,27 @@ data class MessageFileAttachment(
     val size: Long = 0L
 ) {
     fun isImage(): Boolean =
-        type.startsWith("image/") ||
+        type.startsWith("image/", true) ||
             name.endsWith(".jpg", true) ||
             name.endsWith(".jpeg", true) ||
             name.endsWith(".png", true) ||
             name.endsWith(".gif", true) ||
-            name.endsWith(".webp", true)
+            name.endsWith(".webp", true) ||
+            url.contains(".jpg", true) ||
+            url.contains(".jpeg", true) ||
+            url.contains(".png", true) ||
+            url.contains(".webp", true) ||
+            url.contains(".gif", true)
     fun isVideo(): Boolean =
-        type.startsWith("video/") ||
+        type.startsWith("video/", true) ||
             name.endsWith(".mp4", true) ||
             name.endsWith(".webm", true) ||
             name.endsWith(".mov", true) ||
-            name.endsWith(".ogg", true)
+            name.endsWith(".ogg", true) ||
+            url.contains(".mp4", true) ||
+            url.contains(".webm", true) ||
+            url.contains(".mov", true) ||
+            url.contains(".ogg", true)
     fun isAudio(): Boolean = type.startsWith("audio/") || name.endsWith(".mp3", true) || name.endsWith(".m4a", true) || name.endsWith(".wav", true) || name.endsWith(".ogg", true)
     fun isTgsSticker(): Boolean =
         type.equals("application/x-tgsticker", true) ||
@@ -95,6 +104,8 @@ data class SavedSticker(
 data class ForwardedInfo(
     val from: String,
     val originalTs: Long
+)
+
 data class MessageContent(
     val text: String? = null,
     val file: MessageFileAttachment? = null,

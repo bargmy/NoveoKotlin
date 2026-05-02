@@ -4442,38 +4442,6 @@ private fun formatExpiry(session: Session?, strings: NoveoStrings): String {
     }.getOrElse { strings.unknown }
 }
 
-private fun MessageFileAttachment.isImage(): Boolean {
-    val typeValue = type.lowercase(Locale.getDefault())
-    val nameValue = name.lowercase(Locale.getDefault())
-    val urlValue = url.lowercase(Locale.getDefault())
-    return typeValue.startsWith("image/") ||
-        nameValue.endsWith(".png") ||
-        nameValue.endsWith(".jpg") ||
-        nameValue.endsWith(".jpeg") ||
-        nameValue.endsWith(".webp") ||
-        nameValue.endsWith(".gif") ||
-        urlValue.endsWith(".png") ||
-        urlValue.endsWith(".jpg") ||
-        urlValue.endsWith(".jpeg") ||
-        urlValue.endsWith(".webp") ||
-        urlValue.endsWith(".gif")
-}
-
-private fun MessageFileAttachment.isVideo(): Boolean {
-    val typeValue = type.lowercase(Locale.getDefault())
-    val nameValue = name.lowercase(Locale.getDefault())
-    val urlValue = url.lowercase(Locale.getDefault())
-    return typeValue.startsWith("video/") ||
-        nameValue.endsWith(".mp4") ||
-        nameValue.endsWith(".mov") ||
-        nameValue.endsWith(".webm") ||
-        nameValue.endsWith(".ogg") ||
-        urlValue.endsWith(".mp4") ||
-        urlValue.endsWith(".mov") ||
-        urlValue.endsWith(".webm") ||
-        urlValue.endsWith(".ogg")
-}
-
 private fun String?.normalizeNoveoUrl(): String? {
     val value = this?.trim().orEmpty().replace("\\", "/")
     if (value.isBlank()) return null
