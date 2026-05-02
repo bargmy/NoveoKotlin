@@ -448,6 +448,28 @@ class NoveoApi(
         }
     }
 
+    fun sendBotCallback(session: Session, chatId: String, messageId: String, callbackData: String): JSONObject {
+        val url = "https://noveo.ir:8443/bot/callback".toHttpUrl()
+        val body = JSONObject()
+            .put("chatId", chatId)
+            .put("messageId", messageId)
+            .put("callbackData", callbackData)
+            .toString()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .header("User-Agent", userAgent)
+            .header("X-Noveo-Client", "kotlin")
+            .header("X-Noveo-Version", ir.hienob.noveo.BuildConfig.VERSION_NAME)
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Bot callback failed (${response.code})")
+            return JSONObject(response.body?.string().orEmpty())
+        }
+    }
+
     fun startCaptcha(session: Session?, action: String, extra: Map<String, Any> = emptyMap()): JSONObject {
         val url = "https://web.noveo.ir/puzzle.php?proxy=1&target=/captcha/start".toHttpUrl()
         val body = JSONObject().put("action", action).apply {

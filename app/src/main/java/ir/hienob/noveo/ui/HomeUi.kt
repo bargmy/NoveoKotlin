@@ -409,6 +409,7 @@ internal fun HomeScreen(
     onHandleClick: (String) -> Unit,
     onJoinChat: (String) -> Unit,
     onClearNavigationSignal: () -> Unit,
+    onBotCallback: (String, String, String) -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
     onForwardConfirm: (ChatMessage, String) -> Unit = { _, _ -> }
@@ -424,7 +425,7 @@ internal fun HomeScreen(
     var showSettingsModal by rememberSaveable { mutableStateOf(false) }
     var settingsSection by rememberSaveable { mutableStateOf(SettingsSection.MENU) }
     var profileUserId by rememberSaveable { mutableStateOf<String?>(null) }
-    var showGroupInfo by rememberSaveable { mutableStateOf(false) }
+    var infoChatId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedMediaAttachment by remember { mutableStateOf<SelectedMediaAttachment?>(null) }
     var animateModalEntrance by remember { mutableStateOf(false) }
 
@@ -476,15 +477,14 @@ internal fun HomeScreen(
 
     LaunchedEffect(state.pendingGroupInfoId) {
         state.pendingGroupInfoId?.let {
-            onOpenChat(it)
-            showGroupInfo = true
+            infoChatId = it
             animateModalEntrance = true
             onClearNavigationSignal()
         }
     }
 
     val isAnyModalVisible = showContactsModal || showCreateModal || showSettingsModal ||
-                          (showGroupInfo && state.selectedChatId != null) ||
+                          infoChatId != null ||
                           profileUserId != null || selectedMediaAttachment != null || showSearch || showForwardPicker
 
     androidx.activity.compose.BackHandler(enabled = isAnyModalVisible || showMenu || state.selectedChatId != null) {
@@ -494,8 +494,8 @@ internal fun HomeScreen(
                 profileUserId = null
                 animateModalEntrance = false
             }
-            showGroupInfo -> {
-                showGroupInfo = false
+            infoChatId != null -> {
+                infoChatId = null
                 animateModalEntrance = false
             }
             showSettingsModal -> showSettingsModal = false
@@ -679,8 +679,7 @@ internal fun HomeScreen(
                                 },
                                 onOpenProfile = onOpenProfile,
                                 onOpenGroupInfo = { chatId ->
-                                    onOpenChat(chatId)
-                                    showGroupInfo = true
+                                    infoChatId = chatId
                                     animateModalEntrance = true
                                 },
                                 onDismissUpdate = onDismissUpdate,
@@ -708,12 +707,9 @@ internal fun HomeScreen(
                                 onMediaClick = onMediaClick,
                                 onAttachFile = onAttachFile,
                                 onRemoveAttachment = onRemoveAttachment,
-                                onOpenProfile = { userId -> 
-                                    profileUserId = userId
-                                    animateModalEntrance = true
-                                },
-                                onOpenGroupInfo = { 
-                                    showGroupInfo = true 
+                                onOpenProfile = onOpenProfile,
+                                onOpenGroupInfo = { chatId -> 
+                                    infoChatId = chatId
                                     animateModalEntrance = true
                                 },
                                 onReply = { onReply(it) },
@@ -735,6 +731,7 @@ internal fun HomeScreen(
                                 onAddSavedSticker = onAddSavedSticker,
                                 onHandleClick = onHandleClick,
                                 onJoinChat = onJoinChat,
+                                onBotCallback = onBotCallback,
                                 onToggleMute = onToggleMute,
                                 onToggleMinimize = onToggleMinimize,
                                 onLeaveCall = onLeaveCall,
@@ -768,18 +765,16 @@ internal fun HomeScreen(
                             settingsSection = SettingsSection.MENU
                             showSettingsModal = true
                         },
-                        onOpenStars = {
+                        onOpenStars = { 
                             settingsSection = SettingsSection.SUBSCRIPTION
-                            showSettingsModal = true
+                            showSettingsModal = true 
                         },
                         onOpenProfile = onOpenProfile,
                         onOpenGroupInfo = { chatId ->
-                            onOpenChat(chatId)
-                            showGroupInfo = true
+                            infoChatId = chatId
                             animateModalEntrance = true
                         },
                         onDismissUpdate = onDismissUpdate,
-
                         onDownloadUpdate = onDownloadUpdate,
                         onInstallUpdate = onInstallUpdate,
                         onPauseAudio = onPauseAudio,
@@ -815,12 +810,9 @@ internal fun HomeScreen(
                                 onMediaClick = onMediaClick,
                                 onAttachFile = onAttachFile,
                                 onRemoveAttachment = onRemoveAttachment,
-                                onOpenProfile = { userId -> 
-                                    profileUserId = userId
-                                    animateModalEntrance = true
-                                },
-                                onOpenGroupInfo = { 
-                                    showGroupInfo = true 
+                                onOpenProfile = onOpenProfile,
+                                onOpenGroupInfo = { chatId -> 
+                                    infoChatId = chatId
                                     animateModalEntrance = true
                                 },
                                 onReply = { onReply(it) },
@@ -842,6 +834,7 @@ internal fun HomeScreen(
                                 onAddSavedSticker = onAddSavedSticker,
                                 onHandleClick = onHandleClick,
                                 onJoinChat = onJoinChat,
+                                onBotCallback = onBotCallback,
                                 onToggleMute = onToggleMute,
                                 onToggleMinimize = onToggleMinimize,
                                 onLeaveCall = onLeaveCall,
@@ -954,19 +947,16 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
             )
         }
 
-        ModalHost(visible = showGroupInfo && selectedChat != null, onDismiss = { showGroupInfo = false; animateModalEntrance = false }, fullscreen = true) {
-            selectedChat?.let { chat ->
+        ModalHost(visible = infoChatId != null, onDismiss = { infoChatId = null; animateModalEntrance = false }, fullscreen = true) {
+            val infoChat = remember(infoChatId, state.chats) { state.chats.firstOrNull { it.id == infoChatId } }
+            infoChat?.let { chat ->
                 GroupInfoModal(
                     chat = chat,
                     strings = strings,
                     state = state,
-                    onOpenProfile = { userId -> 
-                        profileUserId = userId
-                        showGroupInfo = false
-                        animateModalEntrance = false // standard open from list
-                    },
+                    onOpenProfile = onOpenProfile,
                     onClose = { 
-                        showGroupInfo = false
+                        infoChatId = null
                         animateModalEntrance = false
                     },
                     onJoinChat = onJoinChat,
@@ -1461,6 +1451,7 @@ private fun ChatPane(
     onAddSavedSticker: (ChatMessage) -> Unit,
     onHandleClick: (String) -> Unit,
     onJoinChat: (String) -> Unit,
+    onBotCallback: (String, String, String) -> Unit,
     onToggleMute: () -> Unit,
     onToggleMinimize: () -> Unit,
     onLeaveCall: () -> Unit,
@@ -1683,7 +1674,9 @@ private fun ChatPane(
                     doubleTapReaction = state.doubleTapReaction,
                     onDownloadFile = onDownloadFile,
                     onHandleClick = onHandleClick,
+                    onBotCallback = onBotCallback,
                     appUiState = state,
+
                     isHighlighted = highlightedMessageId == message.id,
                     tgColors = tgColors
                 )
@@ -2138,6 +2131,7 @@ private fun MessageRow(
     doubleTapReaction: String,
     onDownloadFile: (ChatMessage) -> Unit,
     onHandleClick: (String) -> Unit,
+    onBotCallback: (String, String, String) -> Unit,
     appUiState: AppUiState,
     isHighlighted: Boolean = false,
     tgColors: TelegramThemeColors = telegramColors()
@@ -2593,6 +2587,47 @@ private fun MessageRow(
                                             contentDescription = if (seen) "Seen" else "Sent",
                                             modifier = Modifier.size(15.dp),
                                             tint = tgColors.outgoingTime
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (message.content.inlineKeyboard.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        message.content.inlineKeyboard.forEach { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                row.forEach { button ->
+                                    Button(
+                                        onClick = { 
+                                            button.callbackData?.let { data ->
+                                                onBotCallback(message.chatId, message.id, data)
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (ownMessage) tgColors.outgoingBubble.copy(alpha = 0.8f) else tgColors.incomingBubble.copy(alpha = 0.8f),
+                                            contentColor = if (ownMessage) tgColors.outgoingText else tgColors.incomingText
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp)
+                                    ) {
+                                        Text(
+                                            text = button.text,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }

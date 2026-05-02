@@ -268,6 +268,25 @@ internal fun parseMessageContent(raw: Any?): MessageContent {
             originalTs = it.optLong("originalTs", 0L)
         )
     }
+
+    val inlineKeyboard = mutableListOf<List<InlineKeyboardButton>>()
+    payload.optJSONArray("inlineKeyboard")?.let { rows ->
+        for (i in 0 until rows.length()) {
+            val rowArray = rows.optJSONArray(i) ?: continue
+            val row = mutableListOf<InlineKeyboardButton>()
+            for (j in 0 until rowArray.length()) {
+                val btn = rowArray.optJSONObject(j) ?: continue
+                row.add(
+                    InlineKeyboardButton(
+                        text = btn.optString("text"),
+                        callbackData = btn.optString("callbackData").takeIf { it.isNotBlank() },
+                        url = btn.optString("url").takeIf { it.isNotBlank() }
+                    )
+                )
+            }
+            if (row.isNotEmpty()) inlineKeyboard.add(row)
+        }
+    }
     
     return MessageContent(
         text = payload.optString("text").sanitizeServerString().takeIf { it.isNotBlank() },
@@ -276,7 +295,8 @@ internal fun parseMessageContent(raw: Any?): MessageContent {
         theme = payload.optJSONObject("theme")?.toString(),
         callLog = payload.optJSONObject("callLog")?.toString() ?: payload.optString("callLog").takeIf { it.isNotBlank() },
         forwardedInfo = forwardedInfo,
-        replyToId = payload.optString("replyToId").sanitizeServerString().takeIf { it.isNotBlank() }
+        replyToId = payload.optString("replyToId").sanitizeServerString().takeIf { it.isNotBlank() },
+        inlineKeyboard = inlineKeyboard
     )
 }
 

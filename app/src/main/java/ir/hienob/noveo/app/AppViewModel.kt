@@ -591,6 +591,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun sendBotCallback(chatId: String, messageId: String, callbackData: String) {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { api.sendBotCallback(session, chatId, messageId, callbackData) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun restoreSession() {
         viewModelScope.launch {
             val session = sessionStore.read()
@@ -833,7 +844,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 withContext(Dispatchers.IO) { api.joinChat(session, chatId) }
                 refreshHomeSilently()
-                openChat(chatId)
             } catch (e: Exception) {
                 e.printStackTrace()
             }

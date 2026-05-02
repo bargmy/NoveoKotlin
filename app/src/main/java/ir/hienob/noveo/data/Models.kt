@@ -95,8 +95,6 @@ data class SavedSticker(
 data class ForwardedInfo(
     val from: String,
     val originalTs: Long
-)
-
 data class MessageContent(
     val text: String? = null,
     val file: MessageFileAttachment? = null,
@@ -104,10 +102,20 @@ data class MessageContent(
     val theme: String? = null,
     val callLog: String? = null,
     val forwardedInfo: ForwardedInfo? = null,
-    val replyToId: String? = null
+    val replyToId: String? = null,
+    val inlineKeyboard: List<List<InlineKeyboardButton>> = emptyList()
 ) {
     fun previewText(): String {
-        return when {
+...
+    }
+}
+
+data class InlineKeyboardButton(
+    val text: String,
+    val callbackData: String? = null,
+    val url: String? = null
+)
+
             !callLog.isNullOrBlank() -> {
                 try {
                     val log = org.json.JSONObject(callLog)
