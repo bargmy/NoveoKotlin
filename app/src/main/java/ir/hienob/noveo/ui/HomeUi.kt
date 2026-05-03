@@ -483,8 +483,18 @@ internal fun HomeScreen(
 
     LaunchedEffect(state.pendingGroupInfoId) {
         state.pendingGroupInfoId?.let {
-            infoChatId = it
-            animateModalEntrance = true
+            val chat = state.chats.firstOrNull { c -> c.id == it }
+            if (chat?.chatType == "private") {
+                val otherUserId = chat.memberIds.firstOrNull { memberId -> memberId != state.session?.userId }
+                infoChatId = null
+                otherUserId?.let { userId ->
+                    profileUserId = userId
+                    animateModalEntrance = true
+                }
+            } else {
+                infoChatId = it
+                animateModalEntrance = true
+            }
             onClearNavigationSignal()
         }
     }
@@ -537,6 +547,10 @@ internal fun HomeScreen(
     var chatSnapshotBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var chatSnapshotCapturedForGesture by remember { mutableStateOf(false) }
     var lockedSlidingChatId by remember { mutableStateOf<String?>(null) }
+    var lockedSlidingChat by remember { mutableStateOf<ChatSummary?>(null) }
+    var lockedSlidingMessages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var isBackSwipeDragging by remember { mutableStateOf(false) }
+    var isCompletingBackSwipe by remember { mutableStateOf(false) }
 
     // Sync menu state with animation
     LaunchedEffect(showMenu) {
@@ -548,10 +562,15 @@ internal fun HomeScreen(
     }
 
     LaunchedEffect(state.selectedChatId) {
+        if (isBackSwipeDragging || isCompletingBackSwipe) return@LaunchedEffect
         chatBackOffset.snapTo(0f)
         chatSnapshot = null
         chatSnapshotCapturedForGesture = false
-        if (state.selectedChatId == null) lockedSlidingChatId = null
+        if (state.selectedChatId == null) {
+            lockedSlidingChatId = null
+            lockedSlidingChat = null
+            lockedSlidingMessages = emptyList()
+        }
     }
 
     val filteredChats = remember(state.chats, searchQuery) {
@@ -576,6 +595,8 @@ internal fun HomeScreen(
 
     val effectiveSelectedChatId = lockedSlidingChatId ?: state.selectedChatId
     val selectedChat = state.chats.firstOrNull { it.id == effectiveSelectedChatId }
+    val effectiveSelectedChat = lockedSlidingChat ?: selectedChat
+    val effectiveChatState = if (lockedSlidingChat != null) state.copy(selectedChatId = lockedSlidingChatId, messages = lockedSlidingMessages) else state
     val selectedProfile = remember(profileUserId, state.usersById) { profileUserId?.let(state.usersById::get) }
 
     BoxWithConstraints(
@@ -593,16 +614,19 @@ internal fun HomeScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(state.selectedChatId, showMenu, isAnyModalVisible, compact) {
+                .pointerInput(showMenu, isAnyModalVisible, compact) {
                     if (isAnyModalVisible) return@pointerInput
                     var allowChatBackDrag = false
                     detectHorizontalDragGestures(
                         onDragStart = { offset ->
-                            allowChatBackDrag = compact &&
-                                state.selectedChatId != null &&
-                                offset.x <= backSwipeEdgePx
+                            val currentSelectedId = state.selectedChatId
+                            val currentSelectedChat = currentSelectedId?.let { id -> state.chats.firstOrNull { it.id == id } }
+                            allowChatBackDrag = compact && currentSelectedId != null && currentSelectedChat != null && offset.x <= backSwipeEdgePx
                             if (allowChatBackDrag) {
-                                lockedSlidingChatId = state.selectedChatId
+                                lockedSlidingChatId = currentSelectedId
+                                lockedSlidingChat = currentSelectedChat
+                                lockedSlidingMessages = state.messages.toList()
+                                isBackSwipeDragging = true
                             }
                             scope.launch {
                                 sidebarOffset.stop()
@@ -625,7 +649,7 @@ internal fun HomeScreen(
                         },
                         onHorizontalDrag = { change, dragAmount ->
                             change.consume()
-                            if (compact && state.selectedChatId != null) {
+                            if (compact && (lockedSlidingChat != null || state.selectedChatId != null)) {
                                 if (!allowChatBackDrag) return@detectHorizontalDragGestures
                                 // Chat back: only positive drag
                                 val target = chatBackOffset.value + dragAmount
@@ -642,19 +666,23 @@ internal fun HomeScreen(
                         },
                         onDragEnd = {
                             scope.launch {
-                                if (compact && state.selectedChatId != null) {
+                                if (compact && (lockedSlidingChat != null || state.selectedChatId != null)) {
                                     val total = chatBackOffset.value
                                     if (total > 150) {
+                                        isCompletingBackSwipe = true
                                         chatBackOffset.animateTo(size.width.toFloat(), tween(180, easing = FastOutSlowInEasing))
                                         onBackToChats()
                                         chatBackOffset.snapTo(0f)
-                                        lockedSlidingChatId = null
                                     } else {
                                         chatBackOffset.animateTo(0f, tween(180, easing = FastOutSlowInEasing))
                                     }
                                     chatSnapshotCapturedForGesture = false
                                     chatSnapshot = null
-                                    if (total <= 150) lockedSlidingChatId = null
+                                    lockedSlidingChatId = null
+                                    lockedSlidingChat = null
+                                    lockedSlidingMessages = emptyList()
+                                    isBackSwipeDragging = false
+                                    isCompletingBackSwipe = false
                                 } else if (allowSidebarSwipe) {
                                     if (sidebarOffset.value > -menuWidthPx * 0.6f) {
                                         showMenu = true
@@ -670,14 +698,15 @@ internal fun HomeScreen(
                 }
         ) {
             if (compact) {
-                val chatTranslation = if (effectiveSelectedChatId != null) chatBackOffset.value else 0f
+                val showingChatSurface = lockedSlidingChat != null || state.selectedChatId != null
+                val chatTranslation = if (showingChatSurface) chatBackOffset.value else 0f
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .onGloballyPositioned { chatSnapshotBounds = it.boundsInRoot() }
                         .graphicsLayer { translationX = chatTranslation }
                 ) {
-                    if (effectiveSelectedChatId != null && chatTranslation > 0f) {
+                    if (showingChatSurface && chatTranslation > 0f) {
                         chatSnapshot?.let { shot ->
                             androidx.compose.foundation.Image(
                                 bitmap = shot,
@@ -688,7 +717,7 @@ internal fun HomeScreen(
                         }
                     }
                     AnimatedContent(
-                        targetState = effectiveSelectedChatId == null,
+                        targetState = !showingChatSurface,
                         label = "compact_shell_transition",
                         transitionSpec = {
                             if (targetState) {
@@ -702,7 +731,7 @@ internal fun HomeScreen(
                     ) { showList ->
                         if (showList) {
                             SidebarPane(
-                                state = state,
+                                state = effectiveChatState,
                                 strings = strings,
                                 chats = filteredChats,                                users = filteredUsers,
                                 showSearch = showSearch,
@@ -748,7 +777,7 @@ internal fun HomeScreen(
                                 state = state,
                                 compact = true,
                                 strings = strings,
-                                selectedChat = selectedChat,
+                                selectedChat = effectiveSelectedChat,
                                 currentUserId = state.session?.userId,
                                 onBackToChats = onBackToChats,
                                 onSend = onSend,
@@ -1801,7 +1830,9 @@ private fun ChatPane(
                     modifier = Modifier
                         .weight(1f)
                         .clickable {
-                            if (profileUserId != null) onOpenProfile(profileUserId) else if (selectedChat != null) onOpenGroupInfo()
+                            if (profileUserId != null) onOpenProfile(profileUserId)
+                            else if (selectedChat?.chatType == "private") profileUserId?.let(onOpenProfile)
+                            else if (selectedChat != null) onOpenGroupInfo()
                         }
                         .padding(vertical = 4.dp, horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1811,7 +1842,8 @@ private fun ChatPane(
                         imageUrl = selectedChat?.avatarUrl,
                         size = 40.dp,
                         modifier = Modifier.clickable {
-                            profileUserId?.let { onOpenProfile(it) } ?: onOpenGroupInfo()
+                            profileUserId?.let { onOpenProfile(it) }
+                                ?: if (selectedChat?.chatType != "private") onOpenGroupInfo() else Unit
                         }
                     )
                     Spacer(Modifier.width(10.dp))
@@ -4035,7 +4067,7 @@ private fun GroupInfoModal(
                                         clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("@${chat.handle}"))
                                     })
                                 }
-                                InfoItem(label = strings.type, value = chat.chatType.replaceFirstChar { it.uppercase() })
+                                InfoItem(label = strings.type, value = formatChatType(chat.chatType, strings))
                                 
                                 val isMember = chat.memberIds.contains(state.session?.userId)
                                 if (chat.chatType != "private") {
@@ -4182,7 +4214,7 @@ private fun GroupInfoModal(
                                 }
                             }
                             Text(
-                                pluralStringResource(id = R.plurals.members_count, count = chat.memberIds.size, chat.memberIds.size), 
+                                formatMembersCount(chat.memberIds.size, strings),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -4212,7 +4244,7 @@ private fun GroupInfoModal(
                                 }
                             }
                             Text(
-                                pluralStringResource(id = R.plurals.members_count, count = chat.memberIds.size, chat.memberIds.size),
+                                formatMembersCount(chat.memberIds.size, strings),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp
