@@ -78,6 +78,7 @@ data class NoveoStrings(
     val members: String = "Members",
     val lastSeenRecently: String = "last seen recently",
     val membersCount: String = "members",
+    val membersCountFormat: String = "%d members",
     val membersOnline: String = "online",
     val cannotSendMessage: String = "You cannot send messages in this chat.",
     val loginTitle: String = "Welcome back",
@@ -258,6 +259,7 @@ private val translations = mapOf(
         members = "Mitglieder",
         lastSeenRecently = "zuletzt vor kurzem gesehen",
         membersCount = "Mitglieder",
+        membersCountFormat = "%d Mitglieder",
         membersOnline = "online",
         cannotSendMessage = "Sie können in diesem Chat keine Nachrichten senden.",
         loginTitle = "Willkommen zurück",
@@ -403,6 +405,7 @@ private val translations = mapOf(
         members = "Участники",
         lastSeenRecently = "был(а) недавно",
         membersCount = "участников",
+        membersCountFormat = "%d участников",
         membersOnline = "в сети",
         cannotSendMessage = "Вы не можете отправлять сообщения в этот чат.",
         loginTitle = "С возвращением",
@@ -547,6 +550,7 @@ private val translations = mapOf(
         members = "成员",
         lastSeenRecently = "最近在线",
         membersCount = "成员",
+        membersCountFormat = "%d 位成员",
         membersOnline = "在线",
         cannotSendMessage = "您无法在此聊天中发送消息。",
         loginTitle = "欢迎回来",
@@ -692,6 +696,7 @@ private val translations = mapOf(
         members = "اعضا",
         lastSeenRecently = "آخرین بازدید اخیراً",
         membersCount = "عضو",
+        membersCountFormat = "%d عضو",
         membersOnline = "آنلاین",
         cannotSendMessage = "شما نمی‌توانید در این گفتگو پیام ارسال کنید.",
         loginTitle = "خوش آمدید",
@@ -855,6 +860,7 @@ private val translations = mapOf(
         members = "Miembros",
         lastSeenRecently = "visto recientemente",
         membersCount = "miembros",
+        membersCountFormat = "%d miembros",
         membersOnline = "en línea",
         cannotSendMessage = "No puedes enviar mensajes en este chat.",
         loginTitle = "Bienvenido de nuevo",
@@ -999,6 +1005,7 @@ private val translations = mapOf(
         members = "Membres",
         lastSeenRecently = "vu récemment",
         membersCount = "membres",
+        membersCountFormat = "%d membres",
         membersOnline = "en ligne",
         cannotSendMessage = "Vous ne pouvez pas envoyer de messages dans ce chat.",
         loginTitle = "Bon retour",
@@ -1143,6 +1150,7 @@ private val translations = mapOf(
         members = "الأعضاء",
         lastSeenRecently = "آخر ظهور كان قريباً",
         membersCount = "أعضاء",
+        membersCountFormat = "%d أعضاء",
         membersOnline = "متصل",
         cannotSendMessage = "لا يمكنك إرسال رسائل في هذه الدردشة.",
         loginTitle = "أهلاً بك مجدداً",
@@ -1287,6 +1295,7 @@ private val translations = mapOf(
         members = "Üyeler",
         lastSeenRecently = "geçenlerde görüldü",
         membersCount = "üye",
+        membersCountFormat = "%d üye",
         membersOnline = "çevrimiçi",
         cannotSendMessage = "Bu sohbette mesaj gönderemezsiniz.",
         loginTitle = "Tekrar hoş geldiniz",
@@ -1462,4 +1471,9 @@ fun localizeDigits(input: String, languageCode: String): String {
         }
         else char
     }.joinToString("")
+}
+
+fun formatMembersCount(count: Int, strings: NoveoStrings): String {
+    val localizedCount = localizeDigits(count.toString(), strings.languageCode)
+    return strings.membersCountFormat.replace("%d", localizedCount)
 }
