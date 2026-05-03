@@ -536,6 +536,7 @@ internal fun HomeScreen(
     var chatSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var chatSnapshotBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var chatSnapshotCapturedForGesture by remember { mutableStateOf(false) }
+    var lockedSlidingChatId by remember { mutableStateOf<String?>(null) }
 
     // Sync menu state with animation
     LaunchedEffect(showMenu) {
@@ -550,6 +551,7 @@ internal fun HomeScreen(
         chatBackOffset.snapTo(0f)
         chatSnapshot = null
         chatSnapshotCapturedForGesture = false
+        if (state.selectedChatId == null) lockedSlidingChatId = null
     }
 
     val filteredChats = remember(state.chats, searchQuery) {
@@ -572,7 +574,8 @@ internal fun HomeScreen(
             }
     }
 
-    val selectedChat = state.chats.firstOrNull { it.id == state.selectedChatId }
+    val effectiveSelectedChatId = lockedSlidingChatId ?: state.selectedChatId
+    val selectedChat = state.chats.firstOrNull { it.id == effectiveSelectedChatId }
     val selectedProfile = remember(profileUserId, state.usersById) { profileUserId?.let(state.usersById::get) }
 
     BoxWithConstraints(
@@ -598,6 +601,9 @@ internal fun HomeScreen(
                             allowChatBackDrag = compact &&
                                 state.selectedChatId != null &&
                                 offset.x <= backSwipeEdgePx
+                            if (allowChatBackDrag) {
+                                lockedSlidingChatId = state.selectedChatId
+                            }
                             scope.launch {
                                 sidebarOffset.stop()
                                 chatBackOffset.stop()
@@ -639,11 +645,16 @@ internal fun HomeScreen(
                                 if (compact && state.selectedChatId != null) {
                                     val total = chatBackOffset.value
                                     if (total > 150) {
+                                        chatBackOffset.animateTo(size.width.toFloat(), tween(180, easing = FastOutSlowInEasing))
                                         onBackToChats()
+                                        chatBackOffset.snapTo(0f)
+                                        lockedSlidingChatId = null
+                                    } else {
+                                        chatBackOffset.animateTo(0f, tween(180, easing = FastOutSlowInEasing))
                                     }
-                                    chatBackOffset.animateTo(0f)
                                     chatSnapshotCapturedForGesture = false
                                     chatSnapshot = null
+                                    if (total <= 150) lockedSlidingChatId = null
                                 } else if (allowSidebarSwipe) {
                                     if (sidebarOffset.value > -menuWidthPx * 0.6f) {
                                         showMenu = true
@@ -659,14 +670,14 @@ internal fun HomeScreen(
                 }
         ) {
             if (compact) {
-                val chatTranslation = if (state.selectedChatId != null) chatBackOffset.value else 0f
+                val chatTranslation = if (effectiveSelectedChatId != null) chatBackOffset.value else 0f
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .onGloballyPositioned { chatSnapshotBounds = it.boundsInRoot() }
                         .graphicsLayer { translationX = chatTranslation }
                 ) {
-                    if (state.selectedChatId != null && chatTranslation > 0f) {
+                    if (effectiveSelectedChatId != null && chatTranslation > 0f) {
                         chatSnapshot?.let { shot ->
                             androidx.compose.foundation.Image(
                                 bitmap = shot,
@@ -677,7 +688,7 @@ internal fun HomeScreen(
                         }
                     }
                     AnimatedContent(
-                        targetState = state.selectedChatId == null,
+                        targetState = effectiveSelectedChatId == null,
                         label = "compact_shell_transition",
                         transitionSpec = {
                             if (targetState) {
@@ -1005,7 +1016,13 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                         animateModalEntrance = false
                     },
                     onJoinChat = onJoinChat,
-                    onLeaveChat = onLeaveChat,
+                    onLeaveChat = { chatId ->
+                        onLeaveChat(chatId)
+                        if (infoChatId == chatId) {
+                            infoChatId = null
+                            animateModalEntrance = false
+                        }
+                    },
                     onOpenChat = { chatId ->
                         onOpenChat(chatId)
                         infoChatId = null
@@ -1586,10 +1603,11 @@ private fun ChatPane(
         if (selectedChat.chatType == "private") {
             if (isOnline) strings.membersOnline
             else formatLastSeen(profileUser?.lastSeen, strings)
-        } else {            val total = selectedChat.memberIds.size
-            val totalStr = localizeDigits(total.toString(), strings.languageCode)
+        } else {
+            val total = selectedChat.memberIds.size
             val onlineStr = localizeDigits(onlineCount.toString(), strings.languageCode)
-            val rawSubtitle = if (onlineCount > 0) "$totalStr ${strings.membersCount}${strings.comma} $onlineStr ${strings.membersOnline}" else "$totalStr ${strings.membersCount}"
+            val totalMembersText = formatMembersCount(total, strings)
+            val rawSubtitle = if (onlineCount > 0) "$totalMembersText${strings.comma} $onlineStr ${strings.membersOnline}" else totalMembersText
             if (strings.languageCode == "fa" || strings.languageCode == "ar") "\u200F$rawSubtitle" else rawSubtitle
         }
     }

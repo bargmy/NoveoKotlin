@@ -816,8 +816,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { api.leaveChat(session, chatId) }
-                if (_uiState.value.selectedChatId == chatId) {
-                    backToChatList()
+                _uiState.value = _uiState.value.let { current ->
+                    current.copy(
+                        chats = current.chats.map { chat ->
+                            if (chat.id == chatId) chat.copy(memberIds = chat.memberIds.filterNot { it == session.userId })
+                            else chat
+                        },
+                        selectedChatId = if (current.selectedChatId == chatId) null else current.selectedChatId,
+                        messages = if (current.selectedChatId == chatId) emptyList() else current.messages
+                    )
                 }
                 refreshHomeSilently()
             } catch (e: Exception) {
@@ -2051,4 +2058,3 @@ private fun isTimestampClose(left: Long, right: Long, maxDeltaSeconds: Long = 12
     if (left <= 0L || right <= 0L) return false
     return kotlin.math.abs(left - right) <= maxDeltaSeconds
 }
-
