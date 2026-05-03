@@ -503,6 +503,9 @@ internal fun HomeScreen(
                           infoChatId != null ||
                           profileUserId != null || selectedMediaAttachment != null || showSearch || showForwardPicker
 
+    var isCompactLayout by remember { mutableStateOf(false) }
+    var startCompactBackNavigation by remember { mutableStateOf<() -> Unit>({ onBackToChats() }) }
+
     androidx.activity.compose.BackHandler(enabled = isAnyModalVisible || showMenu || state.selectedChatId != null) {
         when {
             selectedMediaAttachment != null -> selectedMediaAttachment = null
@@ -520,7 +523,7 @@ internal fun HomeScreen(
             showForwardPicker -> onForwardMessage(null)
             showSearch -> { showSearch = false; searchQuery = "" }
             showMenu -> showMenu = false
-            state.selectedChatId != null -> onBackToChats()
+            state.selectedChatId != null -> startCompactBackNavigation()
         }
     }
 
@@ -597,6 +600,35 @@ internal fun HomeScreen(
     val selectedChat = state.chats.firstOrNull { it.id == effectiveSelectedChatId }
     val effectiveSelectedChat = lockedSlidingChat ?: selectedChat
     val effectiveChatState = if (lockedSlidingChat != null) state.copy(selectedChatId = lockedSlidingChatId, messages = lockedSlidingMessages) else state
+    val latestState by androidx.compose.runtime.rememberUpdatedState(state)
+    val latestSelectedChat by androidx.compose.runtime.rememberUpdatedState(effectiveSelectedChat)
+    val clearSlidingLockState = {
+        chatSnapshotCapturedForGesture = false
+        chatSnapshot = null
+        lockedSlidingChatId = null
+        lockedSlidingChat = null
+        lockedSlidingMessages = emptyList()
+        isBackSwipeDragging = false
+        isCompletingBackSwipe = false
+    }
+    startCompactBackNavigation = {
+        scope.launch {
+            val currentState = latestState
+            val currentChat = latestSelectedChat ?: currentState.selectedChatId?.let { id -> currentState.chats.firstOrNull { it.id == id } }
+            if (isCompactLayout && currentState.selectedChatId != null && currentChat != null) {
+                lockedSlidingChatId = currentState.selectedChatId
+                lockedSlidingChat = currentChat
+                lockedSlidingMessages = currentState.messages.toList()
+                isBackSwipeDragging = true
+                isCompletingBackSwipe = true
+                chatBackOffset.stop()
+                chatBackOffset.animateTo(rootView.width.toFloat().coerceAtLeast(1f), tween(180, easing = FastOutSlowInEasing))
+                onBackToChats()
+                chatBackOffset.snapTo(0f)
+                clearSlidingLockState()
+            } else onBackToChats()
+        }
+    }
     val selectedProfile = remember(profileUserId, state.usersById) { profileUserId?.let(state.usersById::get) }
 
     BoxWithConstraints(
@@ -607,6 +639,7 @@ internal fun HomeScreen(
             .imePadding()
     ) {
         val compact = maxWidth < 760.dp
+        isCompactLayout = compact
         
         // Allow sidebar swiping even when a chat is open in landscape, but keep it constrained
         val allowSidebarSwipe = !compact || state.selectedChatId == null
@@ -619,13 +652,14 @@ internal fun HomeScreen(
                     var allowChatBackDrag = false
                     detectHorizontalDragGestures(
                         onDragStart = { offset ->
-                            val currentSelectedId = state.selectedChatId
-                            val currentSelectedChat = currentSelectedId?.let { id -> state.chats.firstOrNull { it.id == id } }
+                            val latest = latestState
+                            val currentSelectedId = latest.selectedChatId
+                            val currentSelectedChat = latestSelectedChat ?: currentSelectedId?.let { id -> latest.chats.firstOrNull { it.id == id } }
                             allowChatBackDrag = compact && currentSelectedId != null && currentSelectedChat != null && offset.x <= backSwipeEdgePx
                             if (allowChatBackDrag) {
                                 lockedSlidingChatId = currentSelectedId
                                 lockedSlidingChat = currentSelectedChat
-                                lockedSlidingMessages = state.messages.toList()
+                                lockedSlidingMessages = latest.messages.toList()
                                 isBackSwipeDragging = true
                             }
                             scope.launch {
@@ -649,7 +683,7 @@ internal fun HomeScreen(
                         },
                         onHorizontalDrag = { change, dragAmount ->
                             change.consume()
-                            if (compact && (lockedSlidingChat != null || state.selectedChatId != null)) {
+                            if (compact && (lockedSlidingChat != null || latestState.selectedChatId != null)) {
                                 if (!allowChatBackDrag) return@detectHorizontalDragGestures
                                 // Chat back: only positive drag
                                 val target = chatBackOffset.value + dragAmount
@@ -666,23 +700,14 @@ internal fun HomeScreen(
                         },
                         onDragEnd = {
                             scope.launch {
-                                if (compact && (lockedSlidingChat != null || state.selectedChatId != null)) {
+                                if (compact && (lockedSlidingChat != null || latestState.selectedChatId != null)) {
                                     val total = chatBackOffset.value
                                     if (total > 150) {
-                                        isCompletingBackSwipe = true
-                                        chatBackOffset.animateTo(size.width.toFloat(), tween(180, easing = FastOutSlowInEasing))
-                                        onBackToChats()
-                                        chatBackOffset.snapTo(0f)
+                                        startCompactBackNavigation()
                                     } else {
                                         chatBackOffset.animateTo(0f, tween(180, easing = FastOutSlowInEasing))
+                                        clearSlidingLockState()
                                     }
-                                    chatSnapshotCapturedForGesture = false
-                                    chatSnapshot = null
-                                    lockedSlidingChatId = null
-                                    lockedSlidingChat = null
-                                    lockedSlidingMessages = emptyList()
-                                    isBackSwipeDragging = false
-                                    isCompletingBackSwipe = false
                                 } else if (allowSidebarSwipe) {
                                     if (sidebarOffset.value > -menuWidthPx * 0.6f) {
                                         showMenu = true
@@ -691,6 +716,14 @@ internal fun HomeScreen(
                                         showMenu = false
                                         sidebarOffset.animateTo(-menuWidthPx)
                                     }
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            scope.launch {
+                                if (compact && (lockedSlidingChat != null || latestState.selectedChatId != null)) {
+                                    chatBackOffset.animateTo(0f, tween(180, easing = FastOutSlowInEasing))
+                                    clearSlidingLockState()
                                 }
                             }
                         }
@@ -731,7 +764,7 @@ internal fun HomeScreen(
                     ) { showList ->
                         if (showList) {
                             SidebarPane(
-                                state = effectiveChatState,
+                                state = state,
                                 strings = strings,
                                 chats = filteredChats,                                users = filteredUsers,
                                 showSearch = showSearch,
@@ -774,12 +807,12 @@ internal fun HomeScreen(
                                 modifier = Modifier.fillMaxSize()
                                 )                        } else {
                             ChatPane(
-                                state = state,
+                                state = effectiveChatState,
                                 compact = true,
                                 strings = strings,
                                 selectedChat = effectiveSelectedChat,
                                 currentUserId = state.session?.userId,
-                                onBackToChats = onBackToChats,
+                                onBackToChats = startCompactBackNavigation,
                                 onSend = onSend,
                                 onTyping = onTyping,
                                 onLoadOlder = onLoadOlder,
@@ -788,7 +821,7 @@ internal fun HomeScreen(
                                 onRemoveAttachment = onRemoveAttachment,
                                 onOpenProfile = onOpenProfile,
                                 onOpenGroupInfo = { 
-                                    selectedChat?.id?.let {
+                                    effectiveSelectedChat?.id?.let {
                                         infoChatId = it
                                         animateModalEntrance = true
                                     }
@@ -806,8 +839,8 @@ internal fun HomeScreen(
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
-                                onCall = { selectedChat?.id?.let { onCall(it) } },
-                                onCancelUpload = { selectedChat?.id?.let { onCancelUpload(it) } },
+                                onCall = { effectiveSelectedChat?.id?.let { onCall(it) } },
+                                onCancelUpload = { effectiveSelectedChat?.id?.let { onCancelUpload(it) } },
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
                                 onHandleClick = onHandleClick,
