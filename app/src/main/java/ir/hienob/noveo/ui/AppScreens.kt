@@ -401,11 +401,10 @@ fun NoveoRoot(
                             onCancelUpload = onCancelUpload,
                             onSendSticker = onSendSticker,
                             onAddSavedSticker = onAddSavedSticker,
-                            onCancelUpload = onCancelUpload,
+                            onHandleClick = onHandleClick,
                             onJoinChat = onJoinChat,
                             onLeaveChat = onLeaveChat,
                             onClearNavigationSignal = onClearNavigationSignal,
-
                             onBotCallback = onBotCallback,
                             currentTheme = currentTheme,
                             onThemeChange = { currentTheme = it }

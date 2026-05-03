@@ -408,6 +408,7 @@ internal fun HomeScreen(
     onAddSavedSticker: (ChatMessage) -> Unit,
     onHandleClick: (String) -> Unit,
     onJoinChat: (String) -> Unit,
+    onLeaveChat: (String) -> Unit,
     onClearNavigationSignal: () -> Unit,
     onBotCallback: (String, String, String) -> Unit,
     currentTheme: ThemePreset,
