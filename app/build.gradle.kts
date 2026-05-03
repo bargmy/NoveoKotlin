@@ -4,6 +4,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+apply(from = "noveo-chat-ui-patches.gradle.kts")
+
 val appVersionCode = providers.gradleProperty("NOVEO_VERSION_CODE").orNull?.toIntOrNull() ?: 21
 val appVersionName = providers.gradleProperty("NOVEO_VERSION_NAME").orNull ?: "0.6.3"
 
