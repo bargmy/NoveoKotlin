@@ -814,17 +814,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { api.leaveChat(session, chatId) }
-                _uiState.value = _uiState.value.copy(
-                    chats = _uiState.value.chats.filter { it.id != chatId },
-                    selectedChatId = if (_uiState.value.selectedChatId == chatId) null else _uiState.value.selectedChatId
-                )
-                // If we were in the chat we just left, we should go back
-                if (_uiState.value.selectedChatId == null) {
+                if (_uiState.value.selectedChatId == chatId) {
                     backToChatList()
                 }
                 refreshHomeSilently()
             } catch (e: Exception) {
                 e.printStackTrace()
+            }
+        }
+    }
+
+    private fun retryPendingMessages() {
+        viewModelScope.launch(Dispatchers.IO) {
+            messageCacheByChat.forEach { (chatId, messages) ->
+                messages.filter { it.pending }.forEach { msg ->
+                    val contentObj = org.json.JSONObject().put("text", msg.content.text)
+                    msg.content.file?.let { file ->
+                        contentObj.put("file", org.json.JSONObject()
+                            .put("url", file.url)
+                            .put("name", file.name)
+                            .put("type", file.type)
+                            .put("size", file.size))
+                    }
+
+                    val payload = org.json.JSONObject()
+                        .put("type", "message")
+                        .put("chatId", chatId)
+                        .put("content", contentObj.toString())
+                        .put("replyToId", msg.replyToId)
+                        .put("clientTempId", msg.clientTempId)
+                    
+                    NoveoNotificationService.send(payload)
+                }
             }
         }
     }
@@ -1257,6 +1278,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     connectionTitle = if (event.connected) strings.brandName else strings.connecting,
                     connectionDetail = event.detail
                 )
+                if (event.connected) {
+                    retryPendingMessages()
+                    // Immediately request resync on connect to speed up UI updates
+                    refreshHomeSilently()
+                }
             }
             is SocketEvent.NewMessage -> handleIncomingMessage(event.message)
             is SocketEvent.ChannelInfo -> {
