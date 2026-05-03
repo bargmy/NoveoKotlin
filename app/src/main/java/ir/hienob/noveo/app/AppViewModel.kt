@@ -152,6 +152,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     
     private var mediaPlayer: android.media.MediaPlayer? = null
     private var audioProgressJob: Job? = null
+    
+    private val typingJobs = mutableMapOf<String, Job>()
 
     init {
         _uiState.value = _uiState.value.copy(
@@ -1300,6 +1302,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     messages = if (_uiState.value.selectedChatId == chat.id) event.messages.sortedBy { it.timestamp } else _uiState.value.messages
                 )
             }
+            is SocketEvent.NewChatInfo -> {
+                val chat = event.chat
+                val updatedChats = (_uiState.value.chats.filter { it.id != chat.id } + chat)
+                    .sortedByDescending { it.lastMessageTimestamp }
+                
+                if (event.messages.isNotEmpty()) {
+                    messageCacheByChat[chat.id] = event.messages
+                }
+                
+                _uiState.value = _uiState.value.copy(
+                    chats = updatedChats,
+                    messages = if (_uiState.value.selectedChatId == chat.id) event.messages.sortedBy { it.timestamp } else _uiState.value.messages
+                )
+            }
             is SocketEvent.MessageSent -> handleIncomingMessage(event.message)
             is SocketEvent.Typing -> handleTyping(event.chatId, event.senderId)
             is SocketEvent.MessageSeenUpdate -> handleSeenUpdate(event.chatId, event.messageId, event.userId)
@@ -1651,12 +1667,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             typingUsers = _uiState.value.typingUsers + (chatId to (currentTyping + userId))
         )
-        viewModelScope.launch {
+        
+        val jobKey = "${chatId}_${userId}"
+        typingJobs[jobKey]?.cancel()
+        typingJobs[jobKey] = viewModelScope.launch {
             delay(3000)
             val stillTyping = _uiState.value.typingUsers[chatId].orEmpty() - userId
             _uiState.value = _uiState.value.copy(
                 typingUsers = _uiState.value.typingUsers + (chatId to stillTyping)
             )
+            typingJobs.remove(jobKey)
         }
     }
 

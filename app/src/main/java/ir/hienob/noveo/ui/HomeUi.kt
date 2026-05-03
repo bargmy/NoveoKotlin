@@ -1523,14 +1523,16 @@ private fun ChatPane(
         }
     }
 
-    val typingText = remember(typingUsers, state.usersById, strings) {
+    val typingText = remember(selectedChat?.chatType, typingUsers, state.usersById, strings) {
         if (typingUsers.isEmpty()) null
-        else {
+        else if (selectedChat?.chatType == "private") {
+            strings.typingSomeone.replace("someone ", "") // Falls back to "is typing..."
+        } else {
             val names = typingUsers.mapNotNull { state.usersById[it]?.username?.split(" ")?.firstOrNull() }
             when {
                 names.isEmpty() -> strings.typingSomeone
-                names.size == 1 -> "${names} ${strings.typingSingle}"
-                names.size == 2 -> "${names} ${strings.typingDouble} ${names}"
+                names.size == 1 -> "${names.first()} ${strings.typingSingle}"
+                names.size == 2 -> "${names[0]} ${strings.typingDouble} ${names[1]}"
                 else -> "${localizeDigits(names.size.toString(), strings.languageCode)} ${strings.typingMulti}"
             }
         }
