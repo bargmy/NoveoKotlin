@@ -602,7 +602,7 @@ internal fun HomeScreen(
     val effectiveChatState = if (lockedSlidingChat != null) state.copy(selectedChatId = lockedSlidingChatId, messages = lockedSlidingMessages) else state
     val latestState by androidx.compose.runtime.rememberUpdatedState(state)
     val latestSelectedChat by androidx.compose.runtime.rememberUpdatedState(effectiveSelectedChat)
-    val clearSlidingLockState = {
+    fun clearSlidingLockState() {
         chatSnapshotCapturedForGesture = false
         chatSnapshot = null
         lockedSlidingChatId = null
