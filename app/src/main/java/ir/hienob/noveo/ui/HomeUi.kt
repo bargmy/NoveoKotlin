@@ -3789,26 +3789,6 @@ private fun ProfileModal(
                         ) { 
                             Text(strings.sendMessage) 
                         }
-
-                        val mutualChat = remember(user.id, chats) {
-                            chats.firstOrNull { it.chatType == "private" && it.memberIds.contains(user.id) }
-                        }
-                        if (mutualChat != null && onLeaveChat != null) {
-                            OutlinedButton(
-                                onClick = { 
-                                    onLeaveChat(mutualChat.id)
-                                    onClose()
-                                },
-                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error
-                                ),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
-                            ) {
-                                Text(strings.leave)
-                            }
-                        }
                         
                         Spacer(Modifier.height(300.dp))
                     }
