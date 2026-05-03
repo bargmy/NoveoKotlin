@@ -32,6 +32,7 @@ sealed class SocketEvent {
     data class VoiceChatUpdate(val chatId: String?, val activeVoiceChats: JSONObject) : SocketEvent()
     data class VoiceCallEnded(val chatId: String) : SocketEvent()
     data class VoiceCallError(val message: String) : SocketEvent()
+    data class ChannelInfo(val chat: ChatSummary, val messages: List<ChatMessage>) : SocketEvent()
     data class OlderMessages(
         val chatId: String,
         val messages: List<ChatMessage>,
@@ -164,6 +165,14 @@ class ChatSocket(
                         "chat_updated" -> {
                             payload.optString("chatId").sanitizeRealtimeField()
                                 ?.let { trySend(SocketEvent.ChatUpdated(it)) }
+                        }
+                        "channel_info" -> {
+                            val chatJson = json.optJSONObject("channel") ?: json.optJSONObject("chat")
+                            if (chatJson != null) {
+                                val chat = parseChat(chatJson, knownUsers, session.userId)
+                                val messages = parseChatMessageList(chatJson.optJSONArray("messages"), chat.id, knownUsers)
+                                trySend(SocketEvent.ChannelInfo(chat, messages))
+                            }
                         }
                         "chat_history" -> {
                             val users = parseUsers(json).first

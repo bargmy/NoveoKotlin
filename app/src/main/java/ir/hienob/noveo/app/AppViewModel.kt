@@ -771,64 +771,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openHandle(handle: String) {
         val session = _uiState.value.session ?: return
-        val normalizedHandle = handle.lowercase().removePrefix("@")
-        viewModelScope.launch {
-            try {
-                // First check if we already have a chat with this handle
-                val existingChat = _uiState.value.chats.firstOrNull { it.handle?.lowercase()?.removePrefix("@") == normalizedHandle }
-                if (existingChat != null) {
-                    if (existingChat.chatType == "private") {
-                        val recipientId = existingChat.memberIds.firstOrNull { it != session.userId }
-                        if (recipientId != null) {
-                            _uiState.value = _uiState.value.copy(pendingProfileId = recipientId)
-                            return@launch
-                        }
-                    } else {
-                        // For groups/channels, show the profile instead of opening chat directly
-                        _uiState.value = _uiState.value.copy(pendingGroupInfoId = existingChat.id)
-                        return@launch
-                    }
-                }
-                
-                // Then check users
-                val existingUser = _uiState.value.usersById.values.firstOrNull { it.handle?.lowercase()?.removePrefix("@") == normalizedHandle }
-                if (existingUser != null) {
-                    _uiState.value = _uiState.value.copy(pendingProfileId = existingUser.id)
-                    return@launch
-                }
-                
-                // Resolve handle via API
-                val response = withContext(Dispatchers.IO) { api.resolveHandle(session, if (handle.startsWith("@")) handle else "@$handle") }
-                if (response.optBoolean("success", false)) {
-                    val chatId = response.optString("chatId")
-                    val userId = response.optString("userId")
-                    
-                    if (chatId.isNotBlank()) {
-                        // It's a group/channel
-                        val chatJson = response.optJSONObject("chat")
-                        if (chatJson != null) {
-                            val chat = parseChat(chatJson, _uiState.value.usersById, session.userId)
-                            _uiState.value = _uiState.value.copy(
-                                chats = (_uiState.value.chats.filter { it.id != chat.id } + chat).sortedByDescending { it.lastMessageTimestamp },
-                                pendingGroupInfoId = chat.id
-                            )
-                        }
-                    } else if (userId.isNotBlank()) {
-                        // It's a user
-                        val userJson = response.optJSONObject("user")
-                        if (userJson != null) {
-                            val user = parseUser(userJson)
-                            _uiState.value = _uiState.value.copy(
-                                usersById = _uiState.value.usersById + (user.id to user),
-                                pendingProfileId = user.id
-                            )
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+        val normalizedHandle = if (handle.startsWith("@")) handle else "@$handle"
+        
+        val payload = org.json.JSONObject()
+            .put("type", "get_channel_by_handle")
+            .put("handle", normalizedHandle)
+        
+        NoveoNotificationService.send(payload)
     }
 
     fun clearNavigationSignal() {
@@ -840,14 +789,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun joinChat(chatId: String) {
         val session = _uiState.value.session ?: return
-        viewModelScope.launch {
-            try {
-                withContext(Dispatchers.IO) { api.joinChat(session, chatId) }
-                refreshHomeSilently()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+        val payload = org.json.JSONObject()
+            .put("type", "join_channel")
+            .put("chatId", chatId)
+        
+        NoveoNotificationService.send(payload)
+        refreshHomeSilently()
     }
 
     fun onCaptchaTokenReceived(token: String) {
@@ -1280,6 +1227,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             is SocketEvent.NewMessage -> handleIncomingMessage(event.message)
+            is SocketEvent.ChannelInfo -> {
+                val chat = event.chat
+                val updatedChats = (_uiState.value.chats.filter { it.id != chat.id } + chat)
+                    .sortedByDescending { it.lastMessageTimestamp }
+                
+                if (event.messages.isNotEmpty()) {
+                    messageCacheByChat[chat.id] = event.messages
+                }
+                
+                _uiState.value = _uiState.value.copy(
+                    chats = updatedChats,
+                    pendingGroupInfoId = chat.id,
+                    messages = if (_uiState.value.selectedChatId == chat.id) event.messages.sortedBy { it.timestamp } else _uiState.value.messages
+                )
+            }
             is SocketEvent.MessageSent -> handleIncomingMessage(event.message)
             is SocketEvent.Typing -> handleTyping(event.chatId, event.senderId)
             is SocketEvent.MessageSeenUpdate -> handleSeenUpdate(event.chatId, event.messageId, event.userId)

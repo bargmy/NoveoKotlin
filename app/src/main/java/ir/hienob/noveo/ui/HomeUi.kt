@@ -964,6 +964,11 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                         animateModalEntrance = false
                     },
                     onJoinChat = onJoinChat,
+                    onOpenChat = { chatId ->
+                        onOpenChat(chatId)
+                        infoChatId = null
+                        animateModalEntrance = false
+                    },
                     animateEntrance = animateModalEntrance
                 )
             }
@@ -982,6 +987,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                     },
                     onMessage = {
                         profileUserId = null
+                        infoChatId = null
                         animateModalEntrance = false
                         onStartDirectChat(user.id)
                     },
@@ -3866,6 +3872,7 @@ private fun GroupInfoModal(
     onOpenProfile: (String) -> Unit,
     onClose: () -> Unit,
     onJoinChat: (String) -> Unit,
+    onOpenChat: (String) -> Unit,
     animateEntrance: Boolean = false
 ) {
     val usersById = state.usersById
@@ -3921,21 +3928,33 @@ private fun GroupInfoModal(
                                 InfoItem(label = strings.type, value = chat.chatType.replaceFirstChar { it.uppercase() })
                                 
                                 val isMember = chat.memberIds.contains(state.session?.userId)
-                                if (!isMember || chat.chatType != "private") {
+                                if (chat.chatType != "private") {
                                     Spacer(Modifier.height(8.dp))
-                                    Button(
-                                        onClick = { 
-                                            if (isMember) {
-                                                onClose()
-                                                // It's already joined, just close info and show chat
-                                            } else {
-                                                onJoinChat(chat.id)
-                                            }
-                                        },
+                                    Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Text(if (isMember) strings.open else strings.join)
+                                        Button(
+                                            onClick = { onOpenChat(chat.id) },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Text(strings.open)
+                                        }
+                                        
+                                        if (!isMember) {
+                                            Button(
+                                                onClick = { onJoinChat(chat.id) },
+                                                modifier = Modifier.weight(1f),
+                                                shape = RoundedCornerShape(12.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                                )
+                                            ) {
+                                                Text(strings.join)
+                                            }
+                                        }
                                     }
                                 }
                             }
