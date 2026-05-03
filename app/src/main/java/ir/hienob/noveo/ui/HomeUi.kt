@@ -151,10 +151,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -172,6 +175,7 @@ import android.os.Build
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
@@ -527,6 +531,10 @@ internal fun HomeScreen(
     val chatBackOffset = remember { androidx.compose.animation.core.Animatable(0f) }
     
     val scope = rememberCoroutineScope()
+    val rootView = LocalView.current
+    var chatSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var chatSnapshotBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var chatSnapshotCapturedForGesture by remember { mutableStateOf(false) }
 
     // Sync menu state with animation
     LaunchedEffect(showMenu) {
@@ -539,6 +547,8 @@ internal fun HomeScreen(
 
     LaunchedEffect(state.selectedChatId) {
         chatBackOffset.snapTo(0f)
+        chatSnapshot = null
+        chatSnapshotCapturedForGesture = false
     }
 
     val filteredChats = remember(state.chats, searchQuery) {
@@ -591,6 +601,20 @@ internal fun HomeScreen(
                                 sidebarOffset.stop()
                                 chatBackOffset.stop()
                             }
+                            if (allowChatBackDrag && !chatSnapshotCapturedForGesture) {
+                                chatSnapshotBounds?.let { bounds ->
+                                    val full = android.graphics.Bitmap.createBitmap(rootView.width, rootView.height, android.graphics.Bitmap.Config.ARGB_8888).also { bmp ->
+                                    rootView.draw(android.graphics.Canvas(bmp))
+                                }
+                                    val left = bounds.left.roundToInt().coerceIn(0, full.width - 1)
+                                    val top = bounds.top.roundToInt().coerceIn(0, full.height - 1)
+                                    val width = bounds.width.roundToInt().coerceAtLeast(1).coerceAtMost(full.width - left)
+                                    val height = bounds.height.roundToInt().coerceAtLeast(1).coerceAtMost(full.height - top)
+                                    val cropped = android.graphics.Bitmap.createBitmap(full, left, top, width, height)
+                                    chatSnapshot = cropped.asImageBitmap()
+                                    chatSnapshotCapturedForGesture = true
+                                }
+                            }
                         },
                         onHorizontalDrag = { change, dragAmount ->
                             change.consume()
@@ -617,6 +641,8 @@ internal fun HomeScreen(
                                         onBackToChats()
                                     }
                                     chatBackOffset.animateTo(0f)
+                                    chatSnapshotCapturedForGesture = false
+                                    chatSnapshot = null
                                 } else if (allowSidebarSwipe) {
                                     if (sidebarOffset.value > -menuWidthPx * 0.6f) {
                                         showMenu = true
@@ -636,8 +662,19 @@ internal fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .onGloballyPositioned { chatSnapshotBounds = it.boundsInRoot() }
                         .graphicsLayer { translationX = chatTranslation }
                 ) {
+                    if (state.selectedChatId != null && chatTranslation > 0f) {
+                        chatSnapshot?.let { shot ->
+                            androidx.compose.foundation.Image(
+                                bitmap = shot,
+                                contentDescription = null,
+                                modifier = Modifier.matchParentSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
                     AnimatedContent(
                         targetState = state.selectedChatId == null,
                         label = "compact_shell_transition",
@@ -1477,6 +1514,10 @@ private fun ChatPane(
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val rootView = LocalView.current
+    var chatSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var chatSnapshotBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var chatSnapshotCapturedForGesture by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(state.editingMessage) {
@@ -2225,6 +2266,10 @@ private fun MessageRow(
     // Swipe state
     val swipeOffset = remember { androidx.compose.animation.core.Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val rootView = LocalView.current
+    var chatSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var chatSnapshotBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var chatSnapshotCapturedForGesture by remember { mutableStateOf(false) }
 
     LaunchedEffect(message.id) {
         if (ownMessage && message.pending) {
@@ -4118,7 +4163,7 @@ private fun GroupInfoModal(
                                 }
                             }
                             Text(
-                                "${chat.memberIds.size} members", 
+                                "${chat.memberIds.size} ${strings.membersCount}", 
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -4148,7 +4193,7 @@ private fun GroupInfoModal(
                                 }
                             }
                             Text(
-                                "${chat.memberIds.size} members",
+                                "${chat.memberIds.size} ${strings.membersCount}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp
