@@ -2032,7 +2032,7 @@ private fun ChatPane(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.Login,
+                                imageVector = Icons.Outlined.ArrowForward,
                                 contentDescription = null,
                                 tint = tgColors.composerBlue,
                                 modifier = Modifier.size(24.dp)
