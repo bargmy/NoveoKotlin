@@ -1987,29 +1987,57 @@ private fun ChatPane(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp)
+                    .padding(horizontal = 6.dp)
+                    .padding(bottom = 4.dp)
                     .navigationBarsPadding()
             ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .padding(horizontal = 6.dp)
-                        .clickable { onJoinChat(selectedChat!!.id) },
-                    shape = RoundedCornerShape(24.dp),
-                    color = tgColors.composerField,
-                    shadowElevation = 1.dp
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom
                 ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .clickable { onJoinChat(selectedChat!!.id) },
+                        shape = RoundedCornerShape(24.dp),
+                        color = tgColors.composerField,
+                        shadowElevation = 1.dp
                     ) {
-                        Text(
-                            strings.join,
-                            color = tgColors.composerBlue,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                strings.join,
+                                color = tgColors.composerBlue,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp
+                            )
+                        }
+                    }
+                    
+                    Spacer(Modifier.width(8.dp))
+                    
+                    Surface(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clickable { onJoinChat(selectedChat!!.id) },
+                        shape = CircleShape,
+                        color = tgColors.composerField,
+                        shadowElevation = 1.dp
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.Login,
+                                contentDescription = null,
+                                tint = tgColors.composerBlue,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
             }

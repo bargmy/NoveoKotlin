@@ -795,8 +795,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         
         NoveoNotificationService.send(payload)
         
-        // Optimistically update selection so the UI switches to input mode
-        _uiState.value = _uiState.value.copy(selectedChatId = chatId)
+        // Optimistically update membership and selection so the UI switches to input mode immediately
+        val updatedChats = _uiState.value.chats.map {
+            if (it.id == chatId) {
+                it.copy(memberIds = it.memberIds + session.userId)
+            } else it
+        }
+        
+        _uiState.value = _uiState.value.copy(
+            selectedChatId = chatId,
+            chats = updatedChats
+        )
         refreshHomeSilently()
     }
 
