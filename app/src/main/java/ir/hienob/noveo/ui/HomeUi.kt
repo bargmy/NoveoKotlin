@@ -222,6 +222,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.pluralStringResource
 
 private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
 private val CLIENT_VERSION: String
@@ -4163,7 +4164,7 @@ private fun GroupInfoModal(
                                 }
                             }
                             Text(
-                                "${chat.memberIds.size} ${strings.membersCount}", 
+                                pluralStringResource(id = R.plurals.members_count, count = chat.memberIds.size, chat.memberIds.size), 
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -4193,7 +4194,7 @@ private fun GroupInfoModal(
                                 }
                             }
                             Text(
-                                "${chat.memberIds.size} ${strings.membersCount}",
+                                pluralStringResource(id = R.plurals.members_count, count = chat.memberIds.size, chat.memberIds.size),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp
