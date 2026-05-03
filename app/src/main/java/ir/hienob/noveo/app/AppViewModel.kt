@@ -794,6 +794,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("chatId", chatId)
         
         NoveoNotificationService.send(payload)
+        
+        // Optimistically update selection so the UI switches to input mode
+        _uiState.value = _uiState.value.copy(selectedChatId = chatId)
         refreshHomeSilently()
     }
 
@@ -806,6 +809,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     chats = _uiState.value.chats.filter { it.id != chatId },
                     selectedChatId = if (_uiState.value.selectedChatId == chatId) null else _uiState.value.selectedChatId
                 )
+                // If we were in the chat we just left, we should go back
+                if (_uiState.value.selectedChatId == null) {
+                    backToChatList()
+                }
                 refreshHomeSilently()
             } catch (e: Exception) {
                 e.printStackTrace()

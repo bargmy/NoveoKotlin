@@ -1983,27 +1983,34 @@ private fun ChatPane(
                 }
             }
         } else if (selectedChat?.chatType != "private" && !isMember) {
-            Surface(
+            Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .navigationBarsPadding(),
-                color = tgColors.chatSurface,
-                shadowElevation = 8.dp
+                    .padding(bottom = 8.dp)
+                    .navigationBarsPadding()
             ) {
-                Box(
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp)
+                        .height(48.dp)
+                        .padding(horizontal = 6.dp)
                         .clickable { onJoinChat(selectedChat!!.id) },
-                    contentAlignment = Alignment.Center
+                    shape = RoundedCornerShape(24.dp),
+                    color = tgColors.composerField,
+                    shadowElevation = 1.dp
                 ) {
-                    Text(
-                        strings.join.uppercase(),
-                        color = tgColors.incomingLink,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            strings.join,
+                            color = tgColors.composerBlue,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp
+                        )
+                    }
                 }
             }
         }
