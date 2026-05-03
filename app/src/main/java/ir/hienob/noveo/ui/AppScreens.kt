@@ -300,6 +300,7 @@ fun NoveoRoot(
     onAddSavedSticker: (ChatMessage) -> Unit = {},
     onHandleClick: (String) -> Unit = {},
     onJoinChat: (String) -> Unit = {},
+    onLeaveChat: (String) -> Unit = {},
     onClearNavigationSignal: () -> Unit = {},
     onBotCallback: (String, String, String) -> Unit = { _, _, _ -> }
     ) {
@@ -400,9 +401,11 @@ fun NoveoRoot(
                             onCancelUpload = onCancelUpload,
                             onSendSticker = onSendSticker,
                             onAddSavedSticker = onAddSavedSticker,
-                            onHandleClick = onHandleClick,
+                            onCancelUpload = onCancelUpload,
                             onJoinChat = onJoinChat,
+                            onLeaveChat = onLeaveChat,
                             onClearNavigationSignal = onClearNavigationSignal,
+
                             onBotCallback = onBotCallback,
                             currentTheme = currentTheme,
                             onThemeChange = { currentTheme = it }

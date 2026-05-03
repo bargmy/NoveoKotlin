@@ -733,6 +733,7 @@ internal fun HomeScreen(
                                 onAddSavedSticker = onAddSavedSticker,
                                 onHandleClick = onHandleClick,
                                 onJoinChat = onJoinChat,
+                                onLeaveChat = onLeaveChat,
                                 onBotCallback = onBotCallback,
                                 onToggleMute = onToggleMute,
                                 onToggleMinimize = onToggleMinimize,
@@ -838,6 +839,7 @@ internal fun HomeScreen(
                                 onAddSavedSticker = onAddSavedSticker,
                                 onHandleClick = onHandleClick,
                                 onJoinChat = onJoinChat,
+                                onLeaveChat = onLeaveChat,
                                 onBotCallback = onBotCallback,
                                 onToggleMute = onToggleMute,
                                 onToggleMinimize = onToggleMinimize,
@@ -964,6 +966,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                         animateModalEntrance = false
                     },
                     onJoinChat = onJoinChat,
+                    onLeaveChat = onLeaveChat,
                     onOpenChat = { chatId ->
                         onOpenChat(chatId)
                         infoChatId = null
@@ -991,6 +994,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                         animateModalEntrance = false
                         onStartDirectChat(user.id)
                     },
+                    onLeaveChat = onLeaveChat,
                     animateEntrance = animateModalEntrance
                 )
             }
@@ -1461,6 +1465,7 @@ private fun ChatPane(
     onAddSavedSticker: (ChatMessage) -> Unit,
     onHandleClick: (String) -> Unit,
     onJoinChat: (String) -> Unit,
+    onLeaveChat: (String) -> Unit,
     onBotCallback: (String, String, String) -> Unit,
     onToggleMute: () -> Unit,
     onToggleMinimize: () -> Unit,
@@ -1895,7 +1900,8 @@ private fun ChatPane(
         }
 
         // 3. Floating Input Layer
-        if (selectedChat?.canChat != false) {
+        val isMember = selectedChat?.memberIds?.contains(currentUserId) == true
+        if (selectedChat?.canChat != false && (selectedChat?.chatType == "private" || isMember)) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -1975,20 +1981,20 @@ private fun ChatPane(
                     }
                 }
             }
-        } else if (selectedChat.chatType != "private" && !selectedChat.memberIds.contains(currentUserId)) {
+        } else if (selectedChat?.chatType != "private" && !isMember) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .clickable { onJoinChat(selectedChat.id) },
+                    .navigationBarsPadding(),
                 color = tgColors.chatSurface,
                 shadowElevation = 8.dp
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp),
+                        .height(54.dp)
+                        .clickable { onJoinChat(selectedChat!!.id) },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -3677,6 +3683,7 @@ private fun ProfileModal(
     selfUserId: String?,
     onClose: () -> Unit,
     onMessage: () -> Unit,
+    onLeaveChat: ((String) -> Unit)? = null,
     animateEntrance: Boolean = false
 ) {
     val listState = rememberLazyListState()
@@ -3745,6 +3752,26 @@ private fun ProfileModal(
                             shape = RoundedCornerShape(12.dp)
                         ) { 
                             Text(strings.sendMessage) 
+                        }
+
+                        val mutualChat = remember(user.id, chats) {
+                            chats.firstOrNull { it.chatType == "private" && it.memberIds.contains(user.id) }
+                        }
+                        if (mutualChat != null && onLeaveChat != null) {
+                            OutlinedButton(
+                                onClick = { 
+                                    onLeaveChat(mutualChat.id)
+                                    onClose()
+                                },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                ),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+                            ) {
+                                Text(strings.leave)
+                            }
                         }
                         
                         Spacer(Modifier.height(300.dp))
@@ -3872,6 +3899,7 @@ private fun GroupInfoModal(
     onOpenProfile: (String) -> Unit,
     onClose: () -> Unit,
     onJoinChat: (String) -> Unit,
+    onLeaveChat: (String) -> Unit,
     onOpenChat: (String) -> Unit,
     animateEntrance: Boolean = false
 ) {
@@ -3953,6 +3981,18 @@ private fun GroupInfoModal(
                                                 )
                                             ) {
                                                 Text(strings.join)
+                                            }
+                                        } else {
+                                            Button(
+                                                onClick = { onLeaveChat(chat.id) },
+                                                modifier = Modifier.weight(1f),
+                                                shape = RoundedCornerShape(12.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                                )
+                                            ) {
+                                                Text(strings.leave)
                                             }
                                         }
                                     }

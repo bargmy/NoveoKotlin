@@ -87,6 +87,23 @@ class NoveoApi(
         }
     }
 
+    fun leaveChat(session: Session, chatId: String) {
+        val url = "https://noveo.ir:8443/chat/settings".toHttpUrl()
+        val body = JSONObject()
+            .put("action", "leave_chat")
+            .put("chatId", chatId)
+            .toString()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Leave failed (${response.code})")
+        }
+    }
+
     fun resolveHandle(session: Session, handle: String): JSONObject {
         val url = "https://noveo.ir:8443/chat/resolve-handle".toHttpUrl().newBuilder()
             .addQueryParameter("handle", handle)

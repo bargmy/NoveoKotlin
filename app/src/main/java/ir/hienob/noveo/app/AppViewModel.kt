@@ -797,6 +797,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         refreshHomeSilently()
     }
 
+    fun leaveChat(chatId: String) {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { api.leaveChat(session, chatId) }
+                _uiState.value = _uiState.value.copy(
+                    chats = _uiState.value.chats.filter { it.id != chatId },
+                    selectedChatId = if (_uiState.value.selectedChatId == chatId) null else _uiState.value.selectedChatId
+                )
+                refreshHomeSilently()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun onCaptchaTokenReceived(token: String) {
         val info = _uiState.value.captchaInfo ?: return
         dismissCaptcha()
