@@ -600,35 +600,6 @@ internal fun HomeScreen(
     val selectedChat = state.chats.firstOrNull { it.id == effectiveSelectedChatId }
     val effectiveSelectedChat = lockedSlidingChat ?: selectedChat
     val effectiveChatState = if (lockedSlidingChat != null) state.copy(selectedChatId = lockedSlidingChatId, messages = lockedSlidingMessages) else state
-    val latestState by androidx.compose.runtime.rememberUpdatedState(state)
-    val latestSelectedChat by androidx.compose.runtime.rememberUpdatedState(effectiveSelectedChat)
-    fun clearSlidingLockState() {
-        chatSnapshotCapturedForGesture = false
-        chatSnapshot = null
-        lockedSlidingChatId = null
-        lockedSlidingChat = null
-        lockedSlidingMessages = emptyList()
-        isBackSwipeDragging = false
-        isCompletingBackSwipe = false
-    }
-    startCompactBackNavigation = {
-        scope.launch {
-            val currentState = latestState
-            val currentChat = latestSelectedChat ?: currentState.selectedChatId?.let { id -> currentState.chats.firstOrNull { it.id == id } }
-            if (isCompactLayout && currentState.selectedChatId != null && currentChat != null) {
-                lockedSlidingChatId = currentState.selectedChatId
-                lockedSlidingChat = currentChat
-                lockedSlidingMessages = currentState.messages.toList()
-                isBackSwipeDragging = true
-                isCompletingBackSwipe = true
-                chatBackOffset.stop()
-                chatBackOffset.animateTo(rootView.width.toFloat().coerceAtLeast(1f), tween(180, easing = FastOutSlowInEasing))
-                onBackToChats()
-                chatBackOffset.snapTo(0f)
-                clearSlidingLockState()
-            } else onBackToChats()
-        }
-    }
     val selectedProfile = remember(profileUserId, state.usersById) { profileUserId?.let(state.usersById::get) }
 
     BoxWithConstraints(
@@ -652,14 +623,13 @@ internal fun HomeScreen(
                     var allowChatBackDrag = false
                     detectHorizontalDragGestures(
                         onDragStart = { offset ->
-                            val latest = latestState
-                            val currentSelectedId = latest.selectedChatId
-                            val currentSelectedChat = latestSelectedChat ?: currentSelectedId?.let { id -> latest.chats.firstOrNull { it.id == id } }
+                            val currentSelectedId = state.selectedChatId
+                            val currentSelectedChat = currentSelectedId?.let { id -> state.chats.firstOrNull { it.id == id } }
                             allowChatBackDrag = compact && currentSelectedId != null && currentSelectedChat != null && offset.x <= backSwipeEdgePx
                             if (allowChatBackDrag) {
                                 lockedSlidingChatId = currentSelectedId
                                 lockedSlidingChat = currentSelectedChat
-                                lockedSlidingMessages = latest.messages.toList()
+                                lockedSlidingMessages = state.messages.toList()
                                 isBackSwipeDragging = true
                             }
                             scope.launch {
@@ -683,7 +653,7 @@ internal fun HomeScreen(
                         },
                         onHorizontalDrag = { change, dragAmount ->
                             change.consume()
-                            if (compact && (lockedSlidingChat != null || latestState.selectedChatId != null)) {
+                            if (compact && (lockedSlidingChat != null || state.selectedChatId != null)) {
                                 if (!allowChatBackDrag) return@detectHorizontalDragGestures
                                 // Chat back: only positive drag
                                 val target = chatBackOffset.value + dragAmount
@@ -700,14 +670,24 @@ internal fun HomeScreen(
                         },
                         onDragEnd = {
                             scope.launch {
-                                if (compact && (lockedSlidingChat != null || latestState.selectedChatId != null)) {
+                                if (compact && (lockedSlidingChat != null || state.selectedChatId != null)) {
                                     val total = chatBackOffset.value
                                     if (total > 150) {
-                                        startCompactBackNavigation()
+                                        isCompletingBackSwipe = true
+                                        chatBackOffset.animateTo(size.width.toFloat(), tween(180, easing = FastOutSlowInEasing))
+                                        onBackToChats()
+                                        chatBackOffset.snapTo(0f)
                                     } else {
                                         chatBackOffset.animateTo(0f, tween(180, easing = FastOutSlowInEasing))
                                         clearSlidingLockState()
                                     }
+                                    chatSnapshotCapturedForGesture = false
+                                    chatSnapshot = null
+                                    lockedSlidingChatId = null
+                                    lockedSlidingChat = null
+                                    lockedSlidingMessages = emptyList()
+                                    isBackSwipeDragging = false
+                                    isCompletingBackSwipe = false
                                 } else if (allowSidebarSwipe) {
                                     if (sidebarOffset.value > -menuWidthPx * 0.6f) {
                                         showMenu = true
@@ -764,7 +744,7 @@ internal fun HomeScreen(
                     ) { showList ->
                         if (showList) {
                             SidebarPane(
-                                state = state,
+                                state = effectiveChatState,
                                 strings = strings,
                                 chats = filteredChats,                                users = filteredUsers,
                                 showSearch = showSearch,
