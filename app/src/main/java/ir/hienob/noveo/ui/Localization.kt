@@ -131,6 +131,7 @@ data class NoveoStrings(
     val type: String = "Type",
     val group: String = "Group",
     val channel: String = "Channel",
+    val privateChatType: String = "Private",
     val unknown: String = "Unknown",
     val lastSeenYesterday: String = "last seen yesterday at",
     val lastSeenDaysAgo: String = "last seen %d days ago",
@@ -307,6 +308,7 @@ private val translations = mapOf(
         type = "Typ",
         group = "Gruppe",
         channel = "Kanal",
+        privateChatType = "Privat",
         unknown = "Unbekannt",
         lastSeenYesterday = "zuletzt gestern um",
         lastSeenDaysAgo = "zuletzt vor %d Tagen",
@@ -453,6 +455,7 @@ private val translations = mapOf(
         type = "Тип",
         group = "Группа",
         channel = "Канал",
+        privateChatType = "Личный",
         unknown = "Неизвестно",
         lastSeenYesterday = "был(а) вчера в",
         lastSeenDaysAgo = "был(а) %d дн. назад",
@@ -598,6 +601,7 @@ private val translations = mapOf(
         type = "类型",
         group = "群组",
         channel = "频道",
+        privateChatType = "私聊",
         unknown = "未知",
         lastSeenYesterday = "最后上线于昨天",
         lastSeenDaysAgo = "最后上线于 %d 天前",
@@ -743,6 +747,7 @@ private val translations = mapOf(
         type = "نوع",
         group = "گروه",
         channel = "کانال",
+        privateChatType = "خصوصی",
         unknown = "نامعلوم",
         lastSeenYesterday = "آخرین بازدید دیروز در",
         lastSeenDaysAgo = "آخرین بازدید %d روز پیش",
@@ -1053,6 +1058,7 @@ private val translations = mapOf(
         type = "Type",
         group = "Groupe",
         channel = "Canal",
+        privateChatType = "Privé",
         unknown = "Inconnu",
         lastSeenYesterday = "vu hier à",
         lastSeenDaysAgo = "vu il y a %d jours",
@@ -1476,4 +1482,13 @@ fun localizeDigits(input: String, languageCode: String): String {
 fun formatMembersCount(count: Int, strings: NoveoStrings): String {
     val localizedCount = localizeDigits(count.toString(), strings.languageCode)
     return strings.membersCountFormat.replace("%d", localizedCount)
+}
+
+fun formatChatType(chatType: String, strings: NoveoStrings): String {
+    return when (chatType.lowercase()) {
+        "group" -> strings.group
+        "channel" -> strings.channel
+        "private" -> strings.privateChatType
+        else -> strings.unknown
+    }
 }
