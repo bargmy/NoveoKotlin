@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
                 onStopAudio = { viewModel.stopAudio() },
                 onSeekAudio = { viewModel.seekAudio(it) },
                 onDownloadFile = { viewModel.downloadFile(it) },
+                onCancelDownload = { viewModel.cancelDownload(it) },
                 onCall = { chatId ->
                     if (androidx.core.content.ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                         viewModel.startOutgoingCall(chatId)
