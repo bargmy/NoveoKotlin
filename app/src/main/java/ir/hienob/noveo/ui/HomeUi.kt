@@ -534,6 +534,8 @@ internal fun HomeScreen(
     var isBackSwipeDragging by remember { mutableStateOf(false) }
     var isCompletingBackSwipe by remember { mutableStateOf(false) }
     var lastCompactSelectedChatId by remember { mutableStateOf<String?>(null) }
+    var openingChatId by remember { mutableStateOf<String?>(null) }
+    var directChatDragOffset by remember { mutableStateOf<Float?>(null) }
 
     // Sync menu state with animation
     LaunchedEffect(showMenu) {
@@ -545,11 +547,12 @@ internal fun HomeScreen(
     }
 
     LaunchedEffect(state.selectedChatId) {
-        if (isBackSwipeDragging || isCompletingBackSwipe) return@LaunchedEffect
-        chatBackOffset.snapTo(0f)
+        if (isBackSwipeDragging || isCompletingBackSwipe || openingChatId != null) return@LaunchedEffect
         chatSnapshot = null
         chatSnapshotCapturedForGesture = false
         if (state.selectedChatId == null) {
+            chatBackOffset.snapTo(0f)
+            directChatDragOffset = null
             lockedSlidingChatId = null
             lockedSlidingChat = null
             lockedSlidingMessages = emptyList()
@@ -604,6 +607,7 @@ internal fun HomeScreen(
             lockedSlidingMessages = emptyList()
             isBackSwipeDragging = false
             isCompletingBackSwipe = false
+            directChatDragOffset = null
         }
 
         fun lockCurrentChatForBack(currentState: AppUiState = latestState): Boolean {
@@ -621,11 +625,15 @@ internal fun HomeScreen(
             if (isCompletingBackSwipe) return
             isBackSwipeDragging = false
             isCompletingBackSwipe = true
+            openingChatId = null
             sidebarOffset.stop()
             chatBackOffset.stop()
+            val startingOffset = directChatDragOffset ?: chatBackOffset.value
+            directChatDragOffset = null
+            chatBackOffset.snapTo(startingOffset.coerceAtLeast(0f))
             chatBackOffset.animateTo(
                 targetWidth.coerceAtLeast(chatBackOffset.value),
-                tween(220, easing = FastOutSlowInEasing)
+                tween(260, easing = FastOutSlowInEasing)
             )
             latestOnBackToChats()
             lastCompactSelectedChatId = null
@@ -648,6 +656,8 @@ internal fun HomeScreen(
         LaunchedEffect(compact, state.selectedChatId, screenWidthPx) {
             val currentChatId = state.selectedChatId
             if (!compact) {
+                openingChatId = null
+                directChatDragOffset = null
                 lastCompactSelectedChatId = currentChatId
                 return@LaunchedEffect
             }
@@ -656,12 +666,26 @@ internal fun HomeScreen(
             }
             val previousChatId = lastCompactSelectedChatId
             if (currentChatId != null && currentChatId != previousChatId) {
+                openingChatId = currentChatId
+                directChatDragOffset = null
+                chatBackOffset.stop()
                 chatBackOffset.snapTo(screenWidthPx)
-                chatBackOffset.animateTo(0f, tween(240, easing = FastOutSlowInEasing))
+                try {
+                    chatBackOffset.animateTo(0f, tween(260, easing = FastOutSlowInEasing))
+                } finally {
+                    if (state.selectedChatId == currentChatId) {
+                        lastCompactSelectedChatId = currentChatId
+                    }
+                    openingChatId = null
+                }
             } else if (currentChatId == null) {
+                openingChatId = null
+                directChatDragOffset = null
                 chatBackOffset.snapTo(0f)
+                lastCompactSelectedChatId = null
+            } else {
+                lastCompactSelectedChatId = currentChatId
             }
-            lastCompactSelectedChatId = currentChatId
         }
 
         androidx.activity.compose.BackHandler(enabled = isAnyModalVisible || showMenu || state.selectedChatId != null) {
@@ -707,6 +731,8 @@ internal fun HomeScreen(
                                 lockedSlidingChatId = currentSelectedId
                                 lockedSlidingChat = currentSelectedChat
                                 lockedSlidingMessages = currentState.messages.toList()
+                                openingChatId = null
+                                directChatDragOffset = chatBackOffset.value.coerceAtLeast(0f)
                                 isBackSwipeDragging = true
                             }
                             scope.launch {
@@ -723,9 +749,10 @@ internal fun HomeScreen(
                             if (compact && (lockedSlidingChat != null || latestState.selectedChatId != null)) {
                                 if (!allowChatBackDrag) return@detectHorizontalDragGestures
                                 // Chat back: only positive drag
-                                val target = chatBackOffset.value + dragAmount
+                                val currentOffset = directChatDragOffset ?: chatBackOffset.value
+                                val target = currentOffset + dragAmount
                                 if (target >= 0) {
-                                    scope.launch { chatBackOffset.snapTo(target) }
+                                    directChatDragOffset = target
                                 }
                             } else if (allowSidebarSwipe) {
                                 // Sidebar: constrain to valid range
@@ -738,13 +765,15 @@ internal fun HomeScreen(
                         onDragEnd = {
                             scope.launch {
                                 if (compact && (lockedSlidingChat != null || latestState.selectedChatId != null)) {
-                                    val total = chatBackOffset.value
+                                    val total = directChatDragOffset ?: chatBackOffset.value
                                     if (total > 150) {
                                         if (lockedSlidingChat == null) {
                                             lockCurrentChatForBack(latestState)
                                         }
                                         finishCompactBackNavigation(size.width.toFloat().coerceAtLeast(total))
                                     } else {
+                                        chatBackOffset.snapTo(total.coerceAtLeast(0f))
+                                        directChatDragOffset = null
                                         chatBackOffset.animateTo(0f, tween(220, easing = FastOutSlowInEasing))
                                         clearBackSwipeVisualState()
                                     }
@@ -762,6 +791,9 @@ internal fun HomeScreen(
                         onDragCancel = {
                             scope.launch {
                                 if (compact && (lockedSlidingChat != null || latestState.selectedChatId != null)) {
+                                    val cancelOffset = directChatDragOffset ?: chatBackOffset.value
+                                    chatBackOffset.snapTo(cancelOffset.coerceAtLeast(0f))
+                                    directChatDragOffset = null
                                     chatBackOffset.animateTo(0f, tween(220, easing = FastOutSlowInEasing))
                                     clearBackSwipeVisualState()
                                 }
@@ -771,8 +803,20 @@ internal fun HomeScreen(
                 }
         ) {
             if (compact) {
-                val showingChatSurface = lockedSlidingChat != null || state.selectedChatId != null
-                val chatTranslation = if (showingChatSurface) chatBackOffset.value else 0f
+                val compactOpeningPrime = compact &&
+                    state.selectedChatId != null &&
+                    state.selectedChatId != lastCompactSelectedChatId &&
+                    openingChatId == null &&
+                    lockedSlidingChat == null &&
+                    !isBackSwipeDragging &&
+                    !isCompletingBackSwipe
+                val showingChatSurface = lockedSlidingChat != null || state.selectedChatId != null || openingChatId != null || compactOpeningPrime
+                val chatTranslation = when {
+                    compactOpeningPrime -> screenWidthPx
+                    directChatDragOffset != null -> directChatDragOffset ?: 0f
+                    showingChatSurface -> chatBackOffset.value
+                    else -> 0f
+                }
 
                 Box(modifier = Modifier.fillMaxSize()) {
                     SidebarPane(
