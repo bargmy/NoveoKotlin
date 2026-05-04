@@ -96,7 +96,8 @@ data class AppUiState(
     val incomingCall: SocketEvent.IncomingCall? = null,
     val betaUpdatesEnabled: Boolean = false,
     val doubleTapReaction: String = "❤",
-    val isSendingMessage: Boolean = false
+    val isSendingMessage: Boolean = false,
+    val messagesByChat: Map<String, List<ChatMessage>> = emptyMap()
 )
 
 data class AttachmentDownloadState(
@@ -1055,11 +1056,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     replyToId = replyingTo?.id
                 )
 
+                messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
                 _uiState.value = _uiState.value.copy(
                     messages = _uiState.value.messages + pendingMsg,
-                    replyingToMessage = null
+                    replyingToMessage = null,
+                    messagesByChat = messageCacheByChat.toMap()
                 )
-                messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
                 persistCachedHomeState()
 
                 withContext(Dispatchers.IO) {
@@ -1148,11 +1150,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     replyToId = replyToId
                 )
 
+                messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
                 _uiState.value = _uiState.value.copy(
                     messages = _uiState.value.messages + pendingMsg,
-                    replyingToMessage = null
+                    replyingToMessage = null,
+                    messagesByChat = messageCacheByChat.toMap()
                 )
-                messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
                 persistCachedHomeState()
 
                 withContext(Dispatchers.IO) {
@@ -1376,7 +1379,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     loading = false,
                     connectionDetail = null,
                     connectionTitle = strings.brandName,
-                    languageCode = lang
+                    languageCode = lang,
+                    messagesByChat = messageCacheByChat.toMap()
                 )
                 persistCachedHomeState()
             }
@@ -1392,10 +1396,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (event.chatId == _uiState.value.selectedChatId) {
                     _uiState.value = _uiState.value.copy(
                         messages = updatedMessages,
-                        chats = updatedChats
+                        chats = updatedChats,
+                        messagesByChat = messageCacheByChat.toMap()
                     )
                 } else {
-                    _uiState.value = _uiState.value.copy(chats = updatedChats)
+                    _uiState.value = _uiState.value.copy(
+                        chats = updatedChats,
+                        messagesByChat = messageCacheByChat.toMap()
+                    )
                 }
                 persistCachedHomeState()
             }
@@ -1550,7 +1558,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = latestState.copy(
             messages = if (isSelectedChat) cachedMessages else latestState.messages,
             chats = sortedChats,
-            totalUnreadCount = sumUnread(sortedChats)
+            totalUnreadCount = sumUnread(sortedChats),
+            messagesByChat = messageCacheByChat.toMap()
         )
         persistCachedHomeState()
 
@@ -1863,7 +1872,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             usersById = cachedHomeState.usersById,
             onlineUserIds = cachedHomeState.onlineUserIds,
-            chats = cachedHomeState.chats
+            chats = cachedHomeState.chats,
+            messagesByChat = messageCacheByChat.toMap()
         )
     }
 
