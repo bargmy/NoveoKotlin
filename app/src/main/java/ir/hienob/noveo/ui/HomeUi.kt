@@ -2921,51 +2921,6 @@ private fun MessageRow(
     }
 }
 
-@Composable
-private fun ReplyPreview(message: ChatMessage, onCancel: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp).scale(-1f, 1f)
-            )
-            Spacer(Modifier.width(12.dp))
-            Box(
-                modifier = Modifier
-                    .width(2.dp)
-                    .height(32.dp)
-                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(1.dp))
-            )
-            Spacer(Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = message.senderName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = localizeMessagePreview(message.content.previewText(), strings),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
-                Icon(Icons.Outlined.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
-            }
-        }
-    }
-}
-
 private const val LONG_MESSAGE_COLLAPSE_CHAR_LIMIT = 900
 private const val LONG_MESSAGE_COLLAPSE_MAX_LINES = 28
 
@@ -4560,18 +4515,6 @@ private fun ChatRow(
     }
 }
 
-
-private fun localizeMessagePreview(preview: String, strings: NoveoStrings): String {
-    return when (preview) {
-        "Sticker" -> strings.sticker
-        "Photo" -> "Photo" // Add these if you have them in NoveoStrings, otherwise keep as is for now
-        "Video" -> "Video"
-        "File" -> "File"
-        "Forwarded message" -> strings.forwarded
-        "edited" -> strings.edited
-        else -> preview
-    }
-}
 
 @Composable
 private fun WelcomePane(strings: NoveoStrings, modifier: Modifier = Modifier) {

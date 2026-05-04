@@ -1526,3 +1526,15 @@ fun formatChatType(chatType: String, strings: NoveoStrings): String {
         else -> strings.unknown
     }
 }
+
+internal fun localizeMessagePreview(preview: String, strings: NoveoStrings): String {
+    return when (preview) {
+        "Sticker" -> strings.sticker
+        "Photo" -> "Photo"
+        "Video" -> "Video"
+        "File" -> "File"
+        "Forwarded message" -> strings.forwarded
+        "edited" -> strings.edited
+        else -> preview
+    }
+}
