@@ -1689,7 +1689,7 @@ private fun ChatPane(
     }
 
     val selectedTitle = remember(selectedChat, strings) {
-        if (selectedChat?.title == "Saved Messages") strings.savedMessages
+        if (selectedChat?.id?.startsWith("saved_") == true) strings.savedMessages
         else selectedChat?.title?.ifBlank { strings.chatInfo } ?: strings.chatInfo
     }
     
@@ -1963,6 +1963,7 @@ private fun ChatPane(
                     ProfileCircle(
                         name = selectedTitle,
                         imageUrl = selectedChat?.avatarUrl,
+                        isSavedMessages = selectedChat?.id?.startsWith("saved_") == true,
                         size = 40.dp,
                         modifier = Modifier.clickable {
                             profileUserId?.let { onOpenProfile(it) }
@@ -4178,8 +4179,10 @@ private fun GroupInfoModal(
     animateEntrance: Boolean = false
 ) {
     val usersById = state.usersById
+    val sessionUserId = state.session?.userId
+    val isSavedMessages = remember(chat.id) { chat.id.startsWith("saved_") }
     val chatTitle = remember(chat.title, strings) {
-        if (chat.title == "Saved Messages") strings.savedMessages
+        if (isSavedMessages) strings.savedMessages
         else chat.title.ifBlank { strings.chatInfo }
     }
     val profileUserId = remember(chat, currentUserId) { resolveProfileUserId(chat, currentUserId) }
@@ -4353,7 +4356,7 @@ private fun GroupInfoModal(
                     val avatarY = lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
                     
                     Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
-                        ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize)
+                        ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize, isSavedMessages = isSavedMessages)
                     }
                     
                     // Expanded Title/Subtitle
@@ -4520,7 +4523,7 @@ private fun ChatRow(
         )
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl)
+            ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, isSavedMessages = chat.id.startsWith("saved_"))
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -4640,8 +4643,8 @@ private fun DetailRow(label: String, value: String) {
 }
 
 @Composable
-private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 40.dp, modifier: Modifier = Modifier) {
-    if (name == "Saved Messages") {
+private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 40.dp, modifier: Modifier = Modifier, isSavedMessages: Boolean = false) {
+    if (isSavedMessages) {
         Box(
             modifier = modifier
                 .size(size)
