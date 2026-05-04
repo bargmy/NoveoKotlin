@@ -1726,7 +1726,7 @@ private fun ChatPane(
     val typingText = remember(selectedChat?.chatType, typingUsers, state.usersById, strings) {
         if (typingUsers.isEmpty()) null
         else if (selectedChat?.chatType == "private") {
-            strings.typingSomeone.replace("someone ", "") // Falls back to "is typing..."
+            strings.typingPrivate
         } else {
             val names = typingUsers.mapNotNull { state.usersById[it]?.username?.split(" ")?.firstOrNull() }
             when {
@@ -1994,6 +1994,7 @@ private fun ChatPane(
                                 VerifiedIcon(modifier = Modifier.size(14.dp))
                             }
                         }
+                        Spacer(Modifier.height(3.dp))
                         Text(
                             subtitle,
                             color = tgColors.headerSubtitle,
