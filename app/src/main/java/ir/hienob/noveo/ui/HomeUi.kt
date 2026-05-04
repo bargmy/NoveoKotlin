@@ -1328,6 +1328,8 @@ private fun SearchResultsList(
                 ChatRow(
                     chat = chat, 
                     strings = strings, 
+                    usersById = emptyMap(),
+                    currentUserId = null,
                     selected = false, 
                     onClick = { 
                         if (chat.chatType == "private") {
@@ -1392,6 +1394,8 @@ private fun ChatListContent(
                 ChatRow(
                     chat = chat,
                     strings = strings,
+                    usersById = state.usersById,
+                    currentUserId = state.session?.userId,
                     selected = chat.id == state.selectedChatId,
                     onClick = { onOpenChat(chat.id) }
                 )
@@ -1685,7 +1689,7 @@ private fun ChatPane(
     }
 
     val selectedTitle = remember(selectedChat, strings) {
-        if (selectedChat?.title == "Saved Messages") strings.savedMessages
+        if (selectedChat?.id?.startsWith("saved_") == true) strings.savedMessages
         else selectedChat?.title?.ifBlank { strings.chatInfo } ?: strings.chatInfo
     }
     
@@ -1722,7 +1726,7 @@ private fun ChatPane(
     val typingText = remember(selectedChat?.chatType, typingUsers, state.usersById, strings) {
         if (typingUsers.isEmpty()) null
         else if (selectedChat?.chatType == "private") {
-            strings.typingSomeone.replace("someone ", "") // Falls back to "is typing..."
+            strings.typingPrivate
         } else {
             val names = typingUsers.mapNotNull { state.usersById[it]?.username?.split(" ")?.firstOrNull() }
             when {
@@ -1959,6 +1963,7 @@ private fun ChatPane(
                     ProfileCircle(
                         name = selectedTitle,
                         imageUrl = selectedChat?.avatarUrl,
+                        isSavedMessages = selectedChat?.id?.startsWith("saved_") == true,
                         size = 40.dp,
                         modifier = Modifier.clickable {
                             profileUserId?.let { onOpenProfile(it) }
@@ -1989,6 +1994,7 @@ private fun ChatPane(
                                 VerifiedIcon(modifier = Modifier.size(14.dp))
                             }
                         }
+                        Spacer(Modifier.height(3.dp))
                         Text(
                             subtitle,
                             color = tgColors.headerSubtitle,
@@ -2834,7 +2840,7 @@ private fun MessageRow(
                             ) {
                                 if (message.editedAt != null) {
                                     Text(
-                                        "edited",
+                                        strings.edited,
                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                                         color = (if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime).copy(alpha = 0.7f),
                                         modifier = Modifier.padding(end = 4.dp)
@@ -4174,10 +4180,14 @@ private fun GroupInfoModal(
     animateEntrance: Boolean = false
 ) {
     val usersById = state.usersById
+    val sessionUserId = state.session?.userId
+    val isSavedMessages = remember(chat.id) { chat.id.startsWith("saved_") }
     val chatTitle = remember(chat.title, strings) {
-        if (chat.title == "Saved Messages") strings.savedMessages
+        if (isSavedMessages) strings.savedMessages
         else chat.title.ifBlank { strings.chatInfo }
     }
+    val profileUserId = remember(chat, sessionUserId) { resolveProfileUserId(chat, sessionUserId) }
+    val isVerified = chat.isVerified || (profileUserId?.let { usersById[it]?.isVerified } == true)
     
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -4219,8 +4229,9 @@ private fun GroupInfoModal(
                             Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 InfoItem(label = strings.title, value = chatTitle)
                                 if (!chat.handle.isNullOrBlank()) {
-                                    InfoItem(label = strings.link, value = "@${chat.handle}", onClick = {
-                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("@${chat.handle}"))
+                                    val normalizedHandle = chat.handle.removePrefix("@")
+                                    InfoItem(label = strings.link, value = "@$normalizedHandle", onClick = {
+                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("@$normalizedHandle"))
                                     })
                                 }
                                 InfoItem(label = strings.type, value = formatChatType(chat.chatType, strings))
@@ -4252,7 +4263,7 @@ private fun GroupInfoModal(
                                             ) {
                                                 Text(strings.join)
                                             }
-                                        } else {
+                                        } else if (!isSavedMessages) {
                                             Button(
                                                 onClick = { onLeaveChat(chat.id) },
                                                 modifier = Modifier.weight(1f),
@@ -4346,7 +4357,7 @@ private fun GroupInfoModal(
                     val avatarY = lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
                     
                     Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
-                        ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize)
+                        ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize, isSavedMessages = isSavedMessages)
                     }
                     
                     // Expanded Title/Subtitle
@@ -4364,7 +4375,7 @@ private fun GroupInfoModal(
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold
                                 )
-                                if (chat.isVerified) {
+                                if (isVerified) {
                                     Spacer(Modifier.width(6.dp))
                                     VerifiedIcon(modifier = Modifier.size(18.dp))
                                 }
@@ -4394,7 +4405,7 @@ private fun GroupInfoModal(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                if (chat.isVerified) {
+                                if (isVerified) {
                                     Spacer(Modifier.width(4.dp))
                                     VerifiedIcon(modifier = Modifier.size(14.dp))
                                 }
@@ -4494,6 +4505,8 @@ private fun SettingsRow(text: String, icon: androidx.compose.ui.graphics.vector.
 private fun ChatRow(
     chat: ChatSummary,
     strings: NoveoStrings,
+    usersById: Map<String, UserSummary>,
+    currentUserId: String?,
     selected: Boolean,
     onClick: () -> Unit
 ) {
@@ -4501,6 +4514,8 @@ private fun ChatRow(
         if (chat.title == "Saved Messages") strings.savedMessages
         else chat.title.ifBlank { strings.chatInfo }
     }
+    val profileUserId = remember(chat, currentUserId) { resolveProfileUserId(chat, currentUserId) }
+    val isVerified = chat.isVerified || (profileUserId?.let { usersById[it]?.isVerified } == true)
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
@@ -4509,18 +4524,18 @@ private fun ChatRow(
         )
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl)
+            ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, isSavedMessages = chat.id.startsWith("saved_"))
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(chatTitle, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (chat.isVerified) {
+                    if (isVerified) {
                         Spacer(Modifier.width(4.dp))
                         VerifiedIcon()
                     }
                 }
                 Spacer(Modifier.height(2.dp))
-                Text(chat.lastMessagePreview.ifBlank { strings.noMessagesYet }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                Text(localizeMessagePreview(chat.lastMessagePreview, strings).ifBlank { strings.noMessagesYet }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
             }
             if (chat.unreadCount > 0) {
                 Spacer(Modifier.width(8.dp))
@@ -4532,6 +4547,14 @@ private fun ChatRow(
                 }
             }
         }
+    }
+}
+
+
+private fun localizeMessagePreview(preview: String, strings: NoveoStrings): String {
+    return when (preview) {
+        "Sticker" -> strings.sticker
+        else -> preview
     }
 }
 
@@ -4621,8 +4644,8 @@ private fun DetailRow(label: String, value: String) {
 }
 
 @Composable
-private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 40.dp, modifier: Modifier = Modifier) {
-    if (name == "Saved Messages") {
+private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 40.dp, modifier: Modifier = Modifier, isSavedMessages: Boolean = false) {
+    if (isSavedMessages) {
         Box(
             modifier = modifier
                 .size(size)
@@ -4630,7 +4653,7 @@ private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 40.dp, mod
                 .clip(CircleShape)
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(Color(0xFF42A5F5), Color(0xFF1E88E5))
+                        colors = listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
                     )
                 ),
             contentAlignment = Alignment.Center
@@ -5104,6 +5127,8 @@ private fun ForwardChatPicker(
                     ChatRow(
                         chat = chat,
                         strings = strings,
+                        usersById = emptyMap(),
+                        currentUserId = null,
                         selected = false,
                         onClick = { onForward(chat.id) }
                     )
