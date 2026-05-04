@@ -4186,7 +4186,7 @@ private fun GroupInfoModal(
         if (isSavedMessages) strings.savedMessages
         else chat.title.ifBlank { strings.chatInfo }
     }
-    val profileUserId = remember(chat, currentUserId) { resolveProfileUserId(chat, currentUserId) }
+    val profileUserId = remember(chat, sessionUserId) { resolveProfileUserId(chat, sessionUserId) }
     val isVerified = chat.isVerified || (profileUserId?.let { usersById[it]?.isVerified } == true)
     
     val listState = rememberLazyListState()
