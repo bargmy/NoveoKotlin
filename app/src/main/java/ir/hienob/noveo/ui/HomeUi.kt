@@ -1738,14 +1738,15 @@ private fun ChatPane(
         }
     }
 
-    val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount, typingText, strings) {
+    val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount, typingText, strings, messages.size) {
         if (selectedChat == null) return@remember ""
         if (typingText != null) return@remember typingText
+        val isSavedMessages = selectedChat.id.startsWith("saved_")
         if (selectedChat.chatType == "private") {
             if (isOnline) strings.membersOnline
             else formatLastSeen(profileUser?.lastSeen, strings)
         } else {
-            val total = selectedChat.memberIds.size
+            val total = if (isSavedMessages) messages.size else selectedChat.memberIds.size
             val onlineStr = localizeDigits(onlineCount.toString(), strings.languageCode)
             val totalMembersText = formatMembersCount(total, strings)
             val rawSubtitle = if (onlineCount > 0) "$totalMembersText${strings.comma} $onlineStr ${strings.membersOnline}" else totalMembersText
@@ -4186,7 +4187,7 @@ private fun GroupInfoModal(
         if (isSavedMessages) strings.savedMessages
         else chat.title.ifBlank { strings.chatInfo }
     }
-    val profileUserId = remember(chat, currentUserId) { resolveProfileUserId(chat, currentUserId) }
+    val profileUserId = remember(chat, sessionUserId) { resolveProfileUserId(chat, sessionUserId) }
     val isVerified = chat.isVerified || (profileUserId?.let { usersById[it]?.isVerified } == true)
     
     val listState = rememberLazyListState()
@@ -4228,6 +4229,7 @@ private fun GroupInfoModal(
                         ) {
                             Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 InfoItem(label = strings.title, value = chatTitle)
+                                val savedMessagesCount = state.messagesByChat[chat.id]?.size ?: 0
                                 if (!chat.handle.isNullOrBlank()) {
                                     val normalizedHandle = chat.handle.removePrefix("@")
                                     InfoItem(label = strings.link, value = "@$normalizedHandle", onClick = {
@@ -4235,6 +4237,12 @@ private fun GroupInfoModal(
                                     })
                                 }
                                 InfoItem(label = strings.type, value = formatChatType(chat.chatType, strings))
+                                if (isSavedMessages) {
+                                    InfoItem(
+                                        label = strings.searchMessages,
+                                        value = localizeDigits(savedMessagesCount.toString(), strings.languageCode)
+                                    )
+                                }
                                 
                                 val isMember = chat.memberIds.contains(state.session?.userId)
                                 if (chat.chatType != "private") {
@@ -4282,7 +4290,7 @@ private fun GroupInfoModal(
                         }
 
                         Text(
-                            strings.members, 
+                            if (isSavedMessages) strings.searchMessages else strings.members,
                             style = MaterialTheme.typography.titleMedium, 
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 8.dp),
@@ -4291,7 +4299,7 @@ private fun GroupInfoModal(
                     }
                 }
                 
-                items(chat.memberIds, key = { it }) { memberId ->
+                items(if (isSavedMessages) emptyList() else chat.memberIds, key = { it }) { memberId ->
                     val user = usersById[memberId]
                     Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                         Card(
@@ -4554,6 +4562,7 @@ private fun ChatRow(
 private fun localizeMessagePreview(preview: String, strings: NoveoStrings): String {
     return when (preview) {
         "Sticker" -> strings.sticker
+        "edited" -> strings.edited
         else -> preview
     }
 }
