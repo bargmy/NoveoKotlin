@@ -762,86 +762,67 @@ internal fun HomeScreen(
             if (compact) {
                 val showingChatSurface = lockedSlidingChat != null || state.selectedChatId != null
                 val chatTranslation = if (showingChatSurface) chatBackOffset.value else 0f
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .onGloballyPositioned { chatSnapshotBounds = it.boundsInRoot() }
-                        .graphicsLayer { translationX = chatTranslation }
-                ) {
-                    if (showingChatSurface && chatTranslation > 0f) {
-                        chatSnapshot?.let { shot ->
-                            androidx.compose.foundation.Image(
-                                bitmap = shot,
-                                contentDescription = null,
-                                modifier = Modifier.matchParentSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-                    }
-                    AnimatedContent(
-                        targetState = !showingChatSurface,
-                        label = "compact_shell_transition",
-                        transitionSpec = {
-                            if (targetState) {
-                                slideInHorizontally(initialOffsetX = { -it / 3 }) + fadeIn() togetherWith
-                                        slideOutHorizontally(targetOffsetX = { it / 3 }) + fadeOut()
-                            } else {
-                                slideInHorizontally(initialOffsetX = { it / 3 }) + fadeIn() togetherWith
-                                        slideOutHorizontally(targetOffsetX = { -it / 3 }) + fadeOut()
-                            }.using(SizeTransform(clip = false))
-                        }
-                    ) { showList ->
-                        if (showList) {
-                            SidebarPane(
-                                state = effectiveChatState,
-                                strings = strings,
-                                chats = filteredChats,                                users = filteredUsers,
-                                showSearch = showSearch,
-                                searchQuery = searchQuery,
-                                onMenuClick = { showMenu = true },
-                                onSearchToggle = {
-                                    showSearch = !showSearch
-                                    if (!showSearch) searchQuery = ""
-                                },
-                                onSearchQueryChange = {
-                                    searchQuery = it
-                                    onSearchPublic(it)
-                                },
-                                onOpenChat = onOpenChat,
-                                onOpenContacts = { showContactsModal = true },
-                                onOpenCreate = { showCreateModal = true },
-                                onOpenSettings = {
-                                    settingsSection = SettingsSection.MENU
-                                    showSettingsModal = true
-                                },
-                                onOpenStars = {
-                                    settingsSection = SettingsSection.SUBSCRIPTION
-                                    showSettingsModal = true
-                                },
-                                onOpenProfile = onOpenProfile,
-                                onOpenGroupInfo = { chatId ->
-                                    infoChatId = chatId
-                                    animateModalEntrance = true
-                                },
-                                onDismissUpdate = onDismissUpdate,
-                                onDownloadUpdate = onDownloadUpdate,
-                                onInstallUpdate = onInstallUpdate,
-                                onPauseAudio = onPauseAudio,
-                                onResumeAudio = onResumeAudio,
-                                onStopAudio = onStopAudio,
-                                onSeekAudio = onSeekAudio,
-                                onToggleMute = onToggleMute,
-                                onToggleMinimize = onToggleMinimize,
-                                onLeaveCall = onLeaveCall,
-                                modifier = Modifier.fillMaxSize()
-                                )                        } else {
+
+                Box(modifier = Modifier.fillMaxSize()) {
+                    SidebarPane(
+                        state = state,
+                        strings = strings,
+                        chats = filteredChats,
+                        users = filteredUsers,
+                        showSearch = showSearch,
+                        searchQuery = searchQuery,
+                        onMenuClick = { showMenu = true },
+                        onSearchToggle = {
+                            showSearch = !showSearch
+                            if (!showSearch) searchQuery = ""
+                        },
+                        onSearchQueryChange = {
+                            searchQuery = it
+                            onSearchPublic(it)
+                        },
+                        onOpenChat = onOpenChat,
+                        onOpenContacts = { showContactsModal = true },
+                        onOpenCreate = { showCreateModal = true },
+                        onOpenSettings = {
+                            settingsSection = SettingsSection.MENU
+                            showSettingsModal = true
+                        },
+                        onOpenStars = {
+                            settingsSection = SettingsSection.SUBSCRIPTION
+                            showSettingsModal = true
+                        },
+                        onOpenProfile = onOpenProfile,
+                        onOpenGroupInfo = { chatId ->
+                            infoChatId = chatId
+                            animateModalEntrance = true
+                        },
+                        onDismissUpdate = onDismissUpdate,
+                        onDownloadUpdate = onDownloadUpdate,
+                        onInstallUpdate = onInstallUpdate,
+                        onPauseAudio = onPauseAudio,
+                        onResumeAudio = onResumeAudio,
+                        onStopAudio = onStopAudio,
+                        onSeekAudio = onSeekAudio,
+                        onToggleMute = onToggleMute,
+                        onToggleMinimize = onToggleMinimize,
+                        onLeaveCall = onLeaveCall,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    if (showingChatSurface && effectiveSelectedChat != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .onGloballyPositioned { chatSnapshotBounds = it.boundsInRoot() }
+                                .graphicsLayer { translationX = chatTranslation }
+                        ) {
                             ChatPane(
                                 state = effectiveChatState,
                                 compact = true,
                                 strings = strings,
                                 selectedChat = effectiveSelectedChat,
                                 currentUserId = state.session?.userId,
-                                onBackToChats = ::startCompactBackNavigation,
+                                onBackToChats = { startCompactBackNavigation() },
                                 onSend = onSend,
                                 onTyping = onTyping,
                                 onLoadOlder = onLoadOlder,
@@ -849,8 +830,8 @@ internal fun HomeScreen(
                                 onAttachFile = onAttachFile,
                                 onRemoveAttachment = onRemoveAttachment,
                                 onOpenProfile = onOpenProfile,
-                                onOpenGroupInfo = { 
-                                    effectiveSelectedChat?.id?.let {
+                                onOpenGroupInfo = {
+                                    effectiveSelectedChat.id.let {
                                         infoChatId = it
                                         animateModalEntrance = true
                                     }
@@ -868,8 +849,8 @@ internal fun HomeScreen(
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
-                                onCall = { effectiveSelectedChat?.id?.let { onCall(it) } },
-                                onCancelUpload = { effectiveSelectedChat?.id?.let { onCancelUpload(it) } },
+                                onCall = { effectiveSelectedChat.id.let { onCall(it) } },
+                                onCancelUpload = { effectiveSelectedChat.id.let { onCancelUpload(it) } },
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
                                 onHandleClick = onHandleClick,
@@ -883,12 +864,15 @@ internal fun HomeScreen(
                             )
                         }
                     }
+
                     if ((isBackSwipeDragging || isCompletingBackSwipe) && showingChatSurface && chatTranslation > 0f) {
                         chatSnapshot?.let { shot ->
                             androidx.compose.foundation.Image(
                                 bitmap = shot,
                                 contentDescription = null,
-                                modifier = Modifier.matchParentSize(),
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .graphicsLayer { translationX = chatTranslation },
                                 contentScale = ContentScale.Crop
                             )
                         }
