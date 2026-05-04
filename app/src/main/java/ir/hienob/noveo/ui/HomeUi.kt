@@ -679,7 +679,13 @@ internal fun HomeScreen(
                                         chatBackOffset.snapTo(0f)
                                     } else {
                                         chatBackOffset.animateTo(0f, tween(180, easing = FastOutSlowInEasing))
-                                        clearSlidingLockState()
+                                        chatSnapshotCapturedForGesture = false
+                                        chatSnapshot = null
+                                        lockedSlidingChatId = null
+                                        lockedSlidingChat = null
+                                        lockedSlidingMessages = emptyList()
+                                        isBackSwipeDragging = false
+                                        isCompletingBackSwipe = false
                                     }
                                     chatSnapshotCapturedForGesture = false
                                     chatSnapshot = null
@@ -701,9 +707,15 @@ internal fun HomeScreen(
                         },
                         onDragCancel = {
                             scope.launch {
-                                if (compact && (lockedSlidingChat != null || latestState.selectedChatId != null)) {
+                                if (compact && (lockedSlidingChat != null || state.selectedChatId != null)) {
                                     chatBackOffset.animateTo(0f, tween(180, easing = FastOutSlowInEasing))
-                                    clearSlidingLockState()
+                                    chatSnapshotCapturedForGesture = false
+                                    chatSnapshot = null
+                                    lockedSlidingChatId = null
+                                    lockedSlidingChat = null
+                                    lockedSlidingMessages = emptyList()
+                                    isBackSwipeDragging = false
+                                    isCompletingBackSwipe = false
                                 }
                             }
                         }
