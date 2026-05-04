@@ -6,8 +6,8 @@ plugins {
 
 apply(from = "noveo-chat-ui-patches.gradle.kts")
 
-val appVersionCode = providers.gradleProperty("NOVEO_VERSION_CODE").orNull?.toIntOrNull() ?: 21
-val appVersionName = providers.gradleProperty("NOVEO_VERSION_NAME").orNull ?: "0.6.3"
+val appVersionCode = providers.gradleProperty("NOVEO_VERSION_CODE").orNull?.toIntOrNull() ?: 22
+val appVersionName = providers.gradleProperty("NOVEO_VERSION_NAME").orNull ?: "0.7.0"
 
 android {
     namespace = "ir.hienob.noveo"
