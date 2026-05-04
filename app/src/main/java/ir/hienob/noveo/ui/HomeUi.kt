@@ -203,7 +203,6 @@ import androidx.compose.ui.unit.lerp as lerpDp
 import androidx.compose.ui.text.lerp as lerpTextStyle
 import androidx.compose.ui.util.lerp as lerpFloat
 import coil3.compose.AsyncImage
-import coil3.compose.SubcomposeAsyncImage
 import java.io.File
 import java.util.Calendar
 import java.util.Date
@@ -1363,7 +1362,7 @@ private fun ChatListContent(
 ) {
     if (state.loading && chats.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
         }
     } else if (chats.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -1443,14 +1442,22 @@ private fun SidebarHeader(
                     )
                 } else {
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        AnimatedContent(targetState = connectionTitle, label = "connection_title_swap") { title ->
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.alpha(titleAlpha)
-                            )
-                        }
+                        Text(
+                            text = connectionTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            lineHeight = 22.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(28.dp)
+                                .wrapContentHeight(Alignment.CenterVertically)
+                                .alpha(titleAlpha),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             }
@@ -1658,10 +1665,6 @@ private fun ChatPane(
     var draft by rememberSaveable(state.selectedChatId) { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val rootView = LocalView.current
-    var chatSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
-    var chatSnapshotBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-    var chatSnapshotCapturedForGesture by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(state.editingMessage) {
@@ -1697,6 +1700,15 @@ private fun ChatPane(
         selectedChat?.memberIds?.count { state.onlineUserIds.contains(it) } ?: 0
     }
     
+    val messages = state.messages
+    val usersById = state.usersById
+    val sessionUserId = state.session?.userId
+    val attachmentDownloads = state.attachmentDownloads
+    val currentAudioMessageId = state.currentAudioMessage?.id
+    val currentAudioPlaying = state.isAudioPlaying
+    val currentAudioProgress = state.audioProgress
+    val doubleTapEmoji = state.doubleTapReaction
+
     val typingUsers = state.typingUsers[selectedChat?.id].orEmpty()
     
     val showScrollToBottom by remember {
@@ -1752,7 +1764,7 @@ private fun ChatPane(
     val firstVisibleItemIndex by remember { derivedStateOf { listState.firstVisibleItemIndex } }
     
     LaunchedEffect(firstVisibleItemIndex) {
-        if (firstVisibleItemIndex <= 2 && canLoadOlder && state.messages.isNotEmpty()) {
+        if (firstVisibleItemIndex <= 2 && canLoadOlder && messages.isNotEmpty()) {
             onLoadOlder()
         }
     }
@@ -1765,21 +1777,23 @@ private fun ChatPane(
 
     // Force scroll to bottom when a chat is first opened
     LaunchedEffect(state.selectedChatId) {
-        if (state.selectedChatId != null && state.messages.isNotEmpty()) {
-            listState.scrollToItem(state.messages.lastIndex)
+        if (state.selectedChatId != null && messages.isNotEmpty()) {
+            listState.scrollToItem(messages.lastIndex)
         }
     }
 
     // Handle history loading vs new messages
     val lastMessageId = remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isEmpty()) return@LaunchedEffect
-        val newLastId = state.messages.last().id
+    LaunchedEffect(messages.size) {
+        if (messages.isEmpty()) return@LaunchedEffect
+        val newLastId = messages.last().id
         if (lastMessageId.value != null && newLastId != lastMessageId.value) {
-            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: state.messages.lastIndex
-            val itemsFromBottom = state.messages.lastIndex - lastVisibleItem
-            if (itemsFromBottom < 10) {
-                listState.animateScrollToItem(state.messages.lastIndex)
+            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: messages.lastIndex
+            val itemsFromBottom = messages.lastIndex - lastVisibleItem
+            if (itemsFromBottom <= 2) {
+                listState.scrollToItem(messages.lastIndex)
+            } else if (itemsFromBottom < 10) {
+                listState.animateScrollToItem(messages.lastIndex)
             }
         }
         lastMessageId.value = newLastId
@@ -1787,7 +1801,7 @@ private fun ChatPane(
 
     val tgColors = telegramColors()
     val onScrollToMessage = { messageId: String ->
-        val index = state.messages.indexOfFirst { it.id == messageId }
+        val index = messages.indexOfFirst { it.id == messageId }
         if (index >= 0) {
             scope.launch {
                 highlightedMessageId = messageId
@@ -1801,7 +1815,7 @@ private fun ChatPane(
     }
 
     // Optimization: build a map of messages for fast reply lookup
-    val messagesMap = remember(state.messages) { state.messages.associateBy { it.id } }
+    val messagesMap = remember(messages) { messages.associateBy { it.id } }
     val density = LocalDensity.current
 
     val hasAudio = state.currentAudioMessage != null
@@ -1824,12 +1838,21 @@ private fun ChatPane(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             itemsIndexed(
-                items = state.messages,
+                items = messages,
                 key = { _, msg -> msg.id },
-                contentType = { _, _ -> "message" }
+                contentType = { _, msg ->
+                    when {
+                        msg.senderId == "system" -> "system"
+                        msg.content.file?.isSticker() == true -> "sticker"
+                        msg.content.file?.isAudio() == true -> "audio"
+                        msg.content.file != null -> "attachment"
+                        msg.content.inlineKeyboard.isNotEmpty() -> "bot_keyboard"
+                        else -> "message"
+                    }
+                }
             ) { index, message ->
-                val prevMessage = if (index > 0) state.messages[index - 1] else null
-                val nextMessage = if (index < state.messages.lastIndex) state.messages[index + 1] else null
+                val prevMessage = if (index > 0) messages[index - 1] else null
+                val nextMessage = if (index < messages.lastIndex) messages[index + 1] else null
                 
                 val isFirstInGroup = prevMessage == null || 
                                      prevMessage.senderId != message.senderId || 
@@ -1845,13 +1868,13 @@ private fun ChatPane(
                     message.replyToId?.let { rid -> messagesMap[rid] }
                 }
 
-                val ownMessage = message.senderId == state.session?.userId
+                val ownMessage = message.senderId == sessionUserId
 
                 MessageRow(
                     strings = strings,
                     message = message,
                     ownMessage = ownMessage,
-                    senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl,
+                    senderAvatarUrl = usersById[message.senderId]?.avatarUrl,
                     showSenderInfo = isFirstInGroup,
                     hasTail = isLastInGroup,
                     isGroupChat = selectedChat?.chatType != "private",
@@ -1875,12 +1898,14 @@ private fun ChatPane(
                     onResumeAudio = onResumeAudio,
                     onStopAudio = onStopAudio,
                     onSeekAudio = onSeekAudio,
-                    doubleTapReaction = state.doubleTapReaction,
+                    doubleTapReaction = doubleTapEmoji,
                     onDownloadFile = onDownloadFile,
                     onHandleClick = onHandleClick,
                     onBotCallback = onBotCallback,
-                    appUiState = state,
-
+                    currentAudioMessageId = currentAudioMessageId,
+                    isAudioPlaying = currentAudioMessageId == message.id && currentAudioPlaying,
+                    audioProgress = if (currentAudioMessageId == message.id) currentAudioProgress else 0f,
+                    attachmentDownloadState = message.content.file?.let { attachmentDownloads[it.downloadKey()] },
                     isHighlighted = highlightedMessageId == message.id,
                     tgColors = tgColors
                 )
@@ -1944,15 +1969,23 @@ private fun ChatPane(
                         }
                     )
                     Spacer(Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
                                 selectedTitle,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 color = tgColors.headerTitle,
-                                fontSize = 16.sp
+                                fontSize = 15.sp,
+                                lineHeight = 18.sp,
+                                modifier = Modifier.weight(1f)
                             )
                             if (selectedChat?.isVerified == true || profileUser?.isVerified == true) {
                                 Spacer(Modifier.width(4.dp))
@@ -1962,9 +1995,11 @@ private fun ChatPane(
                         Text(
                             subtitle,
                             color = tgColors.headerSubtitle,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
+                            lineHeight = 14.sp,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -2066,8 +2101,8 @@ private fun ChatPane(
                     .size(42.dp)
                     .clickable { 
                         scope.launch { 
-                            if (state.messages.isNotEmpty()) {
-                                val targetIndex = state.messages.lastIndex
+                            if (messages.isNotEmpty()) {
+                                val targetIndex = messages.lastIndex
                                 if (listState.firstVisibleItemIndex < targetIndex - 20) {
                                     listState.scrollToItem(targetIndex - 10)
                                 }
@@ -2375,7 +2410,10 @@ private fun MessageRow(
     onDownloadFile: (ChatMessage) -> Unit,
     onHandleClick: (String) -> Unit,
     onBotCallback: (String, String, String) -> Unit,
-    appUiState: AppUiState,
+    currentAudioMessageId: String?,
+    isAudioPlaying: Boolean,
+    audioProgress: Float,
+    attachmentDownloadState: ir.hienob.noveo.app.AttachmentDownloadState?,
     isHighlighted: Boolean = false,
     tgColors: TelegramThemeColors = telegramColors()
 ) {
@@ -2406,27 +2444,20 @@ private fun MessageRow(
     var bubbleBounds by remember(message.id) { mutableStateOf<Rect?>(null) }
     val bubbleClickSource = remember { MutableInteractionSource() }
 
-    val animOffsetY = remember(message.id) { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 18f else 0f) }
-    val animOffsetX = remember(message.id) { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 26f else 0f) }
-    val animAlpha = remember(message.id) { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 0.35f else 1f) }
-    val animScale = remember(message.id) { androidx.compose.animation.core.Animatable(if (ownMessage && message.pending) 0.92f else 1f) }
+    val animatePendingIntro = ownMessage && message.pending
+    var pendingIntroStarted by remember(message.id) { mutableStateOf(!animatePendingIntro) }
+    LaunchedEffect(message.id) {
+        pendingIntroStarted = true
+    }
+    val pendingIntroProgress by animateFloatAsState(
+        targetValue = if (pendingIntroStarted) 1f else 0f,
+        animationSpec = tween(140, easing = FastOutSlowInEasing),
+        label = "message_pending_intro"
+    )
+    val pendingIntroFraction = if (animatePendingIntro) pendingIntroProgress else 1f
 
     // Swipe state
-    val swipeOffset = remember { androidx.compose.animation.core.Animatable(0f) }
-    val scope = rememberCoroutineScope()
-    val rootView = LocalView.current
-    var chatSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
-    var chatSnapshotBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-    var chatSnapshotCapturedForGesture by remember { mutableStateOf(false) }
-
-    LaunchedEffect(message.id) {
-        if (ownMessage && message.pending) {
-            launch { animAlpha.animateTo(1f, tween(200)) }
-            launch { animOffsetY.animateTo(0f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)) }
-            launch { animOffsetX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)) }
-            launch { animScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)) }
-        }
-    }
+    var swipeOffset by remember(message.id) { mutableStateOf(0f) }
 
     Column(
         horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
@@ -2442,11 +2473,11 @@ private fun MessageRow(
                 onLongClick = { bubbleBounds?.let(onOpenContextMenu) }
             )
             .graphicsLayer {
-                translationY = animOffsetY.value
-                translationX = animOffsetX.value + swipeOffset.value
-                alpha = animAlpha.value
-                scaleX = animScale.value
-                scaleY = animScale.value
+                translationY = (1f - pendingIntroFraction) * 18f
+                translationX = ((1f - pendingIntroFraction) * 26f) + swipeOffset
+                alpha = 0.35f + (0.65f * pendingIntroFraction)
+                scaleX = 0.92f + (0.08f * pendingIntroFraction)
+                scaleY = 0.92f + (0.08f * pendingIntroFraction)
                 transformOrigin = TransformOrigin(if (ownMessage) 1f else 0f, 1f)
             }
     ) {
@@ -2457,28 +2488,22 @@ private fun MessageRow(
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
                         if (dragAmount < 0) { // Only swipe left
-                            val current = swipeOffset.value
+                            val current = swipeOffset
                             val target = (current + dragAmount).coerceIn(-100f, 0f)
                             if (current > -60f && target <= -60f) {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             }
-                            scope.launch {
-                                swipeOffset.snapTo(target)
-                            }
+                            swipeOffset = target
                         }
                     },
                     onDragEnd = {
-                        if (swipeOffset.value < -60f) {
+                        if (swipeOffset < -60f) {
                             onReply()
                         }
-                        scope.launch {
-                            swipeOffset.animateTo(0f, tween(200))
-                        }
+                        swipeOffset = 0f
                     },
                     onDragCancel = {
-                        scope.launch {
-                            swipeOffset.animateTo(0f, tween(200))
-                        }
+                        swipeOffset = 0f
                     }
                 )
             }
@@ -2560,16 +2585,11 @@ private fun MessageRow(
                                     tint = Color.White
                                 )
                             } else {
-                                SubcomposeAsyncImage(
+                                AsyncImage(
                                     model = normalizedUrl,
                                     contentDescription = "sticker",
                                     modifier = Modifier.size(160.dp),
-                                    contentScale = ContentScale.Fit,
-                                    loading = {
-                                        Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
-                                            androidx.compose.material3.CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
-                                        }
-                                    }
+                                    contentScale = ContentScale.Fit
                                 )
                             }
 
@@ -2730,9 +2750,9 @@ private fun MessageRow(
                                 if (file.isAudio()) {
                                     AudioPlayer(
                                         message = message,
-                                        isCurrent = appUiState.currentAudioMessage?.id == message.id,
-                                        isPlaying = appUiState.isAudioPlaying,
-                                        progress = appUiState.audioProgress,
+                                        isCurrent = currentAudioMessageId == message.id,
+                                        isPlaying = isAudioPlaying,
+                                        progress = audioProgress,
                                         onPlayToggle = { onPlayAudio(message) },
                                         onSeek = onSeekAudio,
                                         tgColors = tgColors
@@ -2740,7 +2760,7 @@ private fun MessageRow(
                                 } else {
                                     MessageAttachment(
                                         file = file,
-                                        downloadState = appUiState.attachmentDownloads[file.downloadKey()],
+                                        downloadState = attachmentDownloadState,
                                         ownMessage = ownMessage,
                                         onClick = { onMediaClick(message, file) },
                                         onDownloadClick = { onDownloadFile(message) },
@@ -3092,16 +3112,11 @@ private fun MessageAttachment(
                     .background((if (ownMessage) tgColors.outgoingBubble else tgColors.incomingBubble).copy(alpha = 0.68f))
             ) {
                 if (isDownloaded) {
-                    SubcomposeAsyncImage(
+                    AsyncImage(
                         model = localFile,
                         contentDescription = file.name,
                         modifier = Modifier.fillMaxWidth(),
-                        contentScale = ContentScale.FillWidth,
-                        loading = {
-                            Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp), color = overlayTint)
-                            }
-                        }
+                        contentScale = ContentScale.FillWidth
                     )
                 } else {
                     Column(
@@ -4601,14 +4616,21 @@ private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 40.dp, mod
     }
 
     if (!resolvedImageUrl.isNullOrBlank() && !isDefaultAvatar) {
-        SubcomposeAsyncImage(
-            model = resolvedImageUrl,
-            contentDescription = name,
-            modifier = modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
-            contentScale = ContentScale.Crop,
-            loading = { fallback() },
-            error = { fallback() }
-        )
+        Box(
+            modifier = modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(name.firstOrNull()?.uppercase() ?: "N", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            AsyncImage(
+                model = resolvedImageUrl,
+                contentDescription = name,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
     } else {
         fallback()
     }
@@ -5216,7 +5238,12 @@ fun VoiceCallOverlay(
                     else -> "Idle"
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
             )
             
             Spacer(Modifier.height(24.dp))
