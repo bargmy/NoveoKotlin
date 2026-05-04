@@ -2953,7 +2953,7 @@ private fun ReplyPreview(message: ChatMessage, onCancel: () -> Unit) {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = message.content.previewText(),
+                    text = localizeMessagePreview(message.content.previewText(), strings),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -3009,123 +3009,125 @@ private fun MarkdownText(
     val hasClickableHandle = onHandleClick != null && visibleText.indexOf('@') >= 0
     val hasBoldMarkup = visibleText.indexOf("**") >= 0
 
-    if (!hasClickableHandle && !hasBoldMarkup) {
-        Text(
-            text = visibleText,
-            style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
-            maxLines = maxLines,
-            overflow = TextOverflow.Ellipsis
-        )
-    } else {
-        val annotated = remember(visibleText, handleColor, hasClickableHandle) {
-            buildAnnotatedString {
-                var index = 0
-                while (index < visibleText.length) {
-                    val nextMarker = visibleText.indexOf("**", index)
-                    val nextHandle = if (hasClickableHandle) visibleText.indexOf("@", index) else -1
+    Column {
+        if (!hasClickableHandle && !hasBoldMarkup) {
+            Text(
+                text = visibleText,
+                style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
+                maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis
+            )
+        } else {
+            val annotated = remember(visibleText, handleColor, hasClickableHandle) {
+                buildAnnotatedString {
+                    var index = 0
+                    while (index < visibleText.length) {
+                        val nextMarker = visibleText.indexOf("**", index)
+                        val nextHandle = if (hasClickableHandle) visibleText.indexOf("@", index) else -1
 
-                    val markers = mutableListOf<Pair<Int, String>>()
-                    if (nextMarker != -1) markers.add(nextMarker to "**")
-                    if (nextHandle != -1) markers.add(nextHandle to "@")
+                        val markers = mutableListOf<Pair<Int, String>>()
+                        if (nextMarker != -1) markers.add(nextMarker to "**")
+                        if (nextHandle != -1) markers.add(nextHandle to "@")
 
-                    val nearest = markers.minByOrNull { it.first }
+                        val nearest = markers.minByOrNull { it.first }
 
-                    if (nearest == null) {
-                        append(visibleText.substring(index))
-                        break
-                    }
-
-                    if (nearest.first > index) {
-                        append(visibleText.substring(index, nearest.first))
-                    }
-
-                    if (nearest.second == "**") {
-                        val endBold = visibleText.indexOf("**", nearest.first + 2)
-                        if (endBold != -1) {
-                            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                                append(visibleText.substring(nearest.first + 2, endBold))
-                            }
-                            index = endBold + 2
-                        } else {
-                            append("**")
-                            index = nearest.first + 2
+                        if (nearest == null) {
+                            append(visibleText.substring(index))
+                            break
                         }
-                    } else if (nearest.second == "@") {
-                        var endHandle = nearest.first + 1
-                        while (endHandle < visibleText.length && (visibleText[endHandle].isLetterOrDigit() || visibleText[endHandle] == '_')) {
-                            endHandle++
+
+                        if (nearest.first > index) {
+                            append(visibleText.substring(index, nearest.first))
                         }
-                        if (endHandle > nearest.first + 1) {
-                            val handle = visibleText.substring(nearest.first, endHandle)
-                            pushStringAnnotation("handle", handle)
-                            withStyle(SpanStyle(color = handleColor, fontWeight = FontWeight.SemiBold)) {
-                                append(handle)
+
+                        if (nearest.second == "**") {
+                            val endBold = visibleText.indexOf("**", nearest.first + 2)
+                            if (endBold != -1) {
+                                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append(visibleText.substring(nearest.first + 2, endBold))
+                                }
+                                index = endBold + 2
+                            } else {
+                                append("**")
+                                index = nearest.first + 2
                             }
-                            pop()
-                            index = endHandle
-                        } else {
-                            append("@")
-                            index = nearest.first + 1
+                        } else if (nearest.second == "@") {
+                            var endHandle = nearest.first + 1
+                            while (endHandle < visibleText.length && (visibleText[endHandle].isLetterOrDigit() || visibleText[endHandle] == '_')) {
+                                endHandle++
+                            }
+                            if (endHandle > nearest.first + 1) {
+                                val handle = visibleText.substring(nearest.first, endHandle)
+                                pushStringAnnotation("handle", handle)
+                                withStyle(SpanStyle(color = handleColor, fontWeight = FontWeight.SemiBold)) {
+                                    append(handle)
+                                }
+                                pop()
+                                index = endHandle
+                            } else {
+                                append("@")
+                                index = nearest.first + 1
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if (hasClickableHandle && onHandleClick != null) {
-            val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
-            Text(
-                text = annotated,
-                style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
-                maxLines = maxLines,
-                overflow = TextOverflow.Ellipsis,
-                onTextLayout = { layoutResult.value = it },
-                modifier = Modifier.pointerInput(annotated, onHandleClick) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull() ?: continue
-                            if (event.type == PointerEventType.Press) {
-                                val layout = layoutResult.value ?: continue
-                                val position = layout.getOffsetForPosition(change.position)
-                                val annotation = annotated.getStringAnnotations("handle", position, position).firstOrNull()
+            if (hasClickableHandle && onHandleClick != null) {
+                val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
+                Text(
+                    text = annotated,
+                    style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
+                    maxLines = maxLines,
+                    overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { layoutResult.value = it },
+                    modifier = Modifier.pointerInput(annotated, onHandleClick) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull() ?: continue
+                                if (event.type == PointerEventType.Press) {
+                                    val layout = layoutResult.value ?: continue
+                                    val position = layout.getOffsetForPosition(change.position)
+                                    val annotation = annotated.getStringAnnotations("handle", position, position).firstOrNull()
 
-                                if (annotation != null) {
-                                    change.consume()
-                                    val up = waitForUpOrCancellation()
-                                    if (up != null) {
-                                        up.consume()
-                                        onHandleClick(annotation.item)
+                                    if (annotation != null) {
+                                        change.consume()
+                                        val up = waitForUpOrCancellation()
+                                        if (up != null) {
+                                            up.consume()
+                                            onHandleClick(annotation.item)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-            )
-        } else {
+                )
+            } else {
+                Text(
+                    text = annotated,
+                    style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
+                    maxLines = maxLines,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        if (shouldCollapse && strings != null) {
             Text(
-                text = annotated,
-                style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
-                maxLines = maxLines,
-                overflow = TextOverflow.Ellipsis
+                text = if (expanded) showLessText(strings) else showMoreText(strings),
+                style = TextStyle(
+                    color = handleColor,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .clickable { expanded = !expanded }
             )
         }
-    }
-
-    if (shouldCollapse && strings != null) {
-        Text(
-            text = if (expanded) showLessText(strings) else showMoreText(strings),
-            style = TextStyle(
-                color = handleColor,
-                fontSize = 15.sp,
-                lineHeight = 20.sp,
-                fontWeight = FontWeight.SemiBold
-            ),
-            modifier = Modifier
-                .padding(top = 2.dp)
-                .clickable { expanded = !expanded }
-        )
     }
 }
 
@@ -4562,6 +4564,10 @@ private fun ChatRow(
 private fun localizeMessagePreview(preview: String, strings: NoveoStrings): String {
     return when (preview) {
         "Sticker" -> strings.sticker
+        "Photo" -> "Photo" // Add these if you have them in NoveoStrings, otherwise keep as is for now
+        "Video" -> "Video"
+        "File" -> "File"
+        "Forwarded message" -> strings.forwarded
         "edited" -> strings.edited
         else -> preview
     }
