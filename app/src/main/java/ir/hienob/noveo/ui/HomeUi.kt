@@ -2959,7 +2959,6 @@ private fun ReplyPreview(message: ChatMessage, onCancel: () -> Unit) {
     }
 }
 
-@Composable
 private const val LONG_MESSAGE_COLLAPSE_CHAR_LIMIT = 900
 private const val LONG_MESSAGE_COLLAPSE_MAX_LINES = 28
 
