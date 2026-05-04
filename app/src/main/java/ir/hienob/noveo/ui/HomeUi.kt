@@ -841,7 +841,7 @@ internal fun HomeScreen(
                                 strings = strings,
                                 selectedChat = effectiveSelectedChat,
                                 currentUserId = state.session?.userId,
-                                onBackToChats = startCompactBackNavigation,
+                                onBackToChats = ::startCompactBackNavigation,
                                 onSend = onSend,
                                 onTyping = onTyping,
                                 onLoadOlder = onLoadOlder,
