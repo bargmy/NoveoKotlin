@@ -772,8 +772,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openHandle(handle: String) {
-        val session = _uiState.value.session ?: return
         val normalizedHandle = if (handle.startsWith("@")) handle else "@$handle"
+        val state = _uiState.value
+        val matchedUser = state.usersById.values.firstOrNull {
+            "@${it.handle}".equals(normalizedHandle, ignoreCase = true) ||
+                "@${it.username}".equals(normalizedHandle, ignoreCase = true)
+        }
+        if (matchedUser != null) {
+            _uiState.value = state.copy(pendingProfileId = matchedUser.id, pendingGroupInfoId = null)
+            return
+        }
         
         val payload = org.json.JSONObject()
             .put("type", "get_channel_by_handle")
@@ -1303,11 +1311,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     messageCacheByChat[chat.id] = event.messages
                 }
                 
-                _uiState.value = _uiState.value.copy(
+                val nextState = _uiState.value.copy(
                     chats = updatedChats,
-                    pendingGroupInfoId = chat.id,
                     messages = if (_uiState.value.selectedChatId == chat.id) event.messages.sortedBy { it.timestamp } else _uiState.value.messages
                 )
+                _uiState.value = if (chat.chatType == "private") {
+                    val otherUserId = chat.memberIds.firstOrNull { it != nextState.session?.userId }
+                    nextState.copy(pendingProfileId = otherUserId, pendingGroupInfoId = null)
+                } else {
+                    nextState.copy(pendingGroupInfoId = chat.id)
+                }
             }
             is SocketEvent.NewChatInfo -> {
                 val chat = event.chat
