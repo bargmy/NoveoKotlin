@@ -234,15 +234,6 @@ private data class SelectedMediaAttachment(
     val localPath: String
 )
 
-private data class MessageRenderItem(
-    val message: ChatMessage,
-    val ownMessage: Boolean,
-    val senderAvatarUrl: String?,
-    val showSenderInfo: Boolean,
-    val hasTail: Boolean,
-    val repliedMessage: ChatMessage?
-)
-
 private fun localAttachmentCacheFile(root: File, file: MessageFileAttachment): File {
     val extension = file.name.substringAfterLast('.', "").ifBlank {
         when {
@@ -1822,30 +1813,6 @@ private fun ChatPane(
         }
     }
 
-    // Optimization: build a map of messages for fast reply lookup
-    val messagesMap = remember(messages) { messages.associateBy { it.id } }
-    val messageRenderItems = remember(messages, usersById, sessionUserId, messagesMap) {
-        messages.mapIndexed { index, message ->
-            val prevMessage = if (index > 0) messages[index - 1] else null
-            val nextMessage = if (index < messages.lastIndex) messages[index + 1] else null
-            val isFirstInGroup = prevMessage == null ||
-                prevMessage.senderId != message.senderId ||
-                (message.timestamp - prevMessage.timestamp) > 300 ||
-                prevMessage.senderId == "system"
-            val isLastInGroup = nextMessage == null ||
-                nextMessage.senderId != message.senderId ||
-                (nextMessage.timestamp - message.timestamp) > 300 ||
-                nextMessage.senderId == "system"
-            MessageRenderItem(
-                message = message,
-                ownMessage = message.senderId == sessionUserId,
-                senderAvatarUrl = usersById[message.senderId]?.avatarUrl,
-                showSenderInfo = isFirstInGroup,
-                hasTail = isLastInGroup,
-                repliedMessage = message.replyToId?.let { rid -> messagesMap[rid] }
-            )
-        }
-    }
     val density = LocalDensity.current
 
     val hasAudio = state.currentAudioMessage != null
@@ -1854,7 +1821,9 @@ private fun ChatPane(
     
     val topPadding = 56.dp + (if (hasAudio) 48.dp else 0.dp) + (if (hasVoice) 48.dp else 0.dp) + (if (hasPinned) 48.dp else 0.dp) + 8.dp
 
-    Box(modifier = modifier.fillMaxSize().background(tgColors.chatSurface)) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().background(tgColors.chatSurface)) {
+        val maxBubbleWidth = maxWidth * 0.78f
+
         // 1. Messages Layer
         LazyColumn(
             state = listState,
@@ -1868,10 +1837,9 @@ private fun ChatPane(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             itemsIndexed(
-                items = messageRenderItems,
-                key = { _, item -> item.message.id },
-                contentType = { _, item ->
-                    val msg = item.message
+                items = messages,
+                key = { _, message -> message.id },
+                contentType = { _, msg ->
                     when {
                         msg.senderId == "system" -> "system"
                         msg.content.file?.isSticker() == true -> "sticker"
@@ -1881,27 +1849,42 @@ private fun ChatPane(
                         else -> "message"
                     }
                 }
-            ) { _, item ->
-                val message = item.message
+            ) { index, message ->
+                val prevMessage = messages.getOrNull(index - 1)
+                val nextMessage = messages.getOrNull(index + 1)
+                val ownMessage = message.senderId == sessionUserId
+                val showSenderInfo = prevMessage == null ||
+                    prevMessage.senderId != message.senderId ||
+                    (message.timestamp - prevMessage.timestamp) > 300 ||
+                    prevMessage.senderId == "system"
+                val hasTail = nextMessage == null ||
+                    nextMessage.senderId != message.senderId ||
+                    (nextMessage.timestamp - message.timestamp) > 300 ||
+                    nextMessage.senderId == "system"
+                val senderAvatarUrl = usersById[message.senderId]?.avatarUrl
+                val repliedMessage = message.replyToId?.let { replyId ->
+                    messages.firstOrNull { it.id == replyId }
+                }
 
                 MessageRow(
                     strings = strings,
                     message = message,
-                    ownMessage = item.ownMessage,
-                    senderAvatarUrl = item.senderAvatarUrl,
-                    showSenderInfo = item.showSenderInfo,
-                    hasTail = item.hasTail,
+                    ownMessage = ownMessage,
+                    senderAvatarUrl = senderAvatarUrl,
+                    showSenderInfo = showSenderInfo,
+                    hasTail = hasTail,
                     isGroupChat = selectedChat?.chatType != "private",
                     currentUserId = currentUserId,
                     onMediaClick = onMediaClick,
                     onOpenProfile = onOpenProfile,
-                    repliedMessage = item.repliedMessage,
+                    repliedMessage = repliedMessage,
+                    maxBubbleWidth = maxBubbleWidth,
                     onReply = { onReply(message) },
                     onToggleReaction = onToggleReaction,
                     onOpenContextMenu = { bubbleBounds ->
                         contextMenuState = MessageContextMenuState(
                             message = message,
-                            ownMessage = item.ownMessage,
+                            ownMessage = ownMessage,
                             bubbleBounds = bubbleBounds
                         )
                         contextMenuExpanded = false
@@ -2411,6 +2394,7 @@ private fun MessageRow(
     onMediaClick: (ChatMessage, MessageFileAttachment) -> Unit,
     onOpenProfile: (String) -> Unit,
     repliedMessage: ChatMessage? = null,
+    maxBubbleWidth: Dp,
     onReply: () -> Unit,
     onToggleReaction: (String, String) -> Unit,
     onOpenContextMenu: (Rect) -> Unit = {},
@@ -2455,8 +2439,7 @@ private fun MessageRow(
         val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
         localizeDigits(sdf.format(Date(message.timestamp * 1000)), strings.languageCode)
     }
-    var bubbleBounds by remember(message.id) { mutableStateOf<Rect?>(null) }
-    val bubbleClickSource = remember { MutableInteractionSource() }
+    val bubbleBoundsRef = remember(message.id) { arrayOfNulls<Rect>(1) }
 
     val animatePendingIntro = ownMessage && message.pending
     val pendingIntroFraction = if (animatePendingIntro) {
@@ -2474,6 +2457,18 @@ private fun MessageRow(
 
     // Swipe state
     var swipeOffset by remember(message.id) { mutableStateOf(0f) }
+    val rowTransformModifier = if (animatePendingIntro || swipeOffset != 0f) {
+        Modifier.graphicsLayer {
+            translationY = (1f - pendingIntroFraction) * 18f
+            translationX = ((1f - pendingIntroFraction) * 26f) + swipeOffset
+            alpha = 0.35f + (0.65f * pendingIntroFraction)
+            scaleX = 0.92f + (0.08f * pendingIntroFraction)
+            scaleY = 0.92f + (0.08f * pendingIntroFraction)
+            transformOrigin = TransformOrigin(if (ownMessage) 1f else 0f, 1f)
+        }
+    } else {
+        Modifier
+    }
 
     Column(
         horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
@@ -2484,21 +2479,14 @@ private fun MessageRow(
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = { bubbleBounds?.let(onOpenContextMenu) },
+                onClick = { bubbleBoundsRef[0]?.let(onOpenContextMenu) },
                 onDoubleClick = { onToggleReaction(message.id, doubleTapReaction) },
-                onLongClick = { bubbleBounds?.let(onOpenContextMenu) }
+                onLongClick = { bubbleBoundsRef[0]?.let(onOpenContextMenu) }
             )
-            .graphicsLayer {
-                translationY = (1f - pendingIntroFraction) * 18f
-                translationX = ((1f - pendingIntroFraction) * 26f) + swipeOffset
-                alpha = 0.35f + (0.65f * pendingIntroFraction)
-                scaleX = 0.92f + (0.08f * pendingIntroFraction)
-                scaleY = 0.92f + (0.08f * pendingIntroFraction)
-                transformOrigin = TransformOrigin(if (ownMessage) 1f else 0f, 1f)
-            }
+            .then(rowTransformModifier)
     ) {
         val bubbleModifier = Modifier
-            .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
+            .onGloballyPositioned { bubbleBoundsRef[0] = it.boundsInRoot() }
             .pointerInput(message.id) {
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { change, dragAmount ->
@@ -2524,8 +2512,10 @@ private fun MessageRow(
                 )
             }
 
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+        ) {
             if (!ownMessage) {
                 // Telegram only shows avatar in group chats, and only for the last message in a group
                 if (isGroupChat) {
@@ -2674,7 +2664,7 @@ private fun MessageRow(
                 } else {
                     Surface(
                         modifier = bubbleModifier
-                            .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f),
+                            .widthIn(max = maxBubbleWidth),
                         shape = TelegramBubbleShape(
                             isOutgoing = ownMessage,
                             hasTail = hasTail,
@@ -2882,7 +2872,7 @@ private fun MessageRow(
                     Column(
                         modifier = Modifier
                             .padding(top = 4.dp)
-                            .widthIn(max = this@BoxWithConstraints.maxWidth * 0.78f),
+                            .widthIn(max = maxBubbleWidth),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         message.content.inlineKeyboard.forEach { row ->
@@ -2921,7 +2911,6 @@ private fun MessageRow(
             }
         }
     }
-}
 }
 
 @Composable
@@ -2971,34 +2960,34 @@ private fun ReplyPreview(message: ChatMessage, onCancel: () -> Unit) {
 
 @Composable
 private fun MarkdownText(
-    text: String, 
+    text: String,
     color: Color = MaterialTheme.colorScheme.onSurface,
     onHandleClick: ((String) -> Unit)? = null
 ) {
     val handleColor = if (color == MaterialTheme.colorScheme.onSurface) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.95f)
-    val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
-    val annotated = remember(text) {
+    val hasClickableHandle = onHandleClick != null && text.indexOf('@') >= 0
+    val annotated = remember(text, handleColor) {
         buildAnnotatedString {
             var index = 0
             while (index < text.length) {
                 val nextMarker = text.indexOf("**", index)
-                val nextHandle = text.indexOf("@", index)
-                
+                val nextHandle = if (hasClickableHandle) text.indexOf("@", index) else -1
+
                 val markers = mutableListOf<Pair<Int, String>>()
                 if (nextMarker != -1) markers.add(nextMarker to "**")
                 if (nextHandle != -1) markers.add(nextHandle to "@")
-                
+
                 val nearest = markers.minByOrNull { it.first }
-                
+
                 if (nearest == null) {
                     append(text.substring(index))
                     break
                 }
-                
+
                 if (nearest.first > index) {
                     append(text.substring(index, nearest.first))
                 }
-                
+
                 if (nearest.second == "**") {
                     val endBold = text.indexOf("**", nearest.first + 2)
                     if (endBold != -1) {
@@ -3016,7 +3005,7 @@ private fun MarkdownText(
                         endHandle++
                     }
                     if (endHandle > nearest.first + 1) {
-                        val handle = text.substring(nearest.first, endHandle) // Include the @
+                        val handle = text.substring(nearest.first, endHandle)
                         pushStringAnnotation("handle", handle)
                         withStyle(SpanStyle(color = handleColor, fontWeight = FontWeight.SemiBold)) {
                             append(handle)
@@ -3032,7 +3021,8 @@ private fun MarkdownText(
         }
     }
 
-    if (onHandleClick != null) {
+    if (hasClickableHandle && onHandleClick != null) {
+        val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
         Text(
             text = annotated,
             style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
@@ -3046,12 +3036,9 @@ private fun MarkdownText(
                             val layout = layoutResult.value ?: continue
                             val position = layout.getOffsetForPosition(change.position)
                             val annotation = annotated.getStringAnnotations("handle", position, position).firstOrNull()
-                            
+
                             if (annotation != null) {
-                                // IT IS A HANDLE. Consume the event to prevent parent from opening context menu.
                                 change.consume()
-                                
-                                // Wait for release
                                 val up = waitForUpOrCancellation()
                                 if (up != null) {
                                     up.consume()
@@ -3074,28 +3061,6 @@ private fun MarkdownText(
 }
 
 @Composable
-private fun PendingMessageBubble(text: String) {
-    AnimatedVisibility(
-        visible = true,
-        enter = fadeIn(animationSpec = tween(220)) + slideInVertically(initialOffsetY = { it / 2 }),
-        exit = fadeOut(animationSpec = tween(220)) + slideOutVertically(targetOffsetY = { it / 2 })
-    ) {
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxWidth()) {
-            Card(
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f))
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(text)
-                    Spacer(Modifier.height(4.dp))
-                    Text("Sending…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun MessageAttachment(
     file: MessageFileAttachment,
     downloadState: ir.hienob.noveo.app.AttachmentDownloadState?,
@@ -3105,7 +3070,8 @@ private fun MessageAttachment(
     tgColors: TelegramThemeColors = telegramColors()
 ) {
     val context = LocalContext.current
-    val localFile = downloadState?.localPath?.let(::File)?.takeIf { it.exists() }
+    val localPath = downloadState?.localPath
+    val localFile = remember(localPath) { localPath?.let(::File)?.takeIf { it.exists() } }
     val isDownloaded = localFile != null
     val isDownloading = downloadState?.isDownloading == true
     val progress = downloadState?.progress ?: 0f
