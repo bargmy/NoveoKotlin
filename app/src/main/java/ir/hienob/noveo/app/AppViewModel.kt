@@ -141,6 +141,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         api
     )
     private val messageCacheByChat = mutableMapOf<String, List<ChatMessage>>()
+    private val activeDownloadJobs = mutableMapOf<String, Job>()
+
+    fun cancelDownload(message: ChatMessage) {
+        val key = message.content.file?.downloadKey() ?: return
+        activeDownloadJobs[key]?.cancel()
+        activeDownloadJobs.remove(key)
+        updateAttachmentDownload(key, AttachmentDownloadState(isDownloading = false, progress = 0f))
+    }
 
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -300,64 +308,71 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                val client = OkHttpClient()
-                val request = Request.Builder().url(url).build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw Exception("Download failed")
-                    val body = response.body ?: throw Exception("Empty body")
+        val job = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                runCatching {
+                    val client = OkHttpClient()
+                    val request = Request.Builder().url(url).build()
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) throw Exception("Download failed")
+                        val body = response.body ?: throw Exception("Empty body")
 
-                    val total = max(body.contentLength(), 1L)
-                    targetFile.parentFile?.mkdirs()
-                    withContext(Dispatchers.Main) {
-                        updateAttachmentDownload(
-                            key = key,
-                            state = AttachmentDownloadState(isDownloading = true, progress = 0f)
-                        )
-                    }
+                        val total = max(body.contentLength(), 1L)
+                        targetFile.parentFile?.mkdirs()
+                        withContext(Dispatchers.Main) {
+                            updateAttachmentDownload(
+                                key = key,
+                                state = AttachmentDownloadState(isDownloading = true, progress = 0f)
+                            )
+                        }
 
-                    body.byteStream().use { input ->
-                        FileOutputStream(targetFile).use { output ->
-                            val buffer = ByteArray(8192)
-                            var current = 0L
-                            var read: Int
-                            while (input.read(buffer).also { read = it } != -1) {
-                                output.write(buffer, 0, read)
-                                current += read
-                                withContext(Dispatchers.Main) {
-                                    updateAttachmentDownload(
-                                        key = key,
-                                        state = AttachmentDownloadState(
-                                            isDownloading = true,
-                                            progress = current.toFloat() / total.toFloat()
+                        body.byteStream().use { input ->
+                            FileOutputStream(targetFile).use { output ->
+                                val buffer = ByteArray(8192)
+                                var current = 0L
+                                var read: Int
+                                while (input.read(buffer).also { read = it } != -1) {
+                                    ensureActive()
+                                    output.write(buffer, 0, read)
+                                    current += read
+                                    withContext(Dispatchers.Main) {
+                                        updateAttachmentDownload(
+                                            key = key,
+                                            state = AttachmentDownloadState(
+                                                isDownloading = true,
+                                                progress = current.toFloat() / total.toFloat()
+                                            )
                                         )
-                                    )
+                                    }
                                 }
                             }
                         }
-                    }
 
+                        withContext(Dispatchers.Main) {
+                            updateAttachmentDownload(
+                                key = key,
+                                state = AttachmentDownloadState(localPath = targetFile.absolutePath, progress = 1f)
+                            )
+                            if (shouldOpenWhenDone) {
+                                openDownloadedFile(targetFile, file.type)
+                            }
+                        }
+                    }
+                }.onFailure { e ->
+                    if (e is CancellationException) return@onFailure
                     withContext(Dispatchers.Main) {
                         updateAttachmentDownload(
                             key = key,
-                            state = AttachmentDownloadState(localPath = targetFile.absolutePath, progress = 1f)
+                            state = AttachmentDownloadState(error = e.message)
                         )
-                        if (shouldOpenWhenDone) {
-                            openDownloadedFile(targetFile, file.type)
-                        }
+                        _uiState.value = _uiState.value.copy(error = "Download failed: ${e.message}")
                     }
                 }
-            }.onFailure {
-                withContext(Dispatchers.Main) {
-                    updateAttachmentDownload(
-                        key = key,
-                        state = AttachmentDownloadState(error = it.message)
-                    )
-                    _uiState.value = _uiState.value.copy(error = "Download failed: ${it.message}")
-                }
+            } finally {
+                activeDownloadJobs.remove(key)
             }
         }
+        activeDownloadJobs[key] = job
     }
 
     private fun normalizeUrl(url: String): String? {
@@ -1295,7 +1310,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val strings = getStrings(currentState.languageCode)
                 _uiState.value = _uiState.value.copy(
                     loading = currentState.chats.isEmpty() && event.connected,
-                    connectionTitle = if (event.connected) strings.brandName else strings.connecting,
+                    connectionTitle = if (event.connected) strings.updating else strings.connecting,
                     connectionDetail = event.detail
                 )
                 if (event.connected) {

@@ -903,6 +903,7 @@ internal fun HomeScreen(
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
+                                onCancelDownload = { viewModel.cancelDownload(it) },
                                 onCall = { onCall(visibleChat.id) },
                                 onCancelUpload = { onCancelUpload(visibleChat.id) },
                                 onSendSticker = onSendSticker,
@@ -1009,6 +1010,7 @@ internal fun HomeScreen(
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
+                                onCancelDownload = { viewModel.cancelDownload(it) },
                                 onCall = { selectedChat?.id?.let { onCall(it) } },
                                 onCancelUpload = { selectedChat?.id?.let { onCancelUpload(it) } },
                                 onSendSticker = onSendSticker,
@@ -1447,22 +1449,31 @@ private fun SidebarHeader(
                     )
                 } else {
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = connectionTitle,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            lineHeight = 22.sp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(28.dp)
-                                .wrapContentHeight(Alignment.CenterVertically)
-                                .alpha(titleAlpha),
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center
-                        )
+                        AnimatedContent(
+                            targetState = connectionTitle,
+                            label = "title_animation",
+                            transitionSpec = {
+                                (slideInVertically { height -> -height } + fadeIn()).togetherWith(
+                                    slideOutVertically { height -> height } + fadeOut())
+                            }
+                        ) { title ->
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp,
+                                lineHeight = 22.sp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(28.dp)
+                                    .wrapContentHeight(Alignment.CenterVertically)
+                                    .alpha(titleAlpha),
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }
@@ -1651,6 +1662,7 @@ private fun ChatPane(
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
     onDownloadFile: (ChatMessage) -> Unit,
+    onCancelDownload: (ChatMessage) -> Unit,
     onCall: () -> Unit,
     onCancelUpload: () -> Unit,
     onSendSticker: (SavedSticker) -> Unit,
@@ -2777,6 +2789,7 @@ private fun MessageRow(
                                         ownMessage = ownMessage,
                                         onClick = { onMediaClick(message, file) },
                                         onDownloadClick = { onDownloadFile(message) },
+                                        onCancelClick = { onCancelDownload(message) },
                                         tgColors = tgColors
                                     )
                                 }
@@ -3093,6 +3106,7 @@ private fun MessageAttachment(
     ownMessage: Boolean,
     onClick: () -> Unit,
     onDownloadClick: () -> Unit,
+    onCancelClick: () -> Unit,
     tgColors: TelegramThemeColors = telegramColors()
 ) {
     val context = LocalContext.current
@@ -3157,6 +3171,7 @@ private fun MessageAttachment(
                     progress = progress,
                     tint = overlayTint,
                     onDownloadClick = onDownloadClick,
+                    onCancelClick = onCancelClick,
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
@@ -3216,6 +3231,7 @@ private fun MessageAttachment(
                     progress = progress,
                     tint = overlayTint,
                     onDownloadClick = onDownloadClick,
+                    onCancelClick = onCancelClick,
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
@@ -3275,6 +3291,7 @@ private fun AttachmentDownloadOverlay(
     progress: Float,
     tint: Color,
     onDownloadClick: () -> Unit,
+    onCancelClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (isDownloaded && !isVideo) return
@@ -3294,7 +3311,19 @@ private fun AttachmentDownloadOverlay(
                 contentAlignment = Alignment.Center
             ) {
                 when {
-                    isDownloading -> DownloadProgressGlyph(progress = progress, tint = tint)
+                    isDownloading -> {
+                        Box(contentAlignment = Alignment.Center) {
+                            DownloadProgressGlyph(progress = progress, tint = tint)
+                            IconButton(onClick = onCancelClick) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Close,
+                                    contentDescription = "Cancel",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
                     isDownloaded && isVideo -> Icon(
                         imageVector = Icons.Outlined.PlayArrow,
                         contentDescription = null,

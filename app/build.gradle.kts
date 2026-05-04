@@ -29,12 +29,36 @@ android {
         resourceConfigurations += listOf("en", "fa", "ru", "zh")
     }
 
+    signingConfigs {
+        create("release") {
+            // These properties can be set in local.properties or via command line -P
+            val keystoreFile = providers.gradleProperty("NOVEO_KEYSTORE_FILE").orNull?.let { file(it) }
+            if (keystoreFile?.exists() == true) {
+                storeFile = keystoreFile
+                storePassword = providers.gradleProperty("NOVEO_KEYSTORE_PASSWORD").orNull
+                keyAlias = providers.gradleProperty("NOVEO_KEY_ALIAS").orNull
+                keyPassword = providers.gradleProperty("NOVEO_KEY_PASSWORD").orNull
+            } else {
+                // Fallback to debug signature if no release keystore is provided
+                // This prevents "unsigned" builds that can't be installed
+                val debugKeystore = file("debug.keystore")
+                if (debugKeystore.exists()) {
+                    storeFile = debugKeystore
+                    storePassword = "androiddebugkey"
+                    keyAlias = "androiddebugkey"
+                    keyPassword = "androiddebugkey"
+                }
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
             isShrinkResources = false
         }
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             isDebuggable = false
