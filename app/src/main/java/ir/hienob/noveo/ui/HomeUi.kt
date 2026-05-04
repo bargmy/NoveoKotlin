@@ -196,6 +196,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.offset
@@ -231,6 +232,15 @@ private val CLIENT_VERSION: String
 private data class SelectedMediaAttachment(
     val attachment: MessageFileAttachment,
     val localPath: String
+)
+
+private data class MessageRenderItem(
+    val message: ChatMessage,
+    val ownMessage: Boolean,
+    val senderAvatarUrl: String?,
+    val showSenderInfo: Boolean,
+    val hasTail: Boolean,
+    val repliedMessage: ChatMessage?
 )
 
 private fun localAttachmentCacheFile(root: File, file: MessageFileAttachment): File {
@@ -503,8 +513,6 @@ internal fun HomeScreen(
                           infoChatId != null ||
                           profileUserId != null || selectedMediaAttachment != null || showSearch || showForwardPicker
 
-    var isCompactLayout by remember { mutableStateOf(false) }
-
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -595,7 +603,6 @@ internal fun HomeScreen(
             .imePadding()
     ) {
         val compact = maxWidth < 760.dp
-        isCompactLayout = compact
         val screenWidthPx = with(density) { maxWidth.toPx() }
 
         fun clearBackSwipeVisualState() {
@@ -810,11 +817,14 @@ internal fun HomeScreen(
                     !isBackSwipeDragging &&
                     !isCompletingBackSwipe
                 val showingChatSurface = lockedSlidingChat != null || state.selectedChatId != null || openingChatId != null || compactOpeningPrime
-                val chatTranslation = when {
-                    compactOpeningPrime -> screenWidthPx
-                    directChatDragOffset != null -> directChatDragOffset ?: 0f
-                    showingChatSurface -> chatBackOffset.value
-                    else -> 0f
+                fun chatSurfaceOffset(): IntOffset {
+                    val offset = when {
+                        compactOpeningPrime -> screenWidthPx
+                        directChatDragOffset != null -> directChatDragOffset ?: 0f
+                        showingChatSurface -> chatBackOffset.value
+                        else -> 0f
+                    }
+                    return IntOffset(offset.roundToInt(), 0)
                 }
 
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -869,7 +879,7 @@ internal fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .onGloballyPositioned { chatSnapshotBounds = it.boundsInRoot() }
-                                .graphicsLayer { translationX = chatTranslation }
+                                .offset { chatSurfaceOffset() }
                         ) {
                             ChatPane(
                                 state = effectiveChatState,
@@ -1543,18 +1553,16 @@ private fun CallLogView(
 }
 
 @Composable
-fun VerifiedIcon(modifier: Modifier = Modifier) {
+fun VerifiedIcon(modifier: Modifier = Modifier.size(14.dp)) {
     Box(
-        modifier = modifier
-            .size(14.dp)
-            .background(Color(0xFF2EA6FF), CircleShape),
+        modifier = modifier.background(Color(0xFF2EA6FF), CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = Icons.Outlined.Check,
             contentDescription = "Verified",
             tint = Color.White,
-            modifier = Modifier.size(10.dp)
+            modifier = Modifier.matchParentSize().padding(2.dp)
         )
     }
 }
@@ -1816,6 +1824,28 @@ private fun ChatPane(
 
     // Optimization: build a map of messages for fast reply lookup
     val messagesMap = remember(messages) { messages.associateBy { it.id } }
+    val messageRenderItems = remember(messages, usersById, sessionUserId, messagesMap) {
+        messages.mapIndexed { index, message ->
+            val prevMessage = if (index > 0) messages[index - 1] else null
+            val nextMessage = if (index < messages.lastIndex) messages[index + 1] else null
+            val isFirstInGroup = prevMessage == null ||
+                prevMessage.senderId != message.senderId ||
+                (message.timestamp - prevMessage.timestamp) > 300 ||
+                prevMessage.senderId == "system"
+            val isLastInGroup = nextMessage == null ||
+                nextMessage.senderId != message.senderId ||
+                (nextMessage.timestamp - message.timestamp) > 300 ||
+                nextMessage.senderId == "system"
+            MessageRenderItem(
+                message = message,
+                ownMessage = message.senderId == sessionUserId,
+                senderAvatarUrl = usersById[message.senderId]?.avatarUrl,
+                showSenderInfo = isFirstInGroup,
+                hasTail = isLastInGroup,
+                repliedMessage = message.replyToId?.let { rid -> messagesMap[rid] }
+            )
+        }
+    }
     val density = LocalDensity.current
 
     val hasAudio = state.currentAudioMessage != null
@@ -1838,9 +1868,10 @@ private fun ChatPane(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             itemsIndexed(
-                items = messages,
-                key = { _, msg -> msg.id },
-                contentType = { _, msg ->
+                items = messageRenderItems,
+                key = { _, item -> item.message.id },
+                contentType = { _, item ->
+                    val msg = item.message
                     when {
                         msg.senderId == "system" -> "system"
                         msg.content.file?.isSticker() == true -> "sticker"
@@ -1850,44 +1881,27 @@ private fun ChatPane(
                         else -> "message"
                     }
                 }
-            ) { index, message ->
-                val prevMessage = if (index > 0) messages[index - 1] else null
-                val nextMessage = if (index < messages.lastIndex) messages[index + 1] else null
-                
-                val isFirstInGroup = prevMessage == null || 
-                                     prevMessage.senderId != message.senderId || 
-                                     (message.timestamp - prevMessage.timestamp) > 300 ||
-                                     prevMessage.senderId == "system"
-                
-                val isLastInGroup = nextMessage == null || 
-                                    nextMessage.senderId != message.senderId || 
-                                    (nextMessage.timestamp - message.timestamp) > 300 ||
-                                    nextMessage.senderId == "system"
-
-                val repliedMessage = remember(message.replyToId, messagesMap) {
-                    message.replyToId?.let { rid -> messagesMap[rid] }
-                }
-
-                val ownMessage = message.senderId == sessionUserId
+            ) { _, item ->
+                val message = item.message
 
                 MessageRow(
                     strings = strings,
                     message = message,
-                    ownMessage = ownMessage,
-                    senderAvatarUrl = usersById[message.senderId]?.avatarUrl,
-                    showSenderInfo = isFirstInGroup,
-                    hasTail = isLastInGroup,
+                    ownMessage = item.ownMessage,
+                    senderAvatarUrl = item.senderAvatarUrl,
+                    showSenderInfo = item.showSenderInfo,
+                    hasTail = item.hasTail,
                     isGroupChat = selectedChat?.chatType != "private",
                     currentUserId = currentUserId,
                     onMediaClick = onMediaClick,
                     onOpenProfile = onOpenProfile,
-                    repliedMessage = repliedMessage,
+                    repliedMessage = item.repliedMessage,
                     onReply = { onReply(message) },
                     onToggleReaction = onToggleReaction,
                     onOpenContextMenu = { bubbleBounds ->
                         contextMenuState = MessageContextMenuState(
                             message = message,
-                            ownMessage = ownMessage,
+                            ownMessage = item.ownMessage,
                             bubbleBounds = bubbleBounds
                         )
                         contextMenuExpanded = false
@@ -1985,7 +1999,7 @@ private fun ChatPane(
                                 color = tgColors.headerTitle,
                                 fontSize = 15.sp,
                                 lineHeight = 18.sp,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f, fill = false)
                             )
                             if (selectedChat?.isVerified == true || profileUser?.isVerified == true) {
                                 Spacer(Modifier.width(4.dp))
@@ -2445,16 +2459,18 @@ private fun MessageRow(
     val bubbleClickSource = remember { MutableInteractionSource() }
 
     val animatePendingIntro = ownMessage && message.pending
-    var pendingIntroStarted by remember(message.id) { mutableStateOf(!animatePendingIntro) }
-    LaunchedEffect(message.id) {
-        pendingIntroStarted = true
+    val pendingIntroFraction = if (animatePendingIntro) {
+        var pendingIntroStarted by remember(message.id) { mutableStateOf(false) }
+        LaunchedEffect(message.id) { pendingIntroStarted = true }
+        val pendingIntroProgress by animateFloatAsState(
+            targetValue = if (pendingIntroStarted) 1f else 0f,
+            animationSpec = tween(140, easing = FastOutSlowInEasing),
+            label = "message_pending_intro"
+        )
+        pendingIntroProgress
+    } else {
+        1f
     }
-    val pendingIntroProgress by animateFloatAsState(
-        targetValue = if (pendingIntroStarted) 1f else 0f,
-        animationSpec = tween(140, easing = FastOutSlowInEasing),
-        label = "message_pending_intro"
-    )
-    val pendingIntroFraction = if (animatePendingIntro) pendingIntroProgress else 1f
 
     // Swipe state
     var swipeOffset by remember(message.id) { mutableStateOf(0f) }
@@ -4616,21 +4632,15 @@ private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 40.dp, mod
     }
 
     if (!resolvedImageUrl.isNullOrBlank() && !isDefaultAvatar) {
-        Box(
+        AsyncImage(
+            model = resolvedImageUrl,
+            contentDescription = name,
             modifier = modifier
                 .size(size)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surface),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(name.firstOrNull()?.uppercase() ?: "N", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            AsyncImage(
-                model = resolvedImageUrl,
-                contentDescription = name,
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Crop
-            )
-        }
+            contentScale = ContentScale.Crop
+        )
     } else {
         fallback()
     }
