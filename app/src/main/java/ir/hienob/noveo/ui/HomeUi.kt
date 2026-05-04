@@ -533,6 +533,7 @@ internal fun HomeScreen(
     var lockedSlidingMessages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var isBackSwipeDragging by remember { mutableStateOf(false) }
     var isCompletingBackSwipe by remember { mutableStateOf(false) }
+    var lastCompactSelectedChatId by remember { mutableStateOf<String?>(null) }
 
     // Sync menu state with animation
     LaunchedEffect(showMenu) {
@@ -624,9 +625,10 @@ internal fun HomeScreen(
             chatBackOffset.stop()
             chatBackOffset.animateTo(
                 targetWidth.coerceAtLeast(chatBackOffset.value),
-                tween(180, easing = FastOutSlowInEasing)
+                tween(220, easing = FastOutSlowInEasing)
             )
             latestOnBackToChats()
+            lastCompactSelectedChatId = null
             chatBackOffset.snapTo(0f)
             clearBackSwipeVisualState()
         }
@@ -641,6 +643,25 @@ internal fun HomeScreen(
             } else {
                 latestOnBackToChats()
             }
+        }
+
+        LaunchedEffect(compact, state.selectedChatId, screenWidthPx) {
+            val currentChatId = state.selectedChatId
+            if (!compact) {
+                lastCompactSelectedChatId = currentChatId
+                return@LaunchedEffect
+            }
+            if (isBackSwipeDragging || isCompletingBackSwipe || lockedSlidingChat != null) {
+                return@LaunchedEffect
+            }
+            val previousChatId = lastCompactSelectedChatId
+            if (currentChatId != null && currentChatId != previousChatId) {
+                chatBackOffset.snapTo(screenWidthPx)
+                chatBackOffset.animateTo(0f, tween(240, easing = FastOutSlowInEasing))
+            } else if (currentChatId == null) {
+                chatBackOffset.snapTo(0f)
+            }
+            lastCompactSelectedChatId = currentChatId
         }
 
         androidx.activity.compose.BackHandler(enabled = isAnyModalVisible || showMenu || state.selectedChatId != null) {
@@ -692,19 +713,9 @@ internal fun HomeScreen(
                                 sidebarOffset.stop()
                                 chatBackOffset.stop()
                             }
-                            if (allowChatBackDrag && !chatSnapshotCapturedForGesture) {
-                                chatSnapshotBounds?.let { bounds ->
-                                    val full = android.graphics.Bitmap.createBitmap(rootView.width, rootView.height, android.graphics.Bitmap.Config.ARGB_8888).also { bmp ->
-                                    rootView.draw(android.graphics.Canvas(bmp))
-                                }
-                                    val left = bounds.left.roundToInt().coerceIn(0, full.width - 1)
-                                    val top = bounds.top.roundToInt().coerceIn(0, full.height - 1)
-                                    val width = bounds.width.roundToInt().coerceAtLeast(1).coerceAtMost(full.width - left)
-                                    val height = bounds.height.roundToInt().coerceAtLeast(1).coerceAtMost(full.height - top)
-                                    val cropped = android.graphics.Bitmap.createBitmap(full, left, top, width, height)
-                                    chatSnapshot = cropped.asImageBitmap()
-                                    chatSnapshotCapturedForGesture = true
-                                }
+                            if (allowChatBackDrag) {
+                                chatSnapshotCapturedForGesture = false
+                                chatSnapshot = null
                             }
                         },
                         onHorizontalDrag = { change, dragAmount ->
@@ -734,7 +745,7 @@ internal fun HomeScreen(
                                         }
                                         finishCompactBackNavigation(size.width.toFloat().coerceAtLeast(total))
                                     } else {
-                                        chatBackOffset.animateTo(0f, tween(180, easing = FastOutSlowInEasing))
+                                        chatBackOffset.animateTo(0f, tween(220, easing = FastOutSlowInEasing))
                                         clearBackSwipeVisualState()
                                     }
                                 } else if (allowSidebarSwipe) {
@@ -751,7 +762,7 @@ internal fun HomeScreen(
                         onDragCancel = {
                             scope.launch {
                                 if (compact && (lockedSlidingChat != null || latestState.selectedChatId != null)) {
-                                    chatBackOffset.animateTo(0f, tween(180, easing = FastOutSlowInEasing))
+                                    chatBackOffset.animateTo(0f, tween(220, easing = FastOutSlowInEasing))
                                     clearBackSwipeVisualState()
                                 }
                             }
@@ -809,7 +820,8 @@ internal fun HomeScreen(
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    if (showingChatSurface && effectiveSelectedChat != null) {
+                    val visibleChat = effectiveSelectedChat
+                    if (showingChatSurface && visibleChat != null) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -820,7 +832,7 @@ internal fun HomeScreen(
                                 state = effectiveChatState,
                                 compact = true,
                                 strings = strings,
-                                selectedChat = effectiveSelectedChat,
+                                selectedChat = visibleChat,
                                 currentUserId = state.session?.userId,
                                 onBackToChats = { startCompactBackNavigation() },
                                 onSend = onSend,
@@ -831,10 +843,8 @@ internal fun HomeScreen(
                                 onRemoveAttachment = onRemoveAttachment,
                                 onOpenProfile = onOpenProfile,
                                 onOpenGroupInfo = {
-                                    effectiveSelectedChat.id.let {
-                                        infoChatId = it
-                                        animateModalEntrance = true
-                                    }
+                                    infoChatId = visibleChat.id
+                                    animateModalEntrance = true
                                 },
                                 onReply = { onReply(it) },
                                 onEditMessage = onEditMessage,
@@ -849,8 +859,8 @@ internal fun HomeScreen(
                                 onStopAudio = onStopAudio,
                                 onSeekAudio = onSeekAudio,
                                 onDownloadFile = onDownloadFile,
-                                onCall = { effectiveSelectedChat.id.let { onCall(it) } },
-                                onCancelUpload = { effectiveSelectedChat.id.let { onCancelUpload(it) } },
+                                onCall = { onCall(visibleChat.id) },
+                                onCancelUpload = { onCancelUpload(visibleChat.id) },
                                 onSendSticker = onSendSticker,
                                 onAddSavedSticker = onAddSavedSticker,
                                 onHandleClick = onHandleClick,
@@ -861,19 +871,6 @@ internal fun HomeScreen(
                                 onToggleMinimize = onToggleMinimize,
                                 onLeaveCall = onLeaveCall,
                                 lastKeyboardHeight = lastKeyboardHeight
-                            )
-                        }
-                    }
-
-                    if ((isBackSwipeDragging || isCompletingBackSwipe) && showingChatSurface && chatTranslation > 0f) {
-                        chatSnapshot?.let { shot ->
-                            androidx.compose.foundation.Image(
-                                bitmap = shot,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .graphicsLayer { translationX = chatTranslation },
-                                contentScale = ContentScale.Crop
                             )
                         }
                     }
