@@ -11,7 +11,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -23,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.airbnb.lottie.compose.rememberLottieComposition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -49,11 +49,12 @@ internal fun TgsSticker(
     modifier: Modifier = Modifier,
     tint: Color = MaterialTheme.colorScheme.primary,
     iterations: Int = LottieConstants.IterateForever,
-    restartOnPlay: Boolean = false
+    restartOnPlay: Boolean = false,
+    autoPlay: Boolean = iterations != 1
 ) {
     var json by remember(url) { mutableStateOf<String?>(null) }
     var failed by remember(url) { mutableStateOf(false) }
-    var playCount by remember(url) { mutableStateOf(0) }
+    var isPlaying by remember(url) { mutableStateOf(autoPlay) }
 
     LaunchedEffect(url) {
         json = null
@@ -82,13 +83,29 @@ internal fun TgsSticker(
     val composition by rememberLottieComposition(
         spec = json?.let(LottieCompositionSpec::JsonString) ?: LottieCompositionSpec.JsonString("{}")
     )
+    val lottieProgress by animateLottieCompositionAsState(
+        composition = composition,
+        isPlaying = isPlaying,
+        iterations = iterations,
+        restartOnPlay = restartOnPlay || iterations == 1
+    )
+
+    LaunchedEffect(url, autoPlay) {
+        isPlaying = autoPlay
+    }
+
+    LaunchedEffect(lottieProgress, isPlaying, iterations) {
+        if (isPlaying && iterations == 1 && lottieProgress >= 0.99f) {
+            isPlaying = false
+        }
+    }
 
     Box(
         modifier = modifier.clickable(
             interactionSource = remember { MutableInteractionSource() },
             indication = null
         ) {
-            playCount++
+            isPlaying = true
         },
         contentAlignment = Alignment.Center
     ) {
@@ -96,24 +113,9 @@ internal fun TgsSticker(
             composition != null -> {
                 LottieAnimation(
                     composition = composition,
-                    iterations = if (iterations == 1) 1 else iterations,
-                    restartOnPlay = restartOnPlay,
-                    isPlaying = true,
+                    progress = { lottieProgress },
                     modifier = Modifier.fillMaxSize()
                 )
-                
-                // Trigger a re-composition/re-play when playCount changes
-                if (iterations == 1 && playCount > 0) {
-                    key(playCount) {
-                        LottieAnimation(
-                            composition = composition,
-                            iterations = 1,
-                            restartOnPlay = true,
-                            isPlaying = true,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
             }
 
             failed -> {
