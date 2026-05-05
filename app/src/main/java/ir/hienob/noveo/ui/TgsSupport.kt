@@ -29,10 +29,34 @@ import kotlinx.coroutines.withContext
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.ByteArrayInputStream
 import java.io.File
+import java.net.URI
 import java.util.zip.GZIPInputStream
 
 private var tgsClient: OkHttpClient? = null
+
+private fun loadTgsJson(url: String): String {
+    val bytes = when {
+        url.startsWith("file:", ignoreCase = true) -> File(URI(url)).readBytes()
+        url.startsWith("/") -> File(url).readBytes()
+        else -> {
+            val client = tgsClient ?: OkHttpClient()
+            val request = Request.Builder().url(url).build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) error("TGS download failed")
+                val body = response.body ?: error("Empty TGS response")
+                body.bytes()
+            }
+        }
+    }
+
+    return if (bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
+        GZIPInputStream(ByteArrayInputStream(bytes)).bufferedReader().use { it.readText() }
+    } else {
+        bytes.toString(Charsets.UTF_8)
+    }
+}
 
 internal fun initializeTgsSupport(context: android.content.Context) {
     if (tgsClient == null) {
@@ -67,13 +91,7 @@ internal fun TgsSticker(
         }
         runCatching {
             withContext(Dispatchers.IO) {
-                val client = tgsClient ?: OkHttpClient()
-                val request = Request.Builder().url(url).build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) error("TGS download failed")
-                    val body = response.body ?: error("Empty TGS response")
-                    GZIPInputStream(body.byteStream()).bufferedReader().use { it.readText() }
-                }
+                loadTgsJson(url)
             }
         }.onSuccess {
             json = it
