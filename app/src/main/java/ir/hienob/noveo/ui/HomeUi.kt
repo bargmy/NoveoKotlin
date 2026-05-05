@@ -424,6 +424,9 @@ internal fun HomeScreen(
 ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        initializeTgsSupport(context)
+    }
 
     var showMenu by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
@@ -2560,11 +2563,16 @@ private fun MessageRow(
                 horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
                 modifier = if (ownMessage) Modifier else Modifier.weight(1f, false)
             ) {
-                val isSticker = message.content.file?.isSticker() == true
+                val emojiTgsUrl = remember(message.content.text) {
+                    message.content.text?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
+                }
+                val isSticker = (message.content.file?.isSticker() == true) || (emojiTgsUrl != null)
                 
                 if (isSticker) {
-                    val file = message.content.file!!
-                    val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
+                    val file = message.content.file
+                    val normalizedUrl = remember(file?.url, emojiTgsUrl) { 
+                        emojiTgsUrl ?: file?.url.normalizeNoveoUrl() ?: ""
+                    }
                     Box(
                         modifier = bubbleModifier.padding(vertical = 4.dp)
                     ) {
@@ -2606,7 +2614,8 @@ private fun MessageRow(
                                 }
                             }
 
-                            if (file.isTgsSticker()) {
+                            val isTgs = emojiTgsUrl != null || file?.isTgsSticker() == true
+                            if (isTgs) {
                                 TgsSticker(
                                     url = normalizedUrl,
                                     modifier = Modifier.size(160.dp),

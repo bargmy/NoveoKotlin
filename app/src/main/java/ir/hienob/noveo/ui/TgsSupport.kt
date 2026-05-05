@@ -23,11 +23,22 @@ import com.airbnb.lottie.compose.LottieConstants
 import com.airbnb.lottie.compose.rememberLottieComposition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.util.zip.GZIPInputStream
 
-private val tgsClient = OkHttpClient()
+private var tgsClient: OkHttpClient? = null
+
+internal fun initializeTgsSupport(context: android.content.Context) {
+    if (tgsClient == null) {
+        tgsClient = OkHttpClient.Builder()
+            .cache(Cache(File(context.cacheDir, "tgs_cache"), 100 * 1024 * 1024))
+            .build()
+    }
+    EmojiTgsManager.initialize(context)
+}
 
 @Composable
 internal fun TgsSticker(
@@ -47,8 +58,9 @@ internal fun TgsSticker(
         }
         runCatching {
             withContext(Dispatchers.IO) {
+                val client = tgsClient ?: OkHttpClient()
                 val request = Request.Builder().url(url).build()
-                tgsClient.newCall(request).execute().use { response ->
+                client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) error("TGS download failed")
                     val body = response.body ?: error("Empty TGS response")
                     GZIPInputStream(body.byteStream()).bufferedReader().use { it.readText() }
