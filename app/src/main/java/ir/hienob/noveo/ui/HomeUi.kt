@@ -3135,6 +3135,7 @@ private fun MessageAttachment(
 
     if (file.isImage()) {
         val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
+        var imageLoaded by remember { mutableStateOf(false) }
         Card(
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier
@@ -3155,24 +3156,27 @@ private fun MessageAttachment(
                     model = localFile ?: normalizedUrl,
                     contentDescription = file.name,
                     modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.FillWidth
+                    contentScale = ContentScale.FillWidth,
+                    onSuccess = { imageLoaded = true }
                 )
                 
-                if (!isDownloaded && !isDownloading) {
+                if (!isDownloaded && !isDownloading && !imageLoaded) {
                     // Overlay a hint if not yet "officially" downloaded (for full res/saving)
                     // but AsyncImage above will already try to show it from cache
                 }
 
-                AttachmentDownloadOverlay(
-                    isVideo = false,
-                    isDownloaded = isDownloaded,
-                    isDownloading = isDownloading,
-                    progress = progress,
-                    tint = overlayTint,
-                    onDownloadClick = onDownloadClick,
-                    onCancelClick = onCancelClick,
-                    modifier = Modifier.align(Alignment.Center)
-                )
+                if (!imageLoaded || isDownloading) {
+                    AttachmentDownloadOverlay(
+                        isVideo = false,
+                        isDownloaded = isDownloaded,
+                        isDownloading = isDownloading,
+                        progress = progress,
+                        tint = overlayTint,
+                        onDownloadClick = onDownloadClick,
+                        onCancelClick = onCancelClick,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
             }
         }
     } else if (file.isVideo()) {

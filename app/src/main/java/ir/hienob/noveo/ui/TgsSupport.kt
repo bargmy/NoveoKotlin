@@ -97,14 +97,20 @@ internal fun TgsSticker(
                     composition = composition,
                     iterations = if (iterations == 1) 1 else iterations,
                     restartOnPlay = restartOnPlay,
-                    isPlaying = iterations != 1 || playCount > 0,
+                    isPlaying = true,
                     modifier = Modifier.fillMaxSize()
                 )
                 
-                // If it's a single-play animation, we use playCount to trigger re-plays
+                // Trigger a re-composition/re-play when playCount changes
                 if (iterations == 1 && playCount > 0) {
-                    LaunchedEffect(playCount) {
-                        // The LottieAnimation isPlaying logic will handle it
+                    key(playCount) {
+                        LottieAnimation(
+                            composition = composition,
+                            iterations = 1,
+                            restartOnPlay = true,
+                            isPlaying = true,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
                 }
             }
