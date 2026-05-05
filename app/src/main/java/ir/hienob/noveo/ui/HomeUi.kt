@@ -2566,12 +2566,15 @@ private fun MessageRow(
                 val emojiTgsUrl = remember(message.content.text) {
                     message.content.text?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
                 }
-                val isSticker = (message.content.file?.let { it.isSticker() || it.fileName?.lowercase()?.endsWith(".webp") == true } == true) || (emojiTgsUrl != null)
+                val isSticker = (message.content.file?.let { it.isSticker() || (it.fileName?.lowercase()?.endsWith(".webp") == true) } == true) || (emojiTgsUrl != null)
                 
                 if (isSticker) {
                     val file = message.content.file
-                    val normalizedUrl = remember(file?.url, emojiTgsUrl) { 
-                        emojiTgsUrl ?: file?.url.normalizeNoveoUrl() ?: ""
+                    val emojiTgsUrlState = remember(message.content.text) {
+                        message.content.text?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
+                    }
+                    val normalizedUrl = remember(file?.url, emojiTgsUrlState) { 
+                        emojiTgsUrlState ?: file?.url.normalizeNoveoUrl() ?: ""
                     }
                     Box(
                         modifier = bubbleModifier.padding(vertical = 4.dp)
@@ -2614,13 +2617,13 @@ private fun MessageRow(
                                 }
                             }
 
-                            val isTgs = emojiTgsUrl != null || file?.isTgsSticker() == true
+                            val isTgs = emojiTgsUrlState != null || file?.isTgsSticker() == true
                             if (isTgs) {
                                 TgsSticker(
                                     url = normalizedUrl,
-                                    modifier = Modifier.size(if (emojiTgsUrl != null) 80.dp else 160.dp),
+                                    modifier = Modifier.size(if (emojiTgsUrlState != null) 80.dp else 160.dp),
                                     tint = Color.White,
-                                    iterations = if (emojiTgsUrl != null) 1 else LottieConstants.IterateForever
+                                    iterations = if (emojiTgsUrlState != null) 1 else com.airbnb.lottie.compose.LottieConstants.IterateForever
                                 )
                             } else {
                                 AsyncImage(
