@@ -34,20 +34,34 @@ import java.io.File
 import java.net.URI
 import java.util.zip.GZIPInputStream
 
+private const val NOVEO_BASE_URL = "https://noveo.ir:8443"
 private var tgsClient: OkHttpClient? = null
 
+private fun resolveTgsUrl(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.startsWith("http://", true) || trimmed.startsWith("https://", true)) return trimmed
+    if (trimmed.startsWith("//")) return "https:$trimmed"
+    if (trimmed.startsWith("/")) return "$NOVEO_BASE_URL$trimmed"
+    return "$NOVEO_BASE_URL/$trimmed"
+}
+
 private fun loadTgsJson(url: String): String {
-    val bytes = when {
-        url.startsWith("file:", ignoreCase = true) -> File(URI(url)).readBytes()
-        url.startsWith("/") -> File(url).readBytes()
-        else -> {
-            val client = tgsClient ?: OkHttpClient()
-            val request = Request.Builder().url(url).build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) error("TGS download failed")
-                val body = response.body ?: error("Empty TGS response")
-                body.bytes()
-            }
+    val trimmed = url.trim()
+    val localFile = when {
+        trimmed.startsWith("file:", true) -> runCatching { File(URI(trimmed)) }.getOrNull()
+        trimmed.startsWith("/") -> File(trimmed).takeIf { it.exists() && it.isFile }
+        else -> File(trimmed).takeIf { it.exists() && it.isFile }
+    }
+
+    val bytes = if (localFile != null) {
+        localFile.readBytes()
+    } else {
+        val client = tgsClient ?: OkHttpClient()
+        val request = Request.Builder().url(resolveTgsUrl(trimmed)).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("TGS download failed")
+            val body = response.body ?: error("Empty TGS response")
+            body.bytes()
         }
     }
 
@@ -78,11 +92,7 @@ internal fun TgsSticker(
     playOnClick: Boolean = iterations == 1
 ) {
     if (iterations == LottieConstants.IterateForever && autoPlay && !playOnClick) {
-        LoopingTgsSticker(
-            url = url,
-            modifier = modifier,
-            tint = tint
-        )
+        LoopingTgsSticker(url = url, modifier = modifier, tint = tint)
     } else {
         ControlledTgsSticker(
             url = url,
@@ -112,15 +122,9 @@ private fun LoopingTgsSticker(
             failed = true
             return@LaunchedEffect
         }
-        runCatching {
-            withContext(Dispatchers.IO) {
-                loadTgsJson(url)
-            }
-        }.onSuccess {
-            json = it
-        }.onFailure {
-            failed = true
-        }
+        runCatching { withContext(Dispatchers.IO) { loadTgsJson(url) } }
+            .onSuccess { json = it }
+            .onFailure { failed = true }
     }
 
     val composition by rememberLottieComposition(
@@ -137,22 +141,8 @@ private fun LoopingTgsSticker(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-
-            failed -> {
-                Text(
-                    text = "TGS",
-                    color = tint,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            else -> {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp),
-                    strokeWidth = 2.dp,
-                    color = tint
-                )
-            }
+            failed -> Text(text = "TGS", color = tint, fontWeight = FontWeight.Bold)
+            else -> CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = tint)
         }
     }
 }
@@ -179,15 +169,9 @@ private fun ControlledTgsSticker(
             failed = true
             return@LaunchedEffect
         }
-        runCatching {
-            withContext(Dispatchers.IO) {
-                loadTgsJson(url)
-            }
-        }.onSuccess {
-            json = it
-        }.onFailure {
-            failed = true
-        }
+        runCatching { withContext(Dispatchers.IO) { loadTgsJson(url) } }
+            .onSuccess { json = it }
+            .onFailure { failed = true }
     }
 
     val composition by rememberLottieComposition(
@@ -201,31 +185,20 @@ private fun ControlledTgsSticker(
     )
     val currentComposition = composition
 
-    LaunchedEffect(url, shouldAutoPlay) {
-        isPlaying = shouldAutoPlay
-    }
-
+    LaunchedEffect(url, shouldAutoPlay) { isPlaying = shouldAutoPlay }
     LaunchedEffect(lottieProgress, isPlaying, iterations) {
-        if (isPlaying && iterations == 1 && lottieProgress >= 0.99f) {
-            isPlaying = false
-        }
+        if (isPlaying && iterations == 1 && lottieProgress >= 0.99f) isPlaying = false
     }
 
     val playbackModifier = if (playOnClick) {
-        modifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null
-        ) {
+        modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
             isPlaying = true
         }
     } else {
         modifier
     }
 
-    Box(
-        modifier = playbackModifier,
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = playbackModifier, contentAlignment = Alignment.Center) {
         when {
             currentComposition != null -> {
                 LottieAnimation(
@@ -234,22 +207,8 @@ private fun ControlledTgsSticker(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-
-            failed -> {
-                Text(
-                    text = "TGS",
-                    color = tint,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            else -> {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp),
-                    strokeWidth = 2.dp,
-                    color = tint
-                )
-            }
+            failed -> Text(text = "TGS", color = tint, fontWeight = FontWeight.Bold)
+            else -> CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = tint)
         }
     }
 }
