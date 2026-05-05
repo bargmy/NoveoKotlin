@@ -52,6 +52,10 @@ data class MessageFileAttachment(
     val type: String = "",
     val size: Long = 0L
 ) {
+    private fun lowerName(): String = name.trim().lowercase()
+    private fun lowerUrl(): String = url.trim().lowercase()
+    private fun lowerType(): String = type.trim().lowercase()
+
     fun isImage(): Boolean =
         type.startsWith("image/", true) ||
             name.endsWith(".jpg", true) ||
@@ -64,6 +68,7 @@ data class MessageFileAttachment(
             url.contains(".png", true) ||
             url.contains(".webp", true) ||
             url.contains(".gif", true)
+
     fun isVideo(): Boolean =
         type.startsWith("video/", true) ||
             name.endsWith(".mp4", true) ||
@@ -74,31 +79,58 @@ data class MessageFileAttachment(
             url.contains(".webm", true) ||
             url.contains(".mov", true) ||
             url.contains(".ogg", true)
-    fun isAudio(): Boolean = type.startsWith("audio/") || name.endsWith(".mp3", true) || name.endsWith(".m4a", true) || name.endsWith(".wav", true) || name.endsWith(".ogg", true)
-    fun isTgsSticker(): Boolean =
-        type.equals("application/x-tgsticker", true) ||
-            name.endsWith(".tgs", true) ||
-            url.contains(".tgs", true)
+
+    fun isAudio(): Boolean =
+        type.startsWith("audio/") ||
+            name.endsWith(".mp3", true) ||
+            name.endsWith(".m4a", true) ||
+            name.endsWith(".wav", true) ||
+            name.endsWith(".ogg", true)
+
+    fun isTgsSticker(): Boolean {
+        val n = lowerName()
+        val u = lowerUrl()
+        val t = lowerType()
+        val namedSticker = n == "sticker" ||
+            n.startsWith("sticker.") ||
+            n.contains("_sticker") ||
+            n.contains("-sticker") ||
+            n.contains(" sticker")
+        return t.contains("tgsticker") ||
+            t == "application/x-tgs" ||
+            t == "application/x-tgsticker" ||
+            t.contains("lottie") ||
+            n.endsWith(".tgs") ||
+            u.endsWith(".tgs") ||
+            u.contains(".tgs?") ||
+            (namedSticker && (t.contains("gzip") || t.contains("tgz") || t == "application/octet-stream" || t == "binary/octet-stream"))
+    }
+
     fun isSticker(): Boolean {
-        val lowerName = name.lowercase()
-        val lowerUrl = url.lowercase()
-        val supportedStickerExtension = lowerName.endsWith(".gif") ||
-            lowerName.endsWith(".png") ||
-            lowerName.endsWith(".jpg") ||
-            lowerName.endsWith(".jpeg") ||
-            lowerName.endsWith(".webp") ||
-            lowerName.endsWith(".tgs") ||
-            lowerUrl.endsWith(".gif") ||
-            lowerUrl.endsWith(".png") ||
-            lowerUrl.endsWith(".jpg") ||
-            lowerUrl.endsWith(".jpeg") ||
-            lowerUrl.endsWith(".webp") ||
-            lowerUrl.endsWith(".tgs")
-        val looksLikeSticker = lowerName.contains("sticker") ||
-            lowerUrl.contains("/stickers/") ||
-            lowerUrl.contains("/sticker") ||
-            lowerUrl.contains("sticker.")
-        return looksLikeSticker && (isImage() || isTgsSticker() || supportedStickerExtension)
+        val n = lowerName()
+        val u = lowerUrl()
+        val namedSticker = n == "sticker" ||
+            n.startsWith("sticker.") ||
+            n.contains("_sticker") ||
+            n.contains("-sticker") ||
+            n.contains(" sticker") ||
+            u.contains("/stickers/") ||
+            u.contains("/sticker") ||
+            u.contains("sticker.")
+        val supportedStickerExtension = n.endsWith(".gif") ||
+            n.endsWith(".png") ||
+            n.endsWith(".jpg") ||
+            n.endsWith(".jpeg") ||
+            n.endsWith(".webp") ||
+            n.endsWith(".tgs") ||
+            u.endsWith(".gif") ||
+            u.endsWith(".png") ||
+            u.endsWith(".jpg") ||
+            u.endsWith(".jpeg") ||
+            u.endsWith(".webp") ||
+            u.endsWith(".tgs") ||
+            u.contains(".tgs?")
+        return isTgsSticker() || (namedSticker && (isImage() || supportedStickerExtension || type.isBlank() || lowerType() == "application/octet-stream"))
     }
 
     fun downloadKey(): String {
