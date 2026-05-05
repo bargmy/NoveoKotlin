@@ -394,6 +394,7 @@ internal fun HomeScreen(
     onCheckUpdate: () -> Unit,
     onSetBetaUpdatesEnabled: (Boolean) -> Unit,
     onSetDoubleTapReaction: (String) -> Unit,
+    onSetAnimatedEmojiTgsEnabled: (Boolean) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     onPlayAudio: (ChatMessage) -> Unit,
@@ -1129,6 +1130,7 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 onCheckUpdate = onCheckUpdate,
                 onSetBetaUpdatesEnabled = onSetBetaUpdatesEnabled,
                 onSetDoubleTapReaction = onSetDoubleTapReaction,
+                onSetAnimatedEmojiTgsEnabled = onSetAnimatedEmojiTgsEnabled,
                 onUpdateNotificationSettings = onUpdateNotificationSettings,
                 onRequestBatteryOptimization = onRequestBatteryOptimization,
                 onRequestPermission = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
@@ -1902,11 +1904,12 @@ private fun ChatPane(
                     maxBubbleWidth = maxBubbleWidth,
                     onReply = { onReply(message) },
                     onToggleReaction = onToggleReaction,
-                    onOpenContextMenu = { bubbleBounds ->
+                    onOpenContextMenu = { bubbleBounds, tapPosition ->
                         contextMenuState = MessageContextMenuState(
                             message = message,
                             ownMessage = ownMessage,
-                            bubbleBounds = bubbleBounds
+                            bubbleBounds = bubbleBounds,
+                            tapPosition = tapPosition
                         )
                         contextMenuExpanded = false
                     },
@@ -1917,6 +1920,7 @@ private fun ChatPane(
                     onStopAudio = onStopAudio,
                     onSeekAudio = onSeekAudio,
                     doubleTapReaction = doubleTapEmoji,
+                    animatedEmojiTgsEnabled = state.animatedEmojiTgsEnabled,
                     onDownloadFile = onDownloadFile,
                     onCancelDownload = onCancelDownload,
                     onHandleClick = onHandleClick,
@@ -2421,7 +2425,7 @@ private fun MessageRow(
     maxBubbleWidth: Dp,
     onReply: () -> Unit,
     onToggleReaction: (String, String) -> Unit,
-    onOpenContextMenu: (Rect) -> Unit = {},
+    onOpenContextMenu: (Rect, Offset) -> Unit = { _, _ -> },
     onScrollToMessage: (String) -> Unit,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
@@ -2429,6 +2433,7 @@ private fun MessageRow(
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
     doubleTapReaction: String,
+    animatedEmojiTgsEnabled: Boolean,
     onDownloadFile: (ChatMessage) -> Unit,
     onCancelDownload: (ChatMessage) -> Unit,
     onHandleClick: (String) -> Unit,
@@ -2465,6 +2470,7 @@ private fun MessageRow(
         localizeDigits(sdf.format(Date(message.timestamp * 1000)), strings.languageCode)
     }
     val bubbleBoundsRef = remember(message.id) { arrayOfNulls<Rect>(1) }
+    val rowBoundsRef = remember(message.id) { arrayOfNulls<Rect>(1) }
 
     val animatePendingIntro = ownMessage && message.pending
     val pendingIntroFraction = if (animatePendingIntro) {
@@ -2501,13 +2507,22 @@ private fun MessageRow(
             .fillMaxWidth()
             .padding(top = if (showSenderInfo) 10.dp else 0.dp)
             .padding(bottom = if (hasTail) 6.dp else 0.dp)
-            .combinedClickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = { bubbleBoundsRef[0]?.let(onOpenContextMenu) },
-                onDoubleClick = { onToggleReaction(message.id, doubleTapReaction) },
-                onLongClick = { bubbleBoundsRef[0]?.let(onOpenContextMenu) }
-            )
+            .onGloballyPositioned { rowBoundsRef[0] = it.boundsInRoot() }
+            .pointerInput(message.id, doubleTapReaction) {
+                fun openMenuFromTap(localTap: Offset) {
+                    val bubbleBounds = bubbleBoundsRef[0] ?: return
+                    val rowBounds = rowBoundsRef[0] ?: bubbleBounds
+                    onOpenContextMenu(
+                        bubbleBounds,
+                        Offset(rowBounds.left + localTap.x, rowBounds.top + localTap.y)
+                    )
+                }
+                detectTapGestures(
+                    onTap = { tapOffset -> openMenuFromTap(tapOffset) },
+                    onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
+                    onLongPress = { tapOffset -> openMenuFromTap(tapOffset) }
+                )
+            }
             .then(rowTransformModifier)
     ) {
         val bubbleModifier = Modifier
@@ -2564,14 +2579,14 @@ private fun MessageRow(
                 modifier = if (ownMessage) Modifier else Modifier.weight(1f, false)
             ) {
                 val emojiTgsUrl = remember(message.content.text) {
-                    message.content.text?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
+                    message.content.text?.takeIf { animatedEmojiTgsEnabled }?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
                 }
                 val isSticker = (message.content.file?.isSticker() == true) || (emojiTgsUrl != null)
                 
                 if (isSticker) {
                     val file = message.content.file
                     val emojiTgsUrlState = remember(message.content.text) {
-                        message.content.text?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
+                        message.content.text?.takeIf { animatedEmojiTgsEnabled }?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
                     }
                     val normalizedUrl = remember(file?.url, emojiTgsUrlState) { 
                         emojiTgsUrlState ?: file?.url.normalizeNoveoUrl() ?: ""
@@ -2623,7 +2638,9 @@ private fun MessageRow(
                                     url = normalizedUrl,
                                     modifier = Modifier.size(if (emojiTgsUrlState != null) 80.dp else 160.dp),
                                     tint = Color.White,
-                                    iterations = if (emojiTgsUrlState != null) 1 else com.airbnb.lottie.compose.LottieConstants.IterateForever
+                                    iterations = if (emojiTgsUrlState != null) 1 else com.airbnb.lottie.compose.LottieConstants.IterateForever,
+                                    restartOnPlay = emojiTgsUrlState != null,
+                                    autoPlay = emojiTgsUrlState != null && ownMessage && message.pending
                                 )
                             } else {
                                 AsyncImage(
@@ -3509,6 +3526,7 @@ private fun SettingsModal(
     onCheckUpdate: () -> Unit,
     onSetBetaUpdatesEnabled: (Boolean) -> Unit,
     onSetDoubleTapReaction: (String) -> Unit,
+    onSetAnimatedEmojiTgsEnabled: (Boolean) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     onRequestPermission: () -> Unit
@@ -3541,7 +3559,7 @@ private fun SettingsModal(
                     SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings)
                     SettingsSection.PROFILE -> SettingsProfileSection(strings, me, onUpdateProfile)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, currentTheme, onThemeChange, onRequestBatteryOptimization)
+                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, onSetAnimatedEmojiTgsEnabled, currentTheme, onThemeChange, onRequestBatteryOptimization)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection(strings)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
                     SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings, onRequestPermission)
@@ -3698,6 +3716,7 @@ private fun SettingsPreferencesSection(
     onCheckUpdate: () -> Unit,
     onSetBetaUpdatesEnabled: (Boolean) -> Unit,
     onSetDoubleTapReaction: (String) -> Unit,
+    onSetAnimatedEmojiTgsEnabled: (Boolean) -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
     onRequestBatteryOptimization: () -> Unit
@@ -3753,6 +3772,29 @@ private fun SettingsPreferencesSection(
                 androidx.compose.material3.Switch(
                     checked = state.betaUpdatesEnabled,
                     onCheckedChange = onSetBetaUpdatesEnabled
+                )
+            }
+        }
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSetAnimatedEmojiTgsEnabled(!state.animatedEmojiTgsEnabled) }
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(strings.animatedEmojiTgs, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(strings.animatedEmojiTgsBody, style = MaterialTheme.typography.bodySmall)
+                }
+                androidx.compose.material3.Switch(
+                    checked = state.animatedEmojiTgsEnabled,
+                    onCheckedChange = onSetAnimatedEmojiTgsEnabled
                 )
             }
         }

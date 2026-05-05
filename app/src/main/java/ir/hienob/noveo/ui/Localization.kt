@@ -120,6 +120,8 @@ data class NoveoStrings(
     val downloading: String = "Downloading...",
     val doubleTapReaction: String = "Double tap reaction",
     val doubleTapReactionBody: String = "Choose which reaction is sent when you double tap a message.",
+    val animatedEmojiTgs: String = "Animated emoji",
+    val animatedEmojiTgsBody: String = "Render supported emoji as .tgs animations. Turn this off to show normal text emoji.",
     val requestPermission: String = "Request Permission",
     val handle: String = "Handle",
     val handleOptional: String = "Handle (optional)",
@@ -1425,7 +1427,9 @@ private fun applyExtendedOverrides(strings: NoveoStrings): NoveoStrings {
             betaUpdatesBody = "Beta-Builds erhalten, wenn sie neuer als Ihre aktuelle Version sind.",
             downloading = "Wird heruntergeladen...",
             doubleTapReaction = "Doppeltipp-Reaktion",
-            doubleTapReactionBody = "Wahlen Sie die Reaktion aus, die beim Doppeltippen auf eine Nachricht gesendet wird."
+            doubleTapReactionBody = "Wahlen Sie die Reaktion aus, die beim Doppeltippen auf eine Nachricht gesendet wird.",
+            animatedEmojiTgs = "Animierte Emoji",
+            animatedEmojiTgsBody = "Unterstutzte Emoji als .tgs-Animationen anzeigen. Deaktivieren, um normale Text-Emoji zu verwenden."
         )
         "ru" -> strings.copy(
             registerOnWebTitle = "Регистрация в Noveo Web",
@@ -1435,7 +1439,9 @@ private fun applyExtendedOverrides(strings: NoveoStrings): NoveoStrings {
             betaUpdatesBody = "Получать бета-сборки, если они новее текущей версии.",
             downloading = "Загрузка...",
             doubleTapReaction = "Реакция по двойному тапу",
-            doubleTapReactionBody = "Выберите реакцию, которая отправляется при двойном тапе по сообщению."
+            doubleTapReactionBody = "Выберите реакцию, которая отправляется при двойном тапе по сообщению.",
+            animatedEmojiTgs = "Анимированные эмодзи",
+            animatedEmojiTgsBody = "Показывать поддерживаемые эмодзи как .tgs-анимации. Отключите, чтобы видеть обычные текстовые эмодзи."
         )
         "zh" -> strings.copy(
             registerOnWebTitle = "在 Noveo Web 注册",
@@ -1445,7 +1451,9 @@ private fun applyExtendedOverrides(strings: NoveoStrings): NoveoStrings {
             betaUpdatesBody = "当 Beta 版本比当前版本更新时接收它。",
             downloading = "下载中...",
             doubleTapReaction = "双击反应",
-            doubleTapReactionBody = "选择双击消息时发送的反应。"
+            doubleTapReactionBody = "选择双击消息时发送的反应。",
+            animatedEmojiTgs = "动态表情",
+            animatedEmojiTgsBody = "将支持的表情渲染为 .tgs 动画。关闭后显示普通文本表情。"
         )
         "fa" -> strings.copy(
             registerOnWebTitle = "ثبت نام در نوئو وب",
@@ -1455,7 +1463,9 @@ private fun applyExtendedOverrides(strings: NoveoStrings): NoveoStrings {
             betaUpdatesBody = "اگر نسخه های بتا از نسخه فعلی شما جدیدتر باشند آنها را دریافت کنید.",
             downloading = "در حال دانلود...",
             doubleTapReaction = "واکنش با دو ضربه",
-            doubleTapReactionBody = "واکنشی را انتخاب کنید که با دو بار ضربه روی پیام ارسال می شود."
+            doubleTapReactionBody = "واکنشی را انتخاب کنید که با دو بار ضربه روی پیام ارسال می شود.",
+            animatedEmojiTgs = "ایموجی متحرک",
+            animatedEmojiTgsBody = "ایموجی های پشتیبانی شده را به صورت انیمیشن .tgs نمایش بده. برای نمایش ایموجی متنی عادی، خاموشش کن."
         )
         "es" -> strings.copy(
             registerOnWebTitle = "Registrarse en Noveo Web",
@@ -1465,7 +1475,9 @@ private fun applyExtendedOverrides(strings: NoveoStrings): NoveoStrings {
             betaUpdatesBody = "Recibe compilaciones beta cuando sean mas nuevas que tu version actual.",
             downloading = "Descargando...",
             doubleTapReaction = "Reaccion de doble toque",
-            doubleTapReactionBody = "Elige la reaccion que se envia al tocar dos veces un mensaje."
+            doubleTapReactionBody = "Elige la reaccion que se envia al tocar dos veces un mensaje.",
+            animatedEmojiTgs = "Emoji animado",
+            animatedEmojiTgsBody = "Renderiza los emojis compatibles como animaciones .tgs. Desactivalo para mostrar emojis de texto normales."
         )
         "fr" -> strings.copy(
             registerOnWebTitle = "S'inscrire sur Noveo Web",
@@ -1475,7 +1487,9 @@ private fun applyExtendedOverrides(strings: NoveoStrings): NoveoStrings {
             betaUpdatesBody = "Recevoir les versions beta lorsqu'elles sont plus recentes que votre version actuelle.",
             downloading = "Telechargement...",
             doubleTapReaction = "Reaction au double appui",
-            doubleTapReactionBody = "Choisissez la reaction envoyee lorsque vous touchez deux fois un message."
+            doubleTapReactionBody = "Choisissez la reaction envoyee lorsque vous touchez deux fois un message.",
+            animatedEmojiTgs = "Emoji anime",
+            animatedEmojiTgsBody = "Afficher les emojis compatibles comme animations .tgs. Desactivez cette option pour afficher les emojis texte normaux."
         )
         "ar" -> strings.copy(
             registerOnWebTitle = "التسجيل عبر Noveo Web",
@@ -1485,7 +1499,9 @@ private fun applyExtendedOverrides(strings: NoveoStrings): NoveoStrings {
             betaUpdatesBody = "استلم إصدارات بيتا عندما تكون أحدث من إصدارك الحالي.",
             downloading = "جارٍ التنزيل...",
             doubleTapReaction = "تفاعل النقر المزدوج",
-            doubleTapReactionBody = "اختر التفاعل الذي يتم إرساله عند النقر المزدوج على الرسالة."
+            doubleTapReactionBody = "اختر التفاعل الذي يتم إرساله عند النقر المزدوج على الرسالة.",
+            animatedEmojiTgs = "رموز تعبيرية متحركة",
+            animatedEmojiTgsBody = "اعرض الرموز المدعومة كرسوم .tgs متحركة. أوقفه لعرض الرموز النصية العادية."
         )
         "tr" -> strings.copy(
             registerOnWebTitle = "Noveo Web uzerinden kayit olun",
@@ -1495,7 +1511,9 @@ private fun applyExtendedOverrides(strings: NoveoStrings): NoveoStrings {
             betaUpdatesBody = "Mevcut surumunuzden daha yeni olduklarinda beta surumleri alin.",
             downloading = "Indiriliyor...",
             doubleTapReaction = "Cift dokunma tepkisi",
-            doubleTapReactionBody = "Bir mesaja cift dokundugunuzda gonderilecek tepkiyi secin."
+            doubleTapReactionBody = "Bir mesaja cift dokundugunuzda gonderilecek tepkiyi secin.",
+            animatedEmojiTgs = "Animasyonlu emoji",
+            animatedEmojiTgsBody = "Desteklenen emojileri .tgs animasyonu olarak goster. Normal metin emojileri icin kapatin."
         )
         else -> strings
     }

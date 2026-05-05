@@ -63,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -90,7 +91,8 @@ private val CONTEXT_MENU_QUICK_REACTIONS = CONTEXT_MENU_REACTIONS.take(7)
 internal data class MessageContextMenuState(
     val message: ChatMessage,
     val ownMessage: Boolean,
-    val bubbleBounds: Rect
+    val bubbleBounds: Rect,
+    val tapPosition: Offset = Offset.Unspecified
 )
 
 @Composable
@@ -224,21 +226,25 @@ private fun MessageContextMenu(
         }
 
         val maxLeft = (screenWidthPx - targetWidthPx - safeHorizontalPx).coerceAtLeast(safeHorizontalPx)
+        val tapPosition = state.tapPosition.takeUnless { it == Offset.Unspecified }
+        val anchorX = tapPosition?.x ?: if (state.ownMessage) state.bubbleBounds.right else state.bubbleBounds.left
+        val anchorY = tapPosition?.y ?: state.bubbleBounds.top
+        val horizontalTouchInsetPx = with(density) { 32.dp.toPx() }
         val preferredLeft = if (state.ownMessage) {
-            state.bubbleBounds.right - targetWidthPx
+            anchorX - targetWidthPx + horizontalTouchInsetPx
         } else {
-            state.bubbleBounds.left
+            anchorX - horizontalTouchInsetPx
         }
         val left = preferredLeft.coerceIn(safeHorizontalPx, maxLeft)
 
-        val spaceAbove = state.bubbleBounds.top - safeTopPx - bubbleGapPx
-        val spaceBelow = screenHeightPx - safeBottomPx - state.bubbleBounds.bottom - bubbleGapPx
+        val spaceAbove = anchorY - safeTopPx - bubbleGapPx
+        val spaceBelow = screenHeightPx - safeBottomPx - anchorY - bubbleGapPx
         val minimumBelowPx = with(density) { 64.dp.toPx() }
         val renderBelow = spaceAbove < targetHeightPx && spaceBelow > minimumBelowPx
         val preferredTop = if (renderBelow) {
-            state.bubbleBounds.bottom + bubbleGapPx
+            anchorY + bubbleGapPx
         } else {
-            state.bubbleBounds.top - targetHeightPx - bubbleGapPx
+            anchorY - targetHeightPx - bubbleGapPx
         }
         val maxTop = (screenHeightPx - targetHeightPx - safeBottomPx).coerceAtLeast(safeTopPx)
         val finalTop = preferredTop.coerceIn(safeTopPx, maxTop)
@@ -330,6 +336,7 @@ private fun MessageContextMenu(
         }
     }
 }
+
 
 @Composable
 private fun MessageContextMenuActions(

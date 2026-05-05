@@ -97,6 +97,7 @@ data class AppUiState(
     val incomingCall: SocketEvent.IncomingCall? = null,
     val betaUpdatesEnabled: Boolean = false,
     val doubleTapReaction: String = "❤",
+    val animatedEmojiTgsEnabled: Boolean = true,
     val isSendingMessage: Boolean = false,
     val messagesByChat: Map<String, List<ChatMessage>> = emptyMap()
 )
@@ -168,7 +169,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     init {
         _uiState.value = _uiState.value.copy(
             betaUpdatesEnabled = sessionStore.readBetaUpdatesEnabled(),
-            doubleTapReaction = sessionStore.readDoubleTapReaction()
+            doubleTapReaction = sessionStore.readDoubleTapReaction(),
+            animatedEmojiTgsEnabled = sessionStore.readAnimatedEmojiTgsEnabled()
         )
         restoreSession()
         checkForUpdate()
@@ -424,6 +426,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setDoubleTapReaction(reaction: String) {
         sessionStore.writeDoubleTapReaction(reaction)
         _uiState.value = _uiState.value.copy(doubleTapReaction = reaction)
+    }
+
+    fun setAnimatedEmojiTgsEnabled(enabled: Boolean) {
+        sessionStore.writeAnimatedEmojiTgsEnabled(enabled)
+        _uiState.value = _uiState.value.copy(animatedEmojiTgsEnabled = enabled)
     }
 
     fun cancelPendingUpload(chatId: String) {
@@ -723,6 +730,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val notificationSettings = _uiState.value.notificationSettings
         val betaUpdatesEnabled = _uiState.value.betaUpdatesEnabled
         val doubleTapReaction = _uiState.value.doubleTapReaction
+        val animatedEmojiTgsEnabled = _uiState.value.animatedEmojiTgsEnabled
         getApplication<Application>().stopService(Intent(getApplication(), NoveoNotificationService::class.java))
         socketResyncJob?.cancel()
         selectedChatRefreshJob?.cancel()
@@ -733,12 +741,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         sessionStore.writeNotificationSettings(notificationSettings)
         sessionStore.writeBetaUpdatesEnabled(betaUpdatesEnabled)
         sessionStore.writeDoubleTapReaction(doubleTapReaction)
+        sessionStore.writeAnimatedEmojiTgsEnabled(animatedEmojiTgsEnabled)
         _uiState.value = AppUiState(
             startupState = StartupState.Auth,
             languageCode = languageCode,
             notificationSettings = notificationSettings,
             betaUpdatesEnabled = betaUpdatesEnabled,
-            doubleTapReaction = doubleTapReaction
+            doubleTapReaction = doubleTapReaction,
+            animatedEmojiTgsEnabled = animatedEmojiTgsEnabled
         )
     }
 

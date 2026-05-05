@@ -62,6 +62,14 @@ class SessionStore(context: Context) {
             .apply()
     }
 
+    fun readAnimatedEmojiTgsEnabled(): Boolean = prefs.getBoolean("animated_emoji_tgs_enabled", true)
+
+    fun writeAnimatedEmojiTgsEnabled(enabled: Boolean) {
+        prefs.edit()
+            .putBoolean("animated_emoji_tgs_enabled", enabled)
+            .apply()
+    }
+
     fun readLanguageCode(): String = prefs.getString("language_code", "en") ?: "en"
 
     fun writeLanguageCode(code: String) {
