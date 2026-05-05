@@ -234,6 +234,26 @@ private data class SelectedMediaAttachment(
     val localPath: String
 )
 
+private fun MessageFileAttachment.shouldRenderAsTgsStickerInChat(): Boolean {
+    val n = name.trim().lowercase()
+    val u = url.trim().lowercase()
+    val t = type.trim().lowercase()
+    val namedSticker = n == "sticker" ||
+        n.startsWith("sticker.") ||
+        n.contains("_sticker") ||
+        n.contains("-sticker") ||
+        n.contains(" sticker")
+    return isTgsSticker() ||
+        t.contains("tgsticker") ||
+        t == "application/x-tgs" ||
+        t == "application/x-tgsticker" ||
+        t.contains("lottie") ||
+        n.endsWith(".tgs") ||
+        u.endsWith(".tgs") ||
+        u.contains(".tgs?") ||
+        (namedSticker && (t.contains("gzip") || t.contains("tgz") || t == "application/octet-stream" || t == "binary/octet-stream"))
+}
+
 private fun localAttachmentCacheFile(root: File, file: MessageFileAttachment): File {
     val extension = file.name.substringAfterLast('.', "").ifBlank {
         when {
@@ -241,7 +261,7 @@ private fun localAttachmentCacheFile(root: File, file: MessageFileAttachment): F
             file.type.equals("image/gif", true) -> "gif"
             file.type.equals("image/webp", true) -> "webp"
             file.type.equals("image/jpeg", true) -> "jpg"
-            file.isTgsSticker() -> "tgs"
+            file.shouldRenderAsTgsStickerInChat() -> "tgs"
             else -> "bin"
         }
     }
@@ -394,7 +414,6 @@ internal fun HomeScreen(
     onCheckUpdate: () -> Unit,
     onSetBetaUpdatesEnabled: (Boolean) -> Unit,
     onSetDoubleTapReaction: (String) -> Unit,
-    onSetAnimatedEmojiTgsEnabled: (Boolean) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     onPlayAudio: (ChatMessage) -> Unit,
@@ -460,7 +479,7 @@ internal fun HomeScreen(
         if (!localPath.isNullOrBlank() && (attachment.isImage() || attachment.isVideo())) {
             selectedMediaAttachment = SelectedMediaAttachment(attachment = attachment, localPath = localPath)
         } else if (attachment.isImage() || attachment.isVideo()) {
-            // Do not auto-download or open remote media. Images/videos render only after an explicit download.
+            onDownloadFile(message)
         } else {
             val url = attachment.url.normalizeNoveoUrl()
             if (url != null) {
@@ -1130,7 +1149,6 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 onCheckUpdate = onCheckUpdate,
                 onSetBetaUpdatesEnabled = onSetBetaUpdatesEnabled,
                 onSetDoubleTapReaction = onSetDoubleTapReaction,
-                onSetAnimatedEmojiTgsEnabled = onSetAnimatedEmojiTgsEnabled,
                 onUpdateNotificationSettings = onUpdateNotificationSettings,
                 onRequestBatteryOptimization = onRequestBatteryOptimization,
                 onRequestPermission = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
@@ -1904,12 +1922,11 @@ private fun ChatPane(
                     maxBubbleWidth = maxBubbleWidth,
                     onReply = { onReply(message) },
                     onToggleReaction = onToggleReaction,
-                    onOpenContextMenu = { bubbleBounds, tapPosition ->
+                    onOpenContextMenu = { bubbleBounds ->
                         contextMenuState = MessageContextMenuState(
                             message = message,
                             ownMessage = ownMessage,
-                            bubbleBounds = bubbleBounds,
-                            tapPosition = tapPosition
+                            bubbleBounds = bubbleBounds
                         )
                         contextMenuExpanded = false
                     },
@@ -1920,7 +1937,6 @@ private fun ChatPane(
                     onStopAudio = onStopAudio,
                     onSeekAudio = onSeekAudio,
                     doubleTapReaction = doubleTapEmoji,
-                    animatedEmojiTgsEnabled = state.animatedEmojiTgsEnabled,
                     onDownloadFile = onDownloadFile,
                     onCancelDownload = onCancelDownload,
                     onHandleClick = onHandleClick,
@@ -2425,7 +2441,7 @@ private fun MessageRow(
     maxBubbleWidth: Dp,
     onReply: () -> Unit,
     onToggleReaction: (String, String) -> Unit,
-    onOpenContextMenu: (Rect, Offset) -> Unit = { _, _ -> },
+    onOpenContextMenu: (Rect) -> Unit = {},
     onScrollToMessage: (String) -> Unit,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
@@ -2433,7 +2449,6 @@ private fun MessageRow(
     onStopAudio: () -> Unit,
     onSeekAudio: (Float) -> Unit,
     doubleTapReaction: String,
-    animatedEmojiTgsEnabled: Boolean,
     onDownloadFile: (ChatMessage) -> Unit,
     onCancelDownload: (ChatMessage) -> Unit,
     onHandleClick: (String) -> Unit,
@@ -2470,7 +2485,6 @@ private fun MessageRow(
         localizeDigits(sdf.format(Date(message.timestamp * 1000)), strings.languageCode)
     }
     val bubbleBoundsRef = remember(message.id) { arrayOfNulls<Rect>(1) }
-    val rowBoundsRef = remember(message.id) { arrayOfNulls<Rect>(1) }
 
     val animatePendingIntro = ownMessage && message.pending
     val pendingIntroFraction = if (animatePendingIntro) {
@@ -2507,22 +2521,13 @@ private fun MessageRow(
             .fillMaxWidth()
             .padding(top = if (showSenderInfo) 10.dp else 0.dp)
             .padding(bottom = if (hasTail) 6.dp else 0.dp)
-            .onGloballyPositioned { rowBoundsRef[0] = it.boundsInRoot() }
-            .pointerInput(message.id, doubleTapReaction) {
-                fun openMenuFromTap(localTap: Offset) {
-                    val bubbleBounds = bubbleBoundsRef[0] ?: return
-                    val rowBounds = rowBoundsRef[0] ?: bubbleBounds
-                    onOpenContextMenu(
-                        bubbleBounds,
-                        Offset(rowBounds.left + localTap.x, rowBounds.top + localTap.y)
-                    )
-                }
-                detectTapGestures(
-                    onTap = { tapOffset -> openMenuFromTap(tapOffset) },
-                    onDoubleTap = { onToggleReaction(message.id, doubleTapReaction) },
-                    onLongPress = { tapOffset -> openMenuFromTap(tapOffset) }
-                )
-            }
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { bubbleBoundsRef[0]?.let(onOpenContextMenu) },
+                onDoubleClick = { onToggleReaction(message.id, doubleTapReaction) },
+                onLongClick = { bubbleBoundsRef[0]?.let(onOpenContextMenu) }
+            )
             .then(rowTransformModifier)
     ) {
         val bubbleModifier = Modifier
@@ -2579,19 +2584,17 @@ private fun MessageRow(
                 modifier = if (ownMessage) Modifier else Modifier.weight(1f, false)
             ) {
                 val emojiTgsUrl = remember(message.content.text) {
-                    message.content.text?.takeIf { animatedEmojiTgsEnabled }?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
+                    message.content.text?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
                 }
                 val isSticker = (message.content.file?.isSticker() == true) || (emojiTgsUrl != null)
                 
                 if (isSticker) {
                     val file = message.content.file
                     val emojiTgsUrlState = remember(message.content.text) {
-                        message.content.text?.takeIf { animatedEmojiTgsEnabled }?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
+                        message.content.text?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
                     }
-                    val localStickerPath = file?.let { attachmentDownloadState?.localPath }
-                    val localStickerFile = remember(localStickerPath) { localStickerPath?.let(::File)?.takeIf { it.exists() } }
-                    val normalizedUrl = remember(file?.url, emojiTgsUrlState, localStickerFile) { 
-                        emojiTgsUrlState ?: localStickerFile?.toURI()?.toString() ?: file?.url.normalizeNoveoUrl() ?: ""
+                    val normalizedUrl = remember(file?.url, emojiTgsUrlState) { 
+                        emojiTgsUrlState ?: file?.url.normalizeNoveoUrl() ?: ""
                     }
                     Box(
                         modifier = bubbleModifier.padding(vertical = 4.dp)
@@ -2634,15 +2637,13 @@ private fun MessageRow(
                                 }
                             }
 
-                            val isTgs = emojiTgsUrlState != null || file?.isTgsSticker() == true
+                            val isTgs = emojiTgsUrlState != null || file?.shouldRenderAsTgsStickerInChat() == true
                             if (isTgs) {
                                 TgsSticker(
                                     url = normalizedUrl,
                                     modifier = Modifier.size(if (emojiTgsUrlState != null) 80.dp else 160.dp),
                                     tint = Color.White,
-                                    iterations = if (emojiTgsUrlState != null) 1 else com.airbnb.lottie.compose.LottieConstants.IterateForever,
-                                    restartOnPlay = emojiTgsUrlState != null,
-                                    autoPlay = emojiTgsUrlState != null && ownMessage && message.pending
+                                    iterations = if (emojiTgsUrlState != null) 1 else com.airbnb.lottie.compose.LottieConstants.IterateForever
                                 )
                             } else {
                                 AsyncImage(
@@ -3152,14 +3153,46 @@ private fun MessageAttachment(
     val progress = downloadState?.progress ?: 0f
     val overlayTint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
 
-    if (file.isImage()) {
+    if (file.shouldRenderAsTgsStickerInChat()) {
+        val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
+        val renderUrl = localFile?.absolutePath ?: normalizedUrl
+        Box(
+            modifier = Modifier
+                .padding(bottom = 2.dp)
+                .size(160.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            TgsSticker(
+                url = renderUrl,
+                modifier = Modifier.fillMaxSize(),
+                tint = overlayTint,
+                iterations = com.airbnb.lottie.compose.LottieConstants.IterateForever,
+                autoPlay = true,
+                playOnClick = false
+            )
+            if (isDownloading) {
+                AttachmentDownloadOverlay(
+                    isVideo = false,
+                    isDownloaded = isDownloaded,
+                    isDownloading = true,
+                    progress = progress,
+                    tint = overlayTint,
+                    onDownloadClick = onDownloadClick,
+                    onCancelClick = onCancelClick,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+        }
+    } else if (file.isImage()) {
+        val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
+        var imageLoaded by remember { mutableStateOf(false) }
         Card(
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier
                 .padding(bottom = 2.dp)
                 .fillMaxWidth()
                 .heightIn(max = 340.dp)
-                .clickable(enabled = isDownloaded) { onClick() },
+                .clickable { if (isDownloaded) onClick() else onDownloadClick() },
             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
         ) {
             Box(
@@ -3168,16 +3201,21 @@ private fun MessageAttachment(
                     .heightIn(min = 180.dp)
                     .background((if (ownMessage) tgColors.outgoingBubble else tgColors.incomingBubble).copy(alpha = 0.68f))
             ) {
-                if (localFile != null) {
-                    AsyncImage(
-                        model = localFile,
-                        contentDescription = file.name,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentScale = ContentScale.FillWidth
-                    )
+                // Auto-load if we have a local file OR if we want to rely on Coil's automatic cache
+                AsyncImage(
+                    model = localFile ?: normalizedUrl,
+                    contentDescription = file.name,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentScale = ContentScale.FillWidth,
+                    onSuccess = { imageLoaded = true }
+                )
+                
+                if (!isDownloaded && !isDownloading && !imageLoaded) {
+                    // Overlay a hint if not yet "officially" downloaded (for full res/saving)
+                    // but AsyncImage above will already try to show it from cache
                 }
 
-                if (!isDownloaded || isDownloading) {
+                if (!imageLoaded || isDownloading) {
                     AttachmentDownloadOverlay(
                         isVideo = false,
                         isDownloaded = isDownloaded,
@@ -3197,7 +3235,7 @@ private fun MessageAttachment(
                 .padding(bottom = 2.dp)
                 .fillMaxWidth()
                 .heightIn(min = 180.dp)
-                .clickable(enabled = isDownloaded) { onClick() },
+                .clickable { if (isDownloaded) onClick() else onDownloadClick() },
             color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.08f),
             shape = RoundedCornerShape(10.dp)
         ) {
@@ -3521,7 +3559,6 @@ private fun SettingsModal(
     onCheckUpdate: () -> Unit,
     onSetBetaUpdatesEnabled: (Boolean) -> Unit,
     onSetDoubleTapReaction: (String) -> Unit,
-    onSetAnimatedEmojiTgsEnabled: (Boolean) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     onRequestPermission: () -> Unit
@@ -3554,7 +3591,7 @@ private fun SettingsModal(
                     SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings)
                     SettingsSection.PROFILE -> SettingsProfileSection(strings, me, onUpdateProfile)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, onSetAnimatedEmojiTgsEnabled, currentTheme, onThemeChange, onRequestBatteryOptimization)
+                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, currentTheme, onThemeChange, onRequestBatteryOptimization)
                     SettingsSection.CHANGELOG -> SettingsChangelogSection(strings)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
                     SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings, onRequestPermission)
@@ -3711,7 +3748,6 @@ private fun SettingsPreferencesSection(
     onCheckUpdate: () -> Unit,
     onSetBetaUpdatesEnabled: (Boolean) -> Unit,
     onSetDoubleTapReaction: (String) -> Unit,
-    onSetAnimatedEmojiTgsEnabled: (Boolean) -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
     onRequestBatteryOptimization: () -> Unit
@@ -3767,29 +3803,6 @@ private fun SettingsPreferencesSection(
                 androidx.compose.material3.Switch(
                     checked = state.betaUpdatesEnabled,
                     onCheckedChange = onSetBetaUpdatesEnabled
-                )
-            }
-        }
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSetAnimatedEmojiTgsEnabled(!state.animatedEmojiTgsEnabled) }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(strings.animatedEmojiTgs, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(4.dp))
-                    Text(strings.animatedEmojiTgsBody, style = MaterialTheme.typography.bodySmall)
-                }
-                androidx.compose.material3.Switch(
-                    checked = state.animatedEmojiTgsEnabled,
-                    onCheckedChange = onSetAnimatedEmojiTgsEnabled
                 )
             }
         }
