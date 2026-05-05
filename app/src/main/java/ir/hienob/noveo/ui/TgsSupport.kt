@@ -36,10 +36,6 @@ import java.util.zip.GZIPInputStream
 
 private var tgsClient: OkHttpClient? = null
 
-private fun readGzippedTgs(bytes: ByteArray): String {
-    return GZIPInputStream(ByteArrayInputStream(bytes)).bufferedReader().use { it.readText() }
-}
-
 private fun loadTgsJson(url: String): String {
     val bytes = when {
         url.startsWith("file:", ignoreCase = true) -> File(URI(url)).readBytes()
@@ -56,7 +52,7 @@ private fun loadTgsJson(url: String): String {
     }
 
     return if (bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
-        readGzippedTgs(bytes)
+        GZIPInputStream(ByteArrayInputStream(bytes)).bufferedReader().use { it.readText() }
     } else {
         bytes.toString(Charsets.UTF_8)
     }
@@ -80,6 +76,31 @@ internal fun TgsSticker(
     restartOnPlay: Boolean = false,
     autoPlay: Boolean = iterations != 1,
     playOnClick: Boolean = iterations == 1
+) {
+    if (iterations == LottieConstants.IterateForever && autoPlay && !playOnClick) {
+        LoopingTgsSticker(
+            url = url,
+            modifier = modifier,
+            tint = tint
+        )
+    } else {
+        ControlledTgsSticker(
+            url = url,
+            modifier = modifier,
+            tint = tint,
+            iterations = iterations,
+            restartOnPlay = restartOnPlay,
+            autoPlay = autoPlay,
+            playOnClick = playOnClick
+        )
+    }
+}
+
+@Composable
+private fun LoopingTgsSticker(
+    url: String?,
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.primary
 ) {
     var json by remember(url) { mutableStateOf<String?>(null) }
     var failed by remember(url) { mutableStateOf(false) }
@@ -105,40 +126,15 @@ internal fun TgsSticker(
     val composition by rememberLottieComposition(
         spec = json?.let(LottieCompositionSpec::JsonString) ?: LottieCompositionSpec.JsonString("{}")
     )
+    val currentComposition = composition
 
-    Box(
-        modifier = if (iterations == 1 && playOnClick) {
-            modifier.clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {}
-            )
-        } else {
-            modifier
-        },
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
         when {
-            composition != null && iterations != 1 -> {
-                // Keep sticker playback on the original 0.6.3 code path: no manual progress state,
-                // no click handling, and no one-shot animation state. Custom .tgs stickers should
-                // simply load, loop, and let parent sticker-picker taps continue to work.
+            currentComposition != null -> {
                 LottieAnimation(
-                    composition = composition,
-                    iterations = iterations,
-                    restartOnPlay = restartOnPlay,
-                    isPlaying = true,
+                    composition = currentComposition,
+                    iterations = LottieConstants.IterateForever,
                     modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            composition != null -> {
-                OneShotTgsAnimation(
-                    composition = composition,
-                    modifier = Modifier.fillMaxSize(),
-                    autoPlay = autoPlay,
-                    restartOnPlay = restartOnPlay,
-                    playOnClick = playOnClick
                 )
             }
 
@@ -162,50 +158,98 @@ internal fun TgsSticker(
 }
 
 @Composable
-private fun OneShotTgsAnimation(
-    composition: com.airbnb.lottie.LottieComposition,
-    modifier: Modifier,
-    autoPlay: Boolean,
-    restartOnPlay: Boolean,
-    playOnClick: Boolean
+private fun ControlledTgsSticker(
+    url: String?,
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.primary,
+    iterations: Int = 1,
+    restartOnPlay: Boolean = false,
+    autoPlay: Boolean = false,
+    playOnClick: Boolean = true
 ) {
-    var isPlaying by remember(composition) { mutableStateOf(autoPlay) }
-    var playVersion by remember(composition) { mutableStateOf(0) }
-    val progress by animateLottieCompositionAsState(
-        composition = composition,
-        isPlaying = isPlaying,
-        iterations = 1,
-        restartOnPlay = restartOnPlay || playVersion > 0
-    )
+    val shouldAutoPlay = iterations != 1 || autoPlay
+    var json by remember(url) { mutableStateOf<String?>(null) }
+    var failed by remember(url) { mutableStateOf(false) }
+    var isPlaying by remember(url) { mutableStateOf(shouldAutoPlay) }
 
-    LaunchedEffect(composition, autoPlay) {
-        isPlaying = autoPlay
-        if (autoPlay) playVersion++
+    LaunchedEffect(url) {
+        json = null
+        failed = false
+        if (url.isNullOrBlank()) {
+            failed = true
+            return@LaunchedEffect
+        }
+        runCatching {
+            withContext(Dispatchers.IO) {
+                loadTgsJson(url)
+            }
+        }.onSuccess {
+            json = it
+        }.onFailure {
+            failed = true
+        }
     }
 
-    LaunchedEffect(progress, isPlaying) {
-        if (isPlaying && progress >= 0.99f) {
+    val composition by rememberLottieComposition(
+        spec = json?.let(LottieCompositionSpec::JsonString) ?: LottieCompositionSpec.JsonString("{}")
+    )
+    val lottieProgress by animateLottieCompositionAsState(
+        composition = composition,
+        isPlaying = isPlaying,
+        iterations = iterations,
+        restartOnPlay = restartOnPlay || iterations == 1
+    )
+    val currentComposition = composition
+
+    LaunchedEffect(url, shouldAutoPlay) {
+        isPlaying = shouldAutoPlay
+    }
+
+    LaunchedEffect(lottieProgress, isPlaying, iterations) {
+        if (isPlaying && iterations == 1 && lottieProgress >= 0.99f) {
             isPlaying = false
         }
     }
 
-    Box(
-        modifier = if (playOnClick) {
-            modifier.clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                playVersion++
-                isPlaying = true
-            }
-        } else {
-            modifier
+    val playbackModifier = if (playOnClick) {
+        modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null
+        ) {
+            isPlaying = true
         }
+    } else {
+        modifier
+    }
+
+    Box(
+        modifier = playbackModifier,
+        contentAlignment = Alignment.Center
     ) {
-        LottieAnimation(
-            composition = composition,
-            progress = { progress },
-            modifier = Modifier.fillMaxSize()
-        )
+        when {
+            currentComposition != null -> {
+                LottieAnimation(
+                    composition = currentComposition,
+                    progress = { lottieProgress },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            failed -> {
+                Text(
+                    text = "TGS",
+                    color = tint,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            else -> {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
+                    color = tint
+                )
+            }
+        }
     }
 }
