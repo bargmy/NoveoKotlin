@@ -2566,7 +2566,7 @@ private fun MessageRow(
                 val emojiTgsUrl = remember(message.content.text) {
                     message.content.text?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
                 }
-                val isSticker = (message.content.file?.let { it.isSticker() || (it.fileName?.lowercase()?.endsWith(".webp") == true) } == true) || (emojiTgsUrl != null)
+                val isSticker = (message.content.file?.isSticker() == true) || (emojiTgsUrl != null)
                 
                 if (isSticker) {
                     val file = message.content.file
