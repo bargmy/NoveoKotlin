@@ -208,28 +208,40 @@ private fun MessageContextMenu(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenWidthPx = with(density) { maxWidth.toPx() }
         val screenHeightPx = with(density) { maxHeight.toPx() }
-        val targetWidthPx = with(density) { (if (expanded) 320.dp else 290.dp).toPx() }
-        val targetHeightPx = with(density) { (if (expanded) 320.dp else 400.dp).toPx() } 
-
-        val minLeft = with(density) { 8.dp.toPx() }
-        val maxLeft = (screenWidthPx - targetWidthPx - with(density) { 12.dp.toPx() }).coerceAtLeast(minLeft)
-        val left = state.bubbleBounds.left.coerceIn(minLeft, maxLeft)
-
-        // Standard position: above the bubble
-        var top = state.bubbleBounds.top - targetHeightPx - with(density) { 10.dp.toPx() }
-        
-        // If it doesn't fit on top, or bubble is too high, show below
-        if (top < with(density) { 24.dp.toPx() }) {
-            top = state.bubbleBounds.bottom + with(density) { 10.dp.toPx() }
+        val safeHorizontalPx = with(density) { 8.dp.toPx() }
+        val safeTopPx = with(density) { 8.dp.toPx() }
+        val safeBottomPx = with(density) { 16.dp.toPx() }
+        val bubbleGapPx = with(density) { 10.dp.toPx() }
+        val targetWidthPx = with(density) { 320.dp.toPx() }
+        val actionCount = 4 +
+            (if (state.ownMessage && state.message.content.text != null) 1 else 0) +
+            (if (state.message.content.text != null) 1 else 0) +
+            (if (state.message.seenBy.isNotEmpty()) 1 else 0) +
+            (if (state.message.content.file?.let { it.isImage() || it.isTgsSticker() } == true) 1 else 0) +
+            (if (state.message.content.file != null) 1 else 0)
+        val targetHeightPx = with(density) {
+            if (expanded) 320.dp.toPx() else (52.dp + 6.dp + 8.dp + (actionCount * 40).dp).toPx()
         }
-        
-        // Ensure it doesn't go off screen at the bottom
-        val maxTop = (screenHeightPx - with(density) { 60.dp.toPx() }) // Minimal visible part
-        if (top > maxTop) {
-             top = (screenHeightPx - targetHeightPx - with(density) { 16.dp.toPx() }).coerceAtLeast(with(density) { 8.dp.toPx() })
+
+        val maxLeft = (screenWidthPx - targetWidthPx - safeHorizontalPx).coerceAtLeast(safeHorizontalPx)
+        val preferredLeft = if (state.ownMessage) {
+            state.bubbleBounds.right - targetWidthPx
+        } else {
+            state.bubbleBounds.left
         }
-        
-        val finalTop = top.coerceIn(with(density) { 8.dp.toPx() }, (screenHeightPx - with(density) { 40.dp.toPx() }))
+        val left = preferredLeft.coerceIn(safeHorizontalPx, maxLeft)
+
+        val spaceAbove = state.bubbleBounds.top - safeTopPx - bubbleGapPx
+        val spaceBelow = screenHeightPx - safeBottomPx - state.bubbleBounds.bottom - bubbleGapPx
+        val minimumBelowPx = with(density) { 64.dp.toPx() }
+        val renderBelow = spaceAbove < targetHeightPx && spaceBelow > minimumBelowPx
+        val preferredTop = if (renderBelow) {
+            state.bubbleBounds.bottom + bubbleGapPx
+        } else {
+            state.bubbleBounds.top - targetHeightPx - bubbleGapPx
+        }
+        val maxTop = (screenHeightPx - targetHeightPx - safeBottomPx).coerceAtLeast(safeTopPx)
+        val finalTop = preferredTop.coerceIn(safeTopPx, maxTop)
 
         Column(
             modifier = Modifier
@@ -240,10 +252,31 @@ private fun MessageContextMenu(
                     alpha = wrapperAlpha
                     scaleX = wrapperScale
                     scaleY = wrapperScale
-                    transformOrigin = TransformOrigin(0.5f, 0.5f)
+                    transformOrigin = TransformOrigin(0.5f, if (renderBelow) 0f else 1f)
                 },
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            if (renderBelow && !expanded) {
+                MessageContextMenuActions(
+                    state = state,
+                    menuSurface = menuSurface,
+                    menuIcon = menuIcon,
+                    menuText = menuText,
+                    deleteColor = deleteColor,
+                    strings = strings,
+                    onReply = onReply,
+                    onEdit = onEdit,
+                    onPin = onPin,
+                    onCopyText = onCopyText,
+                    onForward = onForward,
+                    onSeenBy = onSeenBy,
+                    onAddAsSticker = onAddAsSticker,
+                    onDownload = onDownload,
+                    onDelete = onDelete,
+                    slideDown = true
+                )
+            }
+
             Surface(
                 color = menuSurface,
                 shape = RoundedCornerShape(reactionsRadius),
@@ -274,87 +307,128 @@ private fun MessageContextMenu(
                 }
             }
 
-            AnimatedVisibility(
-                visible = !expanded,
-                enter = fadeIn() + slideInVertically { -it / 8 },
-                exit = fadeOut() + slideOutVertically { -it / 8 }
-            ) {
-                Surface(
-                    color = menuSurface,
-                    shape = RoundedCornerShape(12.dp),
-                    shadowElevation = 8.dp
-                ) {
-                    Column(modifier = Modifier.width(220.dp).padding(vertical = 4.dp)) {
-                        ContextMenuActionItem(
-                            label = strings.reply,
-                            icon = { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
-                            textColor = menuText,
-                            onClick = onReply
-                        )
-                        if (state.ownMessage && state.message.content.text != null) {
-                            ContextMenuActionItem(
-                                label = strings.edit,
-                                icon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
-                                textColor = menuText,
-                                onClick = onEdit
-                            )
-                        }
-                        ContextMenuActionItem(
-                            label = if (state.message.isPinned) strings.unpin else strings.pin,
-                            icon = { Icon(Icons.Outlined.Bookmark, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
-                            textColor = menuText,
-                            onClick = onPin
-                        )
-                        if (state.message.content.text != null) {
-                            ContextMenuActionItem(
-                                label = strings.copyText,
-                                icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
-                                textColor = menuText,
-                                onClick = onCopyText
-                            )
-                        }
-                        ContextMenuActionItem(
-                            label = strings.forward,
-                            icon = { Icon(Icons.Outlined.ArrowForward, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
-                            textColor = menuText,
-                            onClick = onForward
-                        )
+            if (!renderBelow && !expanded) {
+                MessageContextMenuActions(
+                    state = state,
+                    menuSurface = menuSurface,
+                    menuIcon = menuIcon,
+                    menuText = menuText,
+                    deleteColor = deleteColor,
+                    strings = strings,
+                    onReply = onReply,
+                    onEdit = onEdit,
+                    onPin = onPin,
+                    onCopyText = onCopyText,
+                    onForward = onForward,
+                    onSeenBy = onSeenBy,
+                    onAddAsSticker = onAddAsSticker,
+                    onDownload = onDownload,
+                    onDelete = onDelete,
+                    slideDown = false
+                )
+            }
+        }
+    }
+}
 
-                        if (state.message.seenBy.isNotEmpty()) {
-                            ContextMenuActionItem(
-                                label = strings.seenBy,
-                                icon = { Icon(Icons.Outlined.Check, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
-                                textColor = menuText,
-                                onClick = onSeenBy
-                            )
-                        }
-                        
-                        val file = state.message.content.file
-                        if (file != null && (file.isImage() || file.isTgsSticker())) {
-                            ContextMenuActionItem(
-                                label = strings.addAsSticker,
-                                icon = { Icon(Icons.Outlined.Star, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
-                                textColor = menuText,
-                                onClick = onAddAsSticker
-                            )
-                        }
-
-                        if (state.message.content.file != null) {
-                            ContextMenuActionItem(
-                                label = strings.download,
-                                icon = { Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
-                                textColor = menuText,
-                                onClick = onDownload
-                            )
-                        }
-                        ContextMenuActionItem(
-                            label = strings.delete,
-                            icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = deleteColor, modifier = Modifier.size(18.dp)) },
-                            textColor = deleteColor,
-                            onClick = onDelete
-                        )
-                    }
+@Composable
+private fun MessageContextMenuActions(
+    state: MessageContextMenuState,
+    menuSurface: Color,
+    menuIcon: Color,
+    menuText: Color,
+    deleteColor: Color,
+    strings: NoveoStrings,
+    onReply: () -> Unit,
+    onEdit: () -> Unit,
+    onPin: () -> Unit,
+    onCopyText: () -> Unit,
+    onForward: () -> Unit,
+    onSeenBy: () -> Unit,
+    onAddAsSticker: () -> Unit,
+    onDownload: () -> Unit,
+    onDelete: () -> Unit,
+    slideDown: Boolean
+) {
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn() + slideInVertically { if (slideDown) it / 8 else -it / 8 },
+        exit = fadeOut() + slideOutVertically { if (slideDown) it / 8 else -it / 8 }
+    ) {
+        Surface(
+            color = menuSurface,
+            shape = RoundedCornerShape(12.dp),
+            shadowElevation = 8.dp
+        ) {
+            Column(modifier = Modifier.width(220.dp).padding(vertical = 4.dp)) {
+                ContextMenuActionItem(
+                    label = strings.reply,
+                    icon = { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                    textColor = menuText,
+                    onClick = onReply
+                )
+                if (state.ownMessage && state.message.content.text != null) {
+                    ContextMenuActionItem(
+                        label = strings.edit,
+                        icon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                        textColor = menuText,
+                        onClick = onEdit
+                    )
                 }
+                ContextMenuActionItem(
+                    label = if (state.message.isPinned) strings.unpin else strings.pin,
+                    icon = { Icon(Icons.Outlined.Bookmark, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                    textColor = menuText,
+                    onClick = onPin
+                )
+                if (state.message.content.text != null) {
+                    ContextMenuActionItem(
+                        label = strings.copyText,
+                        icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                        textColor = menuText,
+                        onClick = onCopyText
+                    )
+                }
+                ContextMenuActionItem(
+                    label = strings.forward,
+                    icon = { Icon(Icons.Outlined.ArrowForward, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                    textColor = menuText,
+                    onClick = onForward
+                )
+
+                if (state.message.seenBy.isNotEmpty()) {
+                    ContextMenuActionItem(
+                        label = strings.seenBy,
+                        icon = { Icon(Icons.Outlined.Check, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                        textColor = menuText,
+                        onClick = onSeenBy
+                    )
+                }
+
+                val file = state.message.content.file
+                if (file != null && (file.isImage() || file.isTgsSticker())) {
+                    ContextMenuActionItem(
+                        label = strings.addAsSticker,
+                        icon = { Icon(Icons.Outlined.Star, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                        textColor = menuText,
+                        onClick = onAddAsSticker
+                    )
+                }
+
+                if (state.message.content.file != null) {
+                    ContextMenuActionItem(
+                        label = strings.download,
+                        icon = { Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                        textColor = menuText,
+                        onClick = onDownload
+                    )
+                }
+                ContextMenuActionItem(
+                    label = strings.delete,
+                    icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = deleteColor, modifier = Modifier.size(18.dp)) },
+                    textColor = deleteColor,
+                    onClick = onDelete
+                )
             }
         }
     }
