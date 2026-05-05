@@ -44,10 +44,13 @@ internal fun initializeTgsSupport(context: android.content.Context) {
 internal fun TgsSticker(
     url: String?,
     modifier: Modifier = Modifier,
-    tint: Color = MaterialTheme.colorScheme.primary
+    tint: Color = MaterialTheme.colorScheme.primary,
+    iterations: Int = LottieConstants.IterateForever,
+    restartOnPlay: Boolean = false
 ) {
     var json by remember(url) { mutableStateOf<String?>(null) }
     var failed by remember(url) { mutableStateOf(false) }
+    var playCount by remember(url) { mutableStateOf(0) }
 
     LaunchedEffect(url) {
         json = null
@@ -77,14 +80,31 @@ internal fun TgsSticker(
         spec = json?.let(LottieCompositionSpec::JsonString) ?: LottieCompositionSpec.JsonString("{}")
     )
 
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+    Box(
+        modifier = modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null
+        ) {
+            playCount++
+        },
+        contentAlignment = Alignment.Center
+    ) {
         when {
             composition != null -> {
                 LottieAnimation(
                     composition = composition,
-                    iterations = LottieConstants.IterateForever,
+                    iterations = if (iterations == 1) 1 else iterations,
+                    restartOnPlay = restartOnPlay,
+                    isPlaying = iterations != 1 || playCount > 0,
                     modifier = Modifier.fillMaxSize()
                 )
+                
+                // If it's a single-play animation, we use playCount to trigger re-plays
+                if (iterations == 1 && playCount > 0) {
+                    LaunchedEffect(playCount) {
+                        // The LottieAnimation isPlaying logic will handle it
+                    }
+                }
             }
 
             failed -> {

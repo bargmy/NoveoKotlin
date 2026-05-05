@@ -209,18 +209,21 @@ private fun MessageContextMenu(
         val screenWidthPx = with(density) { maxWidth.toPx() }
         val screenHeightPx = with(density) { maxHeight.toPx() }
         val targetWidthPx = with(density) { (if (expanded) 320.dp else 290.dp).toPx() }
-        val targetHeightPx = with(density) { (if (expanded) 280.dp else 240.dp).toPx() }
+        val targetHeightPx = with(density) { (if (expanded) 320.dp else 400.dp).toPx() } // Conservative estimate for height
 
         val minLeft = with(density) { 8.dp.toPx() }
         val maxLeft = (screenWidthPx - targetWidthPx - with(density) { 12.dp.toPx() }).coerceAtLeast(minLeft)
         val left = state.bubbleBounds.left.coerceIn(minLeft, maxLeft)
 
         var top = state.bubbleBounds.top - targetHeightPx - with(density) { 10.dp.toPx() }
-        if (top < with(density) { 16.dp.toPx() }) {
+        val isUpsideDown = top < with(density) { 16.dp.toPx() }
+        
+        if (isUpsideDown) {
             top = state.bubbleBounds.bottom + with(density) { 10.dp.toPx() }
         }
+        
         val minTop = with(density) { 8.dp.toPx() }
-        val maxTop = (screenHeightPx - targetHeightPx - minTop).coerceAtLeast(minTop)
+        val maxTop = (screenHeightPx - targetHeightPx - with(density) { 32.dp.toPx() }).coerceAtLeast(minTop)
         top = top.coerceIn(minTop, maxTop)
 
         Column(

@@ -2566,7 +2566,7 @@ private fun MessageRow(
                 val emojiTgsUrl = remember(message.content.text) {
                     message.content.text?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
                 }
-                val isSticker = (message.content.file?.isSticker() == true) || (emojiTgsUrl != null)
+                val isSticker = (message.content.file?.let { it.isSticker() || it.fileName?.lowercase()?.endsWith(".webp") == true } == true) || (emojiTgsUrl != null)
                 
                 if (isSticker) {
                     val file = message.content.file
@@ -2618,8 +2618,9 @@ private fun MessageRow(
                             if (isTgs) {
                                 TgsSticker(
                                     url = normalizedUrl,
-                                    modifier = Modifier.size(160.dp),
-                                    tint = Color.White
+                                    modifier = Modifier.size(if (emojiTgsUrl != null) 80.dp else 160.dp),
+                                    tint = Color.White,
+                                    iterations = if (emojiTgsUrl != null) 1 else LottieConstants.IterateForever
                                 )
                             } else {
                                 AsyncImage(
@@ -3130,6 +3131,7 @@ private fun MessageAttachment(
     val overlayTint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
 
     if (file.isImage()) {
+        val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
         Card(
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier
@@ -3145,37 +3147,19 @@ private fun MessageAttachment(
                     .heightIn(min = 180.dp)
                     .background((if (ownMessage) tgColors.outgoingBubble else tgColors.incomingBubble).copy(alpha = 0.68f))
             ) {
-                if (isDownloaded) {
-                    AsyncImage(
-                        model = localFile,
-                        contentDescription = file.name,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentScale = ContentScale.FillWidth
-                    )
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Description,
-                            contentDescription = null,
-                            tint = overlayTint.copy(alpha = 0.4f),
-                            modifier = Modifier.size(44.dp)
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = file.name.ifBlank { "Image" },
-                            color = overlayTint.copy(alpha = 0.75f),
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                // Auto-load if we have a local file OR if we want to rely on Coil's automatic cache
+                AsyncImage(
+                    model = localFile ?: normalizedUrl,
+                    contentDescription = file.name,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentScale = ContentScale.FillWidth
+                )
+                
+                if (!isDownloaded && !isDownloading) {
+                    // Overlay a hint if not yet "officially" downloaded (for full res/saving)
+                    // but AsyncImage above will already try to show it from cache
                 }
+
                 AttachmentDownloadOverlay(
                     isVideo = false,
                     isDownloaded = isDownloaded,
