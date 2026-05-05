@@ -50,11 +50,13 @@ internal fun TgsSticker(
     tint: Color = MaterialTheme.colorScheme.primary,
     iterations: Int = LottieConstants.IterateForever,
     restartOnPlay: Boolean = false,
-    autoPlay: Boolean = iterations != 1
+    autoPlay: Boolean = iterations != 1,
+    playOnClick: Boolean = iterations == 1
 ) {
+    val shouldAutoPlay = iterations != 1 || autoPlay
     var json by remember(url) { mutableStateOf<String?>(null) }
     var failed by remember(url) { mutableStateOf(false) }
-    var isPlaying by remember(url) { mutableStateOf(autoPlay) }
+    var isPlaying by remember(url) { mutableStateOf(shouldAutoPlay) }
 
     LaunchedEffect(url) {
         json = null
@@ -90,8 +92,8 @@ internal fun TgsSticker(
         restartOnPlay = restartOnPlay || iterations == 1
     )
 
-    LaunchedEffect(url, autoPlay) {
-        isPlaying = autoPlay
+    LaunchedEffect(url, shouldAutoPlay) {
+        isPlaying = shouldAutoPlay
     }
 
     LaunchedEffect(lottieProgress, isPlaying, iterations) {
@@ -100,13 +102,19 @@ internal fun TgsSticker(
         }
     }
 
-    Box(
-        modifier = modifier.clickable(
+    val playbackModifier = if (playOnClick) {
+        modifier.clickable(
             interactionSource = remember { MutableInteractionSource() },
             indication = null
         ) {
             isPlaying = true
-        },
+        }
+    } else {
+        modifier
+    }
+
+    Box(
+        modifier = playbackModifier,
         contentAlignment = Alignment.Center
     ) {
         when {
