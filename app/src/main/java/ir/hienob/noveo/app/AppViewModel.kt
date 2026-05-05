@@ -770,6 +770,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun openDirectChat(userId: String) {
         val state = _uiState.value
         val selfId = state.session?.userId ?: return
+
+        if (userId == selfId) {
+            val savedChat = state.chats.firstOrNull { chat ->
+                chat.id.startsWith("saved_") ||
+                    (chat.chatType == "private" && chat.memberIds.size == 1 && chat.memberIds.firstOrNull() == selfId)
+            }
+            if (savedChat != null) {
+                _uiState.value = _uiState.value.copy(directRecipientId = null)
+                openChat(savedChat.id)
+            } else {
+                val syntheticSavedChat = ChatSummary(
+                    id = "saved_$selfId",
+                    chatType = "private",
+                    title = "Saved Messages",
+                    avatarUrl = "saved_messages",
+                    memberIds = listOf(selfId),
+                    canChat = true
+                )
+                _uiState.value = _uiState.value.copy(
+                    chats = state.chats + syntheticSavedChat,
+                    selectedChatId = syntheticSavedChat.id,
+                    messages = emptyList(),
+                    directRecipientId = null
+                )
+            }
+            return
+        }
         
         val chatId = listOf(selfId, userId).sorted().joinToString("_")
         val existingChat = state.chats.firstOrNull { it.id == chatId }

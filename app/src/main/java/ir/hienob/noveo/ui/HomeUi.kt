@@ -460,7 +460,7 @@ internal fun HomeScreen(
         if (!localPath.isNullOrBlank() && (attachment.isImage() || attachment.isVideo())) {
             selectedMediaAttachment = SelectedMediaAttachment(attachment = attachment, localPath = localPath)
         } else if (attachment.isImage() || attachment.isVideo()) {
-            onDownloadFile(message)
+            // Do not auto-download or open remote media. Images/videos render only after an explicit download.
         } else {
             val url = attachment.url.normalizeNoveoUrl()
             if (url != null) {
@@ -2588,8 +2588,10 @@ private fun MessageRow(
                     val emojiTgsUrlState = remember(message.content.text) {
                         message.content.text?.takeIf { animatedEmojiTgsEnabled }?.let { EmojiTgsManager.getTgsUrlForEmoji(it) }
                     }
-                    val normalizedUrl = remember(file?.url, emojiTgsUrlState) { 
-                        emojiTgsUrlState ?: file?.url.normalizeNoveoUrl() ?: ""
+                    val localStickerPath = file?.let { attachmentDownloadState?.localPath }
+                    val localStickerFile = remember(localStickerPath) { localStickerPath?.let(::File)?.takeIf { it.exists() } }
+                    val normalizedUrl = remember(file?.url, emojiTgsUrlState, localStickerFile) { 
+                        emojiTgsUrlState ?: localStickerFile?.toURI()?.toString() ?: file?.url.normalizeNoveoUrl() ?: ""
                     }
                     Box(
                         modifier = bubbleModifier.padding(vertical = 4.dp)
@@ -3151,15 +3153,13 @@ private fun MessageAttachment(
     val overlayTint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
 
     if (file.isImage()) {
-        val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
-        var imageLoaded by remember { mutableStateOf(false) }
         Card(
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier
                 .padding(bottom = 2.dp)
                 .fillMaxWidth()
                 .heightIn(max = 340.dp)
-                .clickable { if (isDownloaded) onClick() else onDownloadClick() },
+                .clickable(enabled = isDownloaded) { onClick() },
             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
         ) {
             Box(
@@ -3168,21 +3168,16 @@ private fun MessageAttachment(
                     .heightIn(min = 180.dp)
                     .background((if (ownMessage) tgColors.outgoingBubble else tgColors.incomingBubble).copy(alpha = 0.68f))
             ) {
-                // Auto-load if we have a local file OR if we want to rely on Coil's automatic cache
-                AsyncImage(
-                    model = localFile ?: normalizedUrl,
-                    contentDescription = file.name,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.FillWidth,
-                    onSuccess = { imageLoaded = true }
-                )
-                
-                if (!isDownloaded && !isDownloading && !imageLoaded) {
-                    // Overlay a hint if not yet "officially" downloaded (for full res/saving)
-                    // but AsyncImage above will already try to show it from cache
+                if (localFile != null) {
+                    AsyncImage(
+                        model = localFile,
+                        contentDescription = file.name,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentScale = ContentScale.FillWidth
+                    )
                 }
 
-                if (!imageLoaded || isDownloading) {
+                if (!isDownloaded || isDownloading) {
                     AttachmentDownloadOverlay(
                         isVideo = false,
                         isDownloaded = isDownloaded,
@@ -3202,7 +3197,7 @@ private fun MessageAttachment(
                 .padding(bottom = 2.dp)
                 .fillMaxWidth()
                 .heightIn(min = 180.dp)
-                .clickable { if (isDownloaded) onClick() else onDownloadClick() },
+                .clickable(enabled = isDownloaded) { onClick() },
             color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.08f),
             shape = RoundedCornerShape(10.dp)
         ) {

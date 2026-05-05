@@ -81,13 +81,20 @@ data class MessageFileAttachment(
             url.contains(".tgs", true)
     fun isSticker(): Boolean {
         val lowerName = name.lowercase()
-        return isTgsSticker() ||
-            lowerName == "sticker.png" ||
-            lowerName == "sticker.gif" ||
-            lowerName == "sticker.webp" ||
-            lowerName == "sticker.jpg" ||
-            lowerName == "sticker.jpeg" ||
-            url.contains("/stickers/", true)
+        val lowerUrl = url.lowercase()
+        val looksLikeSticker = lowerName.contains("sticker") ||
+            lowerUrl.contains("/stickers/") ||
+            lowerUrl.contains("/sticker") ||
+            lowerUrl.contains("sticker.")
+        val renderableStickerFile = isTgsSticker() ||
+            isImage() ||
+            lowerName.endsWith(".gif") ||
+            lowerName.endsWith(".png") ||
+            lowerName.endsWith(".jpg") ||
+            lowerName.endsWith(".jpeg") ||
+            lowerName.endsWith(".webp") ||
+            lowerName.endsWith(".tgs")
+        return looksLikeSticker && renderableStickerFile
     }
 
     fun downloadKey(): String {
