@@ -209,26 +209,31 @@ private fun MessageContextMenu(
         val screenWidthPx = with(density) { maxWidth.toPx() }
         val screenHeightPx = with(density) { maxHeight.toPx() }
         val targetWidthPx = with(density) { (if (expanded) 320.dp else 290.dp).toPx() }
-        val targetHeightPx = with(density) { (if (expanded) 320.dp else 400.dp).toPx() } // Conservative estimate for height
+        val targetHeightPx = with(density) { (if (expanded) 320.dp else 400.dp).toPx() } 
 
         val minLeft = with(density) { 8.dp.toPx() }
         val maxLeft = (screenWidthPx - targetWidthPx - with(density) { 12.dp.toPx() }).coerceAtLeast(minLeft)
         val left = state.bubbleBounds.left.coerceIn(minLeft, maxLeft)
 
+        // Standard position: above the bubble
         var top = state.bubbleBounds.top - targetHeightPx - with(density) { 10.dp.toPx() }
-        val isUpsideDown = top < with(density) { 16.dp.toPx() }
         
-        if (isUpsideDown) {
+        // If it doesn't fit on top, or bubble is too high, show below
+        if (top < with(density) { 24.dp.toPx() }) {
             top = state.bubbleBounds.bottom + with(density) { 10.dp.toPx() }
         }
         
-        val minTop = with(density) { 8.dp.toPx() }
-        val maxTop = (screenHeightPx - targetHeightPx - with(density) { 32.dp.toPx() }).coerceAtLeast(minTop)
-        top = top.coerceIn(minTop, maxTop)
+        // Ensure it doesn't go off screen at the bottom
+        val maxTop = (screenHeightPx - with(density) { 60.dp.toPx() }) // Minimal visible part
+        if (top > maxTop) {
+             top = (screenHeightPx - targetHeightPx - with(density) { 16.dp.toPx() }).coerceAtLeast(with(density) { 8.dp.toPx() })
+        }
+        
+        val finalTop = top.coerceIn(with(density) { 8.dp.toPx() }, (screenHeightPx - with(density) { 40.dp.toPx() }))
 
         Column(
             modifier = Modifier
-                .offset { IntOffset(left.roundToInt(), top.roundToInt()) }
+                .offset { IntOffset(left.roundToInt(), finalTop.roundToInt()) }
                 .wrapContentWidth()
                 .wrapContentHeight()
                 .graphicsLayer {
