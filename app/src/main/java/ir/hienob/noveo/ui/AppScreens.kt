@@ -385,7 +385,6 @@ fun NoveoRoot(
                             onCheckUpdate = onCheckUpdate,
                             onSetBetaUpdatesEnabled = onSetBetaUpdatesEnabled,
                             onSetDoubleTapReaction = onSetDoubleTapReaction,
-                            onSetAnimatedEmojiTgsEnabled = onSetAnimatedEmojiTgsEnabled,
                             onUpdateNotificationSettings = onUpdateNotificationSettings,
                             onRequestBatteryOptimization = onRequestBatteryOptimization,
                             onPlayAudio = onPlayAudio,
@@ -584,7 +583,7 @@ private fun CaptchaModal(
                             settings.domStorageEnabled = true
                             settings.userAgentString = "NoveoKotlin/0.4.0"
 
-                            
+
                             webViewClient = object : android.webkit.WebViewClient() {
                                 override fun shouldOverrideUrlLoading(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): Boolean {
                                     val url = request?.url?.toString() ?: ""
@@ -600,13 +599,13 @@ private fun CaptchaModal(
                                     super.onPageFinished(view, url)
                                 }
                             }
-                            
+
                             addJavascriptInterface(object {
                                 @android.webkit.JavascriptInterface
                                 fun onCaptchaSolved(token: String) {
                                     onToken(token)
                                 }
-                                
+
                                 @android.webkit.JavascriptInterface
                                 fun notifyParent(dataJson: String) {
                                     val data = org.json.JSONObject(dataJson)
@@ -620,7 +619,7 @@ private fun CaptchaModal(
                                          val msg = org.json.JSONObject()
                                              .put("type", "captcha-parent-auth")
                                              .put("headers", authHeaders)
-                                         
+
                                          post {
                                              evaluateJavascript("window.postMessage($msg, '*')", null)
                                          }
@@ -658,4 +657,3 @@ private fun CaptchaModal(
         }
     )
 }
-
