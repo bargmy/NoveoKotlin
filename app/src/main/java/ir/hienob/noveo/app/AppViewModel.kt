@@ -426,6 +426,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(doubleTapReaction = reaction)
     }
 
+    fun setAnimatedEmojiTgsEnabled(enabled: Boolean) {
+        sessionStore.writeAnimatedEmojiTgsEnabled(enabled)
+        _uiState.value = _uiState.value.copy(animatedEmojiTgsEnabled = enabled)
+    }
+
     fun cancelPendingUpload(chatId: String) {
         activeUploadController?.cancel()
         activeUploadJob?.cancel()
