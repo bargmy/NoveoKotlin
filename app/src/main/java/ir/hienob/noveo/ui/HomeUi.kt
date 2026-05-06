@@ -234,37 +234,26 @@ private data class SelectedMediaAttachment(
     val localPath: String
 )
 
-private fun MessageFileAttachment.shouldRenderAsTgsStickerInChat(): Boolean {
-    val n = name.trim().lowercase()
-    val u = url.trim().lowercase()
-    val t = type.trim().lowercase()
-    val namedSticker = n == "sticker" ||
-        n.startsWith("sticker.") ||
-        n.contains("_sticker") ||
-        n.contains("-sticker") ||
-        n.contains(" sticker")
-    return isTgsSticker() ||
-        t.contains("tgsticker") ||
-        t == "application/x-tgs" ||
-        t == "application/x-tgsticker" ||
-        t.contains("lottie") ||
-        n.endsWith(".tgs") ||
-        u.endsWith(".tgs") ||
-        u.contains(".tgs?") ||
-        (namedSticker && (t.contains("gzip") || t.contains("tgz") || t == "application/octet-stream" || t == "binary/octet-stream"))
+private fun MessageFileAttachment.cacheExtension(): String {
+    val nameExtension = name.substringAfterLast('.', "")
+        .takeIf { it.isNotBlank() && it.length <= 8 }
+        ?.lowercase()
+    if (nameExtension != null) return nameExtension
+
+    return when {
+        isVideo() -> "mp4"
+        type.equals("image/gif", true) -> "gif"
+        type.equals("image/webp", true) -> "webp"
+        type.equals("image/jpeg", true) -> "jpg"
+        type.equals("image/png", true) -> "png"
+        type.startsWith("image/", true) -> type.substringAfter('/').substringBefore(';').ifBlank { "img" }
+        isTgsSticker() -> "tgs"
+        else -> "bin"
+    }
 }
 
 private fun localAttachmentCacheFile(root: File, file: MessageFileAttachment): File {
-    val extension = file.name.substringAfterLast('.', "").ifBlank {
-        when {
-            file.isVideo() -> "mp4"
-            file.type.equals("image/gif", true) -> "gif"
-            file.type.equals("image/webp", true) -> "webp"
-            file.type.equals("image/jpeg", true) -> "jpg"
-            file.shouldRenderAsTgsStickerInChat() -> "tgs"
-            else -> "bin"
-        }
-    }
+    val extension = file.cacheExtension()
     val safeName = file.name
         .substringBeforeLast('.', file.name)
         .replace(Regex("[^A-Za-z0-9._-]"), "_")
@@ -473,14 +462,12 @@ internal fun HomeScreen(
         }
     }
 
-    val onMediaClick = { message: ChatMessage, attachment: MessageFileAttachment ->
+    val onMediaClick = { _: ChatMessage, attachment: MessageFileAttachment ->
         val localPath = state.attachmentDownloads[attachment.downloadKey()]?.localPath
             ?: localAttachmentCacheFile(context.filesDir, attachment).takeIf { it.exists() }?.absolutePath
         if (!localPath.isNullOrBlank() && (attachment.isImage() || attachment.isVideo())) {
             selectedMediaAttachment = SelectedMediaAttachment(attachment = attachment, localPath = localPath)
-        } else if (attachment.isImage() || attachment.isVideo()) {
-            onDownloadFile(message)
-        } else {
+        } else if (!attachment.isImage() && !attachment.isVideo()) {
             val url = attachment.url.normalizeNoveoUrl()
             if (url != null) {
                 try {
@@ -2637,7 +2624,7 @@ private fun MessageRow(
                                 }
                             }
 
-                            val isTgs = emojiTgsUrlState != null || file?.shouldRenderAsTgsStickerInChat() == true
+                            val isTgs = emojiTgsUrlState != null || file?.isTgsSticker() == true
                             if (isTgs) {
                                 TgsSticker(
                                     url = normalizedUrl,
@@ -3153,46 +3140,15 @@ private fun MessageAttachment(
     val progress = downloadState?.progress ?: 0f
     val overlayTint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
 
-    if (file.shouldRenderAsTgsStickerInChat()) {
-        val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
-        val renderUrl = localFile?.absolutePath ?: normalizedUrl
-        Box(
-            modifier = Modifier
-                .padding(bottom = 2.dp)
-                .size(160.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            TgsSticker(
-                url = renderUrl,
-                modifier = Modifier.fillMaxSize(),
-                tint = overlayTint,
-                iterations = com.airbnb.lottie.compose.LottieConstants.IterateForever,
-                autoPlay = true,
-                playOnClick = false
-            )
-            if (isDownloading) {
-                AttachmentDownloadOverlay(
-                    isVideo = false,
-                    isDownloaded = isDownloaded,
-                    isDownloading = true,
-                    progress = progress,
-                    tint = overlayTint,
-                    onDownloadClick = onDownloadClick,
-                    onCancelClick = onCancelClick,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-        }
-    } else if (file.isImage()) {
-        val normalizedUrl = remember(file.url) { file.url.normalizeNoveoUrl() }
-        var imageLoaded by remember { mutableStateOf(false) }
+    if (file.isImage()) {
+        var imageLoaded by remember(localFile) { mutableStateOf(localFile != null) }
         Card(
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier
                 .padding(bottom = 2.dp)
                 .fillMaxWidth()
                 .heightIn(max = 340.dp)
-                .clickable { if (isDownloaded) onClick() else onDownloadClick() },
+                .clickable(enabled = isDownloaded) { onClick() },
             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
         ) {
             Box(
@@ -3201,21 +3157,17 @@ private fun MessageAttachment(
                     .heightIn(min = 180.dp)
                     .background((if (ownMessage) tgColors.outgoingBubble else tgColors.incomingBubble).copy(alpha = 0.68f))
             ) {
-                // Auto-load if we have a local file OR if we want to rely on Coil's automatic cache
-                AsyncImage(
-                    model = localFile ?: normalizedUrl,
-                    contentDescription = file.name,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.FillWidth,
-                    onSuccess = { imageLoaded = true }
-                )
-                
-                if (!isDownloaded && !isDownloading && !imageLoaded) {
-                    // Overlay a hint if not yet "officially" downloaded (for full res/saving)
-                    // but AsyncImage above will already try to show it from cache
+                if (localFile != null) {
+                    AsyncImage(
+                        model = localFile,
+                        contentDescription = file.name,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentScale = ContentScale.FillWidth,
+                        onSuccess = { imageLoaded = true }
+                    )
                 }
 
-                if (!imageLoaded || isDownloading) {
+                if (!isDownloaded || !imageLoaded || isDownloading) {
                     AttachmentDownloadOverlay(
                         isVideo = false,
                         isDownloaded = isDownloaded,
@@ -3235,7 +3187,7 @@ private fun MessageAttachment(
                 .padding(bottom = 2.dp)
                 .fillMaxWidth()
                 .heightIn(min = 180.dp)
-                .clickable { if (isDownloaded) onClick() else onDownloadClick() },
+                .clickable(enabled = isDownloaded) { onClick() },
             color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.08f),
             shape = RoundedCornerShape(10.dp)
         ) {

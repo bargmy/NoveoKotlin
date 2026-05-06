@@ -97,7 +97,6 @@ data class AppUiState(
     val incomingCall: SocketEvent.IncomingCall? = null,
     val betaUpdatesEnabled: Boolean = false,
     val doubleTapReaction: String = "❤",
-    val animatedEmojiTgsEnabled: Boolean = true,
     val isSendingMessage: Boolean = false,
     val messagesByChat: Map<String, List<ChatMessage>> = emptyMap()
 )
@@ -169,8 +168,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     init {
         _uiState.value = _uiState.value.copy(
             betaUpdatesEnabled = sessionStore.readBetaUpdatesEnabled(),
-            doubleTapReaction = sessionStore.readDoubleTapReaction(),
-            animatedEmojiTgsEnabled = sessionStore.readAnimatedEmojiTgsEnabled()
+            doubleTapReaction = sessionStore.readDoubleTapReaction()
         )
         restoreSession()
         checkForUpdate()
@@ -426,11 +424,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setDoubleTapReaction(reaction: String) {
         sessionStore.writeDoubleTapReaction(reaction)
         _uiState.value = _uiState.value.copy(doubleTapReaction = reaction)
-    }
-
-    fun setAnimatedEmojiTgsEnabled(enabled: Boolean) {
-        sessionStore.writeAnimatedEmojiTgsEnabled(enabled)
-        _uiState.value = _uiState.value.copy(animatedEmojiTgsEnabled = enabled)
     }
 
     fun cancelPendingUpload(chatId: String) {
@@ -730,7 +723,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val notificationSettings = _uiState.value.notificationSettings
         val betaUpdatesEnabled = _uiState.value.betaUpdatesEnabled
         val doubleTapReaction = _uiState.value.doubleTapReaction
-        val animatedEmojiTgsEnabled = _uiState.value.animatedEmojiTgsEnabled
         getApplication<Application>().stopService(Intent(getApplication(), NoveoNotificationService::class.java))
         socketResyncJob?.cancel()
         selectedChatRefreshJob?.cancel()
@@ -741,14 +733,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         sessionStore.writeNotificationSettings(notificationSettings)
         sessionStore.writeBetaUpdatesEnabled(betaUpdatesEnabled)
         sessionStore.writeDoubleTapReaction(doubleTapReaction)
-        sessionStore.writeAnimatedEmojiTgsEnabled(animatedEmojiTgsEnabled)
         _uiState.value = AppUiState(
             startupState = StartupState.Auth,
             languageCode = languageCode,
             notificationSettings = notificationSettings,
             betaUpdatesEnabled = betaUpdatesEnabled,
-            doubleTapReaction = doubleTapReaction,
-            animatedEmojiTgsEnabled = animatedEmojiTgsEnabled
+            doubleTapReaction = doubleTapReaction
         )
     }
 
@@ -770,33 +760,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun openDirectChat(userId: String) {
         val state = _uiState.value
         val selfId = state.session?.userId ?: return
-
-        if (userId == selfId) {
-            val savedChat = state.chats.firstOrNull { chat ->
-                chat.id.startsWith("saved_") ||
-                    (chat.chatType == "private" && chat.memberIds.size == 1 && chat.memberIds.firstOrNull() == selfId)
-            }
-            if (savedChat != null) {
-                _uiState.value = _uiState.value.copy(directRecipientId = null)
-                openChat(savedChat.id)
-            } else {
-                val syntheticSavedChat = ChatSummary(
-                    id = "saved_$selfId",
-                    chatType = "private",
-                    title = "Saved Messages",
-                    avatarUrl = "saved_messages",
-                    memberIds = listOf(selfId),
-                    canChat = true
-                )
-                _uiState.value = _uiState.value.copy(
-                    chats = state.chats + syntheticSavedChat,
-                    selectedChatId = syntheticSavedChat.id,
-                    messages = emptyList(),
-                    directRecipientId = null
-                )
-            }
-            return
-        }
         
         val chatId = listOf(selfId, userId).sorted().joinToString("_")
         val existingChat = state.chats.firstOrNull { it.id == chatId }
@@ -1945,16 +1908,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    private fun getAttachmentFile(file: MessageFileAttachment): File {
-        val extension = file.name.substringAfterLast('.', "").ifBlank {
-            when {
-                file.isVideo() -> "mp4"
-                file.type.equals("image/gif", true) -> "gif"
-                file.type.equals("image/webp", true) -> "webp"
-                file.type.equals("image/jpeg", true) -> "jpg"
-                else -> "bin"
-            }
+    private fun getAttachmentExtension(file: MessageFileAttachment): String {
+        val nameExtension = file.name.substringAfterLast('.', "")
+            .takeIf { it.isNotBlank() && it.length <= 8 }
+            ?.lowercase()
+        if (nameExtension != null) return nameExtension
+
+        return when {
+            file.isVideo() -> "mp4"
+            file.type.equals("image/gif", true) -> "gif"
+            file.type.equals("image/webp", true) -> "webp"
+            file.type.equals("image/jpeg", true) -> "jpg"
+            file.type.equals("image/png", true) -> "png"
+            file.type.startsWith("image/", true) -> file.type.substringAfter('/').substringBefore(';').ifBlank { "img" }
+            file.isTgsSticker() -> "tgs"
+            else -> "bin"
         }
+    }
+
+    private fun getAttachmentFile(file: MessageFileAttachment): File {
+        val extension = getAttachmentExtension(file)
         val safeName = file.name
             .substringBeforeLast('.', file.name)
             .replace(Regex("[^A-Za-z0-9._-]"), "_")
