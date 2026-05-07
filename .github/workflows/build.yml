@@ -517,36 +517,18 @@ jobs:
         shell: bash
         run: chmod +x ./gradlew
 
-      - name: Build desktop distributables
+      - name: Build thin desktop distributable
         shell: bash
         run: |
-          ./gradlew --build-cache --configuration-cache :desktopApp:packageReleaseMsi :desktopApp:packageReleaseExe
+          ./gradlew --build-cache --configuration-cache :desktopApp:createThinDesktopZip
 
       - name: Collect desktop artifacts
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          shopt -s nullglob
-
-          msi_files=(desktopApp/build/compose/binaries/main-release/msi/*.msi)
-          exe_files=(desktopApp/build/compose/binaries/main-release/exe/*.exe)
-
-          if [ ${#msi_files[@]} -ne 1 ]; then
-            echo "Expected exactly one MSI in desktopApp/build/compose/binaries/main-release/msi, found ${#msi_files[@]}" >&2
-            find desktopApp/build/compose/binaries -type f -name '*.msi' -print >&2 || true
-            exit 1
-          fi
-
-          if [ ${#exe_files[@]} -ne 1 ]; then
-            echo "Expected exactly one EXE in desktopApp/build/compose/binaries/main-release/exe, found ${#exe_files[@]}" >&2
-            find desktopApp/build/compose/binaries -type f -name '*.exe' -print >&2 || true
-            exit 1
-          fi
-
-          cp "${msi_files[0]}" "dist/noveo-${RELEASE_TAG}-windows-x64.msi"
-          cp "${exe_files[0]}" "dist/noveo-${RELEASE_TAG}-windows-x64.exe"
-          ls -lh dist
+          find desktopApp/build/compose/binaries -maxdepth 4 -type f -print
+          cp desktopApp/build/compose/binaries/thin/*.zip "dist/noveo-${RELEASE_TAG}-windows-x64-thin.zip"
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
