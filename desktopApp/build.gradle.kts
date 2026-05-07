@@ -4,6 +4,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val desktopPackageVersion = providers.gradleProperty("NOVEO_DESKTOP_PACKAGE_VERSION").orNull ?: "1.0.0"
+
 dependencies {
     implementation(project(":core:ui"))
     implementation(compose.desktop.currentOs)
@@ -17,7 +19,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe)
             packageName = "Noveo"
-            packageVersion = "1.0.0"
+            packageVersion = desktopPackageVersion
         }
         buildTypes.release.proguard {
             configurationFiles.from(project.file("proguard-rules.pro"))

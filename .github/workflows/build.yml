@@ -517,26 +517,64 @@ jobs:
         shell: bash
         run: chmod +x ./gradlew
 
-      - name: Build Windows setup EXE
+      - name: Derive Windows package version
+        id: desktop_version
         shell: bash
         run: |
-          ./gradlew --build-cache --configuration-cache :desktopApp:packageReleaseExe
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          import re
 
-      - name: Collect desktop setup
+          tag = os.environ.get("RELEASE_TAG", "1.0.0")
+          match = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$", tag)
+          if not match:
+              print("package_version=1.0.0")
+          else:
+              major, minor, patch, stamp = match.groups()
+              if stamp:
+                  # Windows MSI ProductVersion has three numeric fields. Keep prereleases
+                  # installable/upgradable by folding the timestamp into the build field.
+                  build = int(patch) * 1000 + int(stamp[-3:])
+                  build = max(0, min(build, 65535))
+                  print(f"package_version={major}.{minor}.{build}")
+              else:
+                  print(f"package_version={major}.{minor}.{patch}")
+          PY
+
+      - name: Build bundled Windows installers
+        shell: bash
+        run: |
+          ./gradlew --build-cache --configuration-cache \
+            -PNOVEO_DESKTOP_PACKAGE_VERSION="${{ steps.desktop_version.outputs.package_version }}" \
+            :desktopApp:packageReleaseExe \
+            :desktopApp:packageReleaseMsi
+
+      - name: Collect desktop installers
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
           find desktopApp/build/compose/binaries -maxdepth 5 -type f -print
-          mapfile -t setup_exes < <(find desktopApp/build/compose/binaries -path "*/main-release/exe/*.exe" -type f | sort)
-          if [ "${#setup_exes[@]}" -eq 0 ]; then
-            echo "No Compose Desktop setup EXE was produced." >&2
-            find desktopApp/build/compose/binaries -maxdepth 5 -type f -print >&2
+
+          exe_path="$(find desktopApp/build/compose/binaries -path '*/main-release/exe/*.exe' -type f | head -n 1)"
+          msi_path="$(find desktopApp/build/compose/binaries -path '*/main-release/msi/*.msi' -type f | head -n 1)"
+
+          if [ -z "$exe_path" ]; then
+            echo "No bundled Windows EXE installer found under desktopApp/build/compose/binaries" >&2
             exit 1
           fi
-          cp "${setup_exes[0]}" "dist/Noveo-Setup-${RELEASE_TAG}.exe"
+          if [ -z "$msi_path" ]; then
+            echo "No bundled Windows MSI installer found under desktopApp/build/compose/binaries" >&2
+            exit 1
+          fi
+
+          cp "$exe_path" "dist/Noveo-Setup-${RELEASE_TAG}.exe"
+          cp "$msi_path" "dist/Noveo-${RELEASE_TAG}.msi"
+
           ls -lh dist
-          test -f "dist/Noveo-Setup-${RELEASE_TAG}.exe"
+          test -s "dist/Noveo-Setup-${RELEASE_TAG}.exe"
+          test -s "dist/Noveo-${RELEASE_TAG}.msi"
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
