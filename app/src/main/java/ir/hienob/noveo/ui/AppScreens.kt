@@ -55,6 +55,10 @@ import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.data.SavedSticker
 import ir.hienob.noveo.core.ui.NoveoTheme
 import ir.hienob.noveo.core.ui.NoveoThemePreset
+import ir.hienob.noveo.core.ui.NoveoRootFrame
+import ir.hienob.noveo.core.ui.NoveoRootFrameState
+import ir.hienob.noveo.core.ui.NoveoStartupSurface
+import ir.hienob.noveo.core.ui.coreNoveoStrings
 
 internal enum class ThemePreset(val label: String) {
     SKY_LIGHT("Sky Light"),
@@ -331,7 +335,6 @@ fun NoveoRoot(
     onClearNavigationSignal: () -> Unit = {},
     onBotCallback: (String, String, String) -> Unit = { _, _, _ -> }
     ) {
-    val strings = getStrings(state.languageCode)
     val context = LocalContext.current
     val prefs = remember(context) { context.getSharedPreferences("noveo_ui", Context.MODE_PRIVATE) }
     val initialTheme = remember(prefs) {
@@ -348,99 +351,110 @@ fun NoveoRoot(
         prefs.edit().putString("theme_preset", currentTheme.name).apply()
     }
 
-    val colorScheme = when (currentTheme) {
-        ThemePreset.SKY_LIGHT -> skyLightScheme
-        ThemePreset.LIGHT -> lightScheme
-        ThemePreset.SUNSET_LIGHT -> sunsetLightScheme
-        ThemePreset.OCEAN_DARK -> oceanDarkScheme
-        ThemePreset.DARK -> darkScheme
-        ThemePreset.PLUM_DARK -> plumDarkScheme
-        ThemePreset.OLED_DARK -> oledDarkScheme
-        ThemePreset.SUNSET_SHIMMER -> sunsetShimmerScheme
-        ThemePreset.CHERRY_RED -> cherryRedScheme
-        ThemePreset.SNOWY_DAYDREAM -> snowyDaydreamScheme
-        ThemePreset.RAINBOW_RAGEBAIT -> rainbowRagebaitScheme
+    val openRegistrationWeb: () -> Unit = {
+        val chromeIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://web.noveo.ir")).apply {
+            setPackage("com.android.chrome")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val fallbackIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://web.noveo.ir")).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(chromeIntent) }
+            .recoverCatching { context.startActivity(fallbackIntent) }
+        Unit
     }
 
-    val layoutDirection = LayoutDirection.Ltr
-    CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-        NoveoTheme(theme = currentTheme.toSharedTheme()) {
-            Surface(modifier = Modifier.fillMaxSize()) {
-                if (state.captchaInfo != null) {
-                    CaptchaModal(
-                        sessionId = state.captchaInfo.sessionId,
-                        session = state.session,
-                        onToken = onCaptchaTokenReceived,
-                        onDismiss = onCaptchaDismiss
-                    )
-                }
-                Box(modifier = Modifier.fillMaxSize()) {
-                    when (state.startupState) {
-                        StartupState.Splash -> ConnectingShell(strings.brandName)
-                        StartupState.Onboarding -> OnboardingScreen(strings, onDismissOnboarding)
-                        StartupState.Auth -> AuthScreen(strings, state, onAuthMode, onStartRegisterCaptcha, onAuthSubmit)
-                        StartupState.Home -> HomeScreen(
-                            state = state,
-                            onOpenChat = onOpenChat,
-                            onStartDirectChat = onStartDirectChat,
-                            onStartCreateChat = onStartCreateChat,
-                            onSearchPublic = onSearchPublic,
-                            onBackToChats = onBackToChats,
-                            onSend = onSend,
-                            onTyping = onTyping,
-                            onLogout = onLogout,
-                            onAttachFile = onAttachFile,
-                            onRemoveAttachment = onRemoveAttachment,
-                            onUpdateProfile = onUpdateProfile,
-                            onLoadOlder = onLoadOlder,
-                            onReply = onReply,
-                            onEditMessage = onEditMessage,
-                            onForwardMessage = onForwardMessage,
-                            onForwardConfirm = onForwardConfirm,
-                            onToggleReaction = onToggleReaction,
-                            onDeleteMessage = onDeleteMessage,
-                            onPinMessage = onPinMessage,
-                            onChangePassword = onChangePassword,
-                            onDeleteAccount = onDeleteAccount,
-                            onSetLanguage = onSetLanguage,
-                            onDismissUpdate = onDismissUpdate,
-                            onDownloadUpdate = onDownloadUpdate,
-                            onInstallUpdate = onInstallUpdate,
-                            onCheckUpdate = onCheckUpdate,
-                            onSetBetaUpdatesEnabled = onSetBetaUpdatesEnabled,
-                            onSetDoubleTapReaction = onSetDoubleTapReaction,
-                            onUpdateNotificationSettings = onUpdateNotificationSettings,
-                            onRequestBatteryOptimization = onRequestBatteryOptimization,
-                            onPlayAudio = onPlayAudio,
-                            onPauseAudio = onPauseAudio,
-                            onResumeAudio = onResumeAudio,
-                            onStopAudio = onStopAudio,
-                            onSeekAudio = onSeekAudio,
-                            onDownloadFile = onDownloadFile,
-                            onCancelDownload = onCancelDownload,
-                            onCall = onCall,
-                            onAcceptCall = onAcceptCall,
-                            onDeclineCall = onDeclineCall,
-                            onLeaveCall = onLeaveCall,
-                            onToggleMute = onToggleMute,
-                            onToggleDeafen = onToggleDeafen,
-                            onToggleMinimize = onToggleMinimize,
-                            onCancelUpload = onCancelUpload,
-                            onSendSticker = onSendSticker,
-                            onAddSavedSticker = onAddSavedSticker,
-                            onHandleClick = onHandleClick,
-                            onJoinChat = onJoinChat,
-                            onLeaveChat = onLeaveChat,
-                            onClearNavigationSignal = onClearNavigationSignal,
-                            onBotCallback = onBotCallback,
-                            currentTheme = currentTheme,
-                            onThemeChange = { currentTheme = it }
-                        )
-                    }
-                }
+    NoveoRootFrame(
+        state = NoveoRootFrameState(
+            startupSurface = when (state.startupState) {
+                StartupState.Splash -> NoveoStartupSurface.Splash
+                StartupState.Onboarding -> NoveoStartupSurface.Onboarding
+                StartupState.Auth -> NoveoStartupSurface.Auth
+                StartupState.Home -> NoveoStartupSurface.Home
+            },
+            languageCode = state.languageCode,
+            authModeSignup = state.authModeSignup,
+            loading = state.loading,
+            error = state.error,
+            connectionTitle = state.connectionTitle.ifBlank { coreNoveoStrings(state.languageCode).brandName }
+        ),
+        theme = currentTheme.toSharedTheme(),
+        strings = coreNoveoStrings(state.languageCode),
+        onDismissOnboarding = onDismissOnboarding,
+        onAuthMode = onAuthMode,
+        onStartRegisterCaptcha = onStartRegisterCaptcha,
+        onAuthSubmit = onAuthSubmit,
+        onOpenRegistrationWeb = openRegistrationWeb,
+        captchaContent = {
+            if (state.captchaInfo != null) {
+                CaptchaModal(
+                    sessionId = state.captchaInfo.sessionId,
+                    session = state.session,
+                    onToken = onCaptchaTokenReceived,
+                    onDismiss = onCaptchaDismiss
+                )
             }
+        },
+        homeContent = {
+            HomeScreen(
+                state = state,
+                onOpenChat = onOpenChat,
+                onStartDirectChat = onStartDirectChat,
+                onStartCreateChat = onStartCreateChat,
+                onSearchPublic = onSearchPublic,
+                onBackToChats = onBackToChats,
+                onSend = onSend,
+                onTyping = onTyping,
+                onLogout = onLogout,
+                onAttachFile = onAttachFile,
+                onRemoveAttachment = onRemoveAttachment,
+                onUpdateProfile = onUpdateProfile,
+                onLoadOlder = onLoadOlder,
+                onReply = onReply,
+                onEditMessage = onEditMessage,
+                onForwardMessage = onForwardMessage,
+                onForwardConfirm = onForwardConfirm,
+                onToggleReaction = onToggleReaction,
+                onDeleteMessage = onDeleteMessage,
+                onPinMessage = onPinMessage,
+                onChangePassword = onChangePassword,
+                onDeleteAccount = onDeleteAccount,
+                onSetLanguage = onSetLanguage,
+                onDismissUpdate = onDismissUpdate,
+                onDownloadUpdate = onDownloadUpdate,
+                onInstallUpdate = onInstallUpdate,
+                onCheckUpdate = onCheckUpdate,
+                onSetBetaUpdatesEnabled = onSetBetaUpdatesEnabled,
+                onSetDoubleTapReaction = onSetDoubleTapReaction,
+                onUpdateNotificationSettings = onUpdateNotificationSettings,
+                onRequestBatteryOptimization = onRequestBatteryOptimization,
+                onPlayAudio = onPlayAudio,
+                onPauseAudio = onPauseAudio,
+                onResumeAudio = onResumeAudio,
+                onStopAudio = onStopAudio,
+                onSeekAudio = onSeekAudio,
+                onDownloadFile = onDownloadFile,
+                onCancelDownload = onCancelDownload,
+                onCall = onCall,
+                onAcceptCall = onAcceptCall,
+                onDeclineCall = onDeclineCall,
+                onLeaveCall = onLeaveCall,
+                onToggleMute = onToggleMute,
+                onToggleDeafen = onToggleDeafen,
+                onToggleMinimize = onToggleMinimize,
+                onCancelUpload = onCancelUpload,
+                onSendSticker = onSendSticker,
+                onAddSavedSticker = onAddSavedSticker,
+                onHandleClick = onHandleClick,
+                onJoinChat = onJoinChat,
+                onLeaveChat = onLeaveChat,
+                onClearNavigationSignal = onClearNavigationSignal,
+                onBotCallback = onBotCallback,
+                currentTheme = currentTheme,
+                onThemeChange = { currentTheme = it }
+            )
         }
-    }
+    )
 }
 
 @Composable
