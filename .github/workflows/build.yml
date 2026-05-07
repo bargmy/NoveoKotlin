@@ -514,16 +514,10 @@ jobs:
         shell: bash
         run: chmod +x ./gradlew
 
-      - name: Clear Desktop build caches
-        shell: bash
-        run: |
-          rm -rf desktopApp/build
-          rm -rf ~/.gradle/caches/*/configuration-cache || true
-
       - name: Build desktop distributables
         shell: bash
         run: |
-          ./gradlew --build-cache --no-configuration-cache --rerun-tasks clean :desktopApp:packageMsi :desktopApp:packageExe
+          ./gradlew --build-cache --configuration-cache :desktopApp:packageReleaseMsi :desktopApp:packageReleaseExe
 
       - name: Collect desktop artifacts
         shell: bash
