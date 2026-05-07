@@ -234,26 +234,17 @@ private data class SelectedMediaAttachment(
     val localPath: String
 )
 
-private fun MessageFileAttachment.cacheExtension(): String {
-    val nameExtension = name.substringAfterLast('.', "")
-        .takeIf { it.isNotBlank() && it.length <= 8 }
-        ?.lowercase()
-    if (nameExtension != null) return nameExtension
-
-    return when {
-        isVideo() -> "mp4"
-        type.equals("image/gif", true) -> "gif"
-        type.equals("image/webp", true) -> "webp"
-        type.equals("image/jpeg", true) -> "jpg"
-        type.equals("image/png", true) -> "png"
-        type.startsWith("image/", true) -> type.substringAfter('/').substringBefore(';').ifBlank { "img" }
-        isTgsSticker() -> "tgs"
-        else -> "bin"
-    }
-}
-
 private fun localAttachmentCacheFile(root: File, file: MessageFileAttachment): File {
-    val extension = file.cacheExtension()
+    val extension = file.name.substringAfterLast('.', "").ifBlank {
+        when {
+            file.isVideo() -> "mp4"
+            file.type.equals("image/gif", true) -> "gif"
+            file.type.equals("image/webp", true) -> "webp"
+            file.type.equals("image/jpeg", true) -> "jpg"
+            file.isTgsSticker() -> "tgs"
+            else -> "bin"
+        }
+    }
     val safeName = file.name
         .substringBeforeLast('.', file.name)
         .replace(Regex("[^A-Za-z0-9._-]"), "_")
@@ -462,12 +453,14 @@ internal fun HomeScreen(
         }
     }
 
-    val onMediaClick = { _: ChatMessage, attachment: MessageFileAttachment ->
+    val onMediaClick = { message: ChatMessage, attachment: MessageFileAttachment ->
         val localPath = state.attachmentDownloads[attachment.downloadKey()]?.localPath
             ?: localAttachmentCacheFile(context.filesDir, attachment).takeIf { it.exists() }?.absolutePath
         if (!localPath.isNullOrBlank() && (attachment.isImage() || attachment.isVideo())) {
             selectedMediaAttachment = SelectedMediaAttachment(attachment = attachment, localPath = localPath)
-        } else if (!attachment.isImage() && !attachment.isVideo()) {
+        } else if (attachment.isImage() || attachment.isVideo()) {
+            onDownloadFile(message)
+        } else {
             val url = attachment.url.normalizeNoveoUrl()
             if (url != null) {
                 try {
@@ -3134,14 +3127,17 @@ private fun MessageAttachment(
 ) {
     val context = LocalContext.current
     val localPath = downloadState?.localPath
-    val localFile = remember(localPath) { localPath?.let(::File)?.takeIf { it.exists() } }
+    val cacheFile = remember(file.url, file.name, file.type) { localAttachmentCacheFile(context.filesDir, file) }
+    val localFile = remember(localPath, cacheFile.absolutePath) {
+        localPath?.let(::File)?.takeIf { it.exists() } ?: cacheFile.takeIf { it.exists() }
+    }
     val isDownloaded = localFile != null
     val isDownloading = downloadState?.isDownloading == true
     val progress = downloadState?.progress ?: 0f
     val overlayTint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
 
     if (file.isImage()) {
-        var imageLoaded by remember(localFile) { mutableStateOf(localFile != null) }
+        var imageLoaded by remember(localFile?.absolutePath) { mutableStateOf(false) }
         Card(
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier
@@ -3167,7 +3163,7 @@ private fun MessageAttachment(
                     )
                 }
 
-                if (!isDownloaded || !imageLoaded || isDownloading) {
+                if (!imageLoaded || isDownloading || localFile == null) {
                     AttachmentDownloadOverlay(
                         isVideo = false,
                         isDownloaded = isDownloaded,
@@ -3385,19 +3381,33 @@ private fun ContactsModal(
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(560.dp)) {
         Column(modifier = Modifier.fillMaxSize()) {
             ModalHeader(title = strings.allContacts, onClose = onClose)
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(users, key = { it.id }) { user ->
-                    ContactRow(
-                        user = user,
-                        strings = strings,
-                        existingChat = findDirectChatForUser(chats, selfUserId, user.id),
-                        onMessage = { onMessage(user.id) },
-                        onOpenProfile = { onOpenProfile(user.id) }
+            if (users.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = strings.noContacts,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
                     )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(users, key = { it.id }) { user ->
+                        ContactRow(
+                            user = user,
+                            strings = strings,
+                            existingChat = findDirectChatForUser(chats, selfUserId, user.id),
+                            onMessage = { onMessage(user.id) },
+                            onOpenProfile = { onOpenProfile(user.id) }
+                        )
+                    }
                 }
             }
         }
@@ -3910,7 +3920,7 @@ private fun SettingsThemeSection(strings: NoveoStrings, currentTheme: ThemePrese
             ThemeSection(
                 title = strings.themePremium,
                 subtitle = strings.themePremiumDesc,
-                presets = listOf(ThemePreset.SUNSET_SHIMMER, ThemePreset.CHERRY_RED, ThemePreset.RAINBOW_RAGEBAIT, ThemePreset.SANOKI_MEOA)
+                presets = listOf(ThemePreset.SUNSET_SHIMMER, ThemePreset.CHERRY_RED, ThemePreset.RAINBOW_RAGEBAIT)
             )
         )
 

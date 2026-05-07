@@ -293,6 +293,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val targetFile = getAttachmentFile(file)
         val shouldOpenWhenDone = !(file.isImage() || file.isVideo())
 
+        if (activeDownloadJobs[key]?.isActive == true) return
+
         if (targetFile.exists()) {
             updateAttachmentDownload(key, AttachmentDownloadState(localPath = targetFile.absolutePath, progress = 1f))
             if (shouldOpenWhenDone) {
@@ -311,6 +313,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
+        updateAttachmentDownload(
+            key = key,
+            state = AttachmentDownloadState(isDownloading = true, progress = 0f)
+        )
+
         val job = viewModelScope.launch(Dispatchers.IO) {
             try {
                 runCatching {
@@ -322,13 +329,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
                         val total = max(body.contentLength(), 1L)
                         targetFile.parentFile?.mkdirs()
-                        withContext(Dispatchers.Main) {
-                            updateAttachmentDownload(
-                                key = key,
-                                state = AttachmentDownloadState(isDownloading = true, progress = 0f)
-                            )
-                        }
-
                         body.byteStream().use { input ->
                             FileOutputStream(targetFile).use { output ->
                                 val buffer = ByteArray(8192)
@@ -770,10 +770,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun openDirectChat(userId: String) {
         val state = _uiState.value
         val selfId = state.session?.userId ?: return
-        
+
+        if (userId == selfId) {
+            val savedChat = state.chats.firstOrNull { chat ->
+                chat.id.startsWith("saved_") ||
+                    (chat.chatType == "private" && chat.memberIds.size == 1 && chat.memberIds.firstOrNull() == selfId)
+            }
+            if (savedChat != null) {
+                _uiState.value = _uiState.value.copy(directRecipientId = null)
+                openChat(savedChat.id)
+            } else {
+                val syntheticSavedChat = ChatSummary(
+                    id = "saved_$selfId",
+                    chatType = "private",
+                    title = "Saved Messages",
+                    avatarUrl = "saved_messages",
+                    memberIds = listOf(selfId),
+                    canChat = true
+                )
+                _uiState.value = _uiState.value.copy(
+                    chats = state.chats + syntheticSavedChat,
+                    selectedChatId = syntheticSavedChat.id,
+                    messages = emptyList(),
+                    directRecipientId = null
+                )
+            }
+            return
+        }
+
         val chatId = listOf(selfId, userId).sorted().joinToString("_")
         val existingChat = state.chats.firstOrNull { it.id == chatId }
-        
+
         if (existingChat != null) {
             _uiState.value = _uiState.value.copy(directRecipientId = null)
             openChat(chatId)
@@ -788,7 +815,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 memberIds = listOf(selfId, userId),
                 canChat = true
             )
-            
+
             _uiState.value = _uiState.value.copy(
                 chats = state.chats + syntheticChat,
                 selectedChatId = chatId,
@@ -1067,6 +1094,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                     ensureActive()
+                    uploadedFile?.let { cacheUploadedAttachment(it, attachment) }
                     _uiState.value = _uiState.value.copy(pendingAttachment = null)
                 }
 
@@ -1918,32 +1946,46 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    private fun getAttachmentExtension(file: MessageFileAttachment): String {
-        val nameExtension = file.name.substringAfterLast('.', "")
+    private fun MessageFileAttachment.cacheExtension(): String {
+        val nameExtension = name.substringAfterLast('.', "")
             .takeIf { it.isNotBlank() && it.length <= 8 }
             ?.lowercase()
         if (nameExtension != null) return nameExtension
 
         return when {
-            file.isVideo() -> "mp4"
-            file.type.equals("image/gif", true) -> "gif"
-            file.type.equals("image/webp", true) -> "webp"
-            file.type.equals("image/jpeg", true) -> "jpg"
-            file.type.equals("image/png", true) -> "png"
-            file.type.startsWith("image/", true) -> file.type.substringAfter('/').substringBefore(';').ifBlank { "img" }
-            file.isTgsSticker() -> "tgs"
+            isVideo() -> "mp4"
+            type.equals("image/gif", true) -> "gif"
+            type.equals("image/webp", true) -> "webp"
+            type.equals("image/jpeg", true) -> "jpg"
+            type.equals("image/png", true) -> "png"
+            type.startsWith("image/", true) -> type.substringAfter('/').substringBefore(';').ifBlank { "img" }
+            isTgsSticker() -> "tgs"
             else -> "bin"
         }
     }
 
     private fun getAttachmentFile(file: MessageFileAttachment): File {
-        val extension = getAttachmentExtension(file)
+        val extension = file.cacheExtension()
         val safeName = file.name
             .substringBeforeLast('.', file.name)
             .replace(Regex("[^A-Za-z0-9._-]"), "_")
             .take(40)
             .ifBlank { "attachment" }
         return File(getApplication<Application>().filesDir, "attachments/$safeName-${file.downloadKey()}.$extension")
+    }
+
+    private suspend fun cacheUploadedAttachment(file: MessageFileAttachment, attachment: PendingAttachment) {
+        val targetFile = getAttachmentFile(file)
+        withContext(Dispatchers.IO) {
+            targetFile.parentFile?.mkdirs()
+            targetFile.writeBytes(attachment.fileData)
+        }
+        withContext(Dispatchers.Main) {
+            updateAttachmentDownload(
+                key = file.downloadKey(),
+                state = AttachmentDownloadState(localPath = targetFile.absolutePath, progress = 1f)
+            )
+        }
     }
 
     private fun openDownloadedFile(file: File, mimeTypeHint: String) {

@@ -65,8 +65,7 @@ internal enum class ThemePreset(val label: String) {
     SUNSET_SHIMMER("Sunset Shimmer"),
     CHERRY_RED("Cherry Red"),
     SNOWY_DAYDREAM("Snowy Daydream"),
-    RAINBOW_RAGEBAIT("Rainbow Ragebait"),
-    SANOKI_MEOA("Sanoki Meoa")
+    RAINBOW_RAGEBAIT("Rainbow Ragebait")
 }
 
 private val sunsetLightScheme = lightColorScheme(
@@ -75,6 +74,8 @@ private val sunsetLightScheme = lightColorScheme(
     primaryContainer = Color(0xFFFFF7ED),
     onPrimaryContainer = Color(0xFF431407),
     secondary = Color(0xFFFB923C),
+    secondaryContainer = Color(0xFFFFEDD5),
+    onSecondaryContainer = Color(0xFF7C2D12),
     background = Color(0xFFFFF7ED),
     surface = Color(0xFFFFFAF5),
     surfaceVariant = Color(0xFFFDE6D7),
@@ -146,6 +147,8 @@ private val snowyDaydreamScheme = lightColorScheme(
     primaryContainer = Color(0xFFDDE6FF),
     onPrimaryContainer = Color(0xFF102041),
     secondary = Color(0xFF7B94B8),
+    secondaryContainer = Color(0xFFEAF2FF),
+    onSecondaryContainer = Color(0xFF123A6F),
     background = Color(0xFFF1F7FF),
     surface = Color.White.copy(alpha = 0.86f),
     onSurface = Color(0xFF102041),
@@ -167,20 +170,6 @@ private val rainbowRagebaitScheme = darkColorScheme(
     outline = Color(0xFF334155)
 )
 
-private val sanokiMeoaScheme = darkColorScheme(
-    primary = Color(0xFFA855F7),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFF39145C),
-    onPrimaryContainer = Color(0xFFf3e8ff),
-    secondary = Color(0xFFC084FC),
-    onSecondary = Color(0xFF4c1d95),
-    background = Color(0xFF09090b),
-    surface = Color(0xFF18181b),
-    surfaceVariant = Color(0xFF27272a),
-    onSurface = Color(0xFFf4f4f5),
-    onSurfaceVariant = Color(0xFFd4d4d8),
-    outline = Color(0xFF3f3f46)
-)
 
 private val skyLightScheme = lightColorScheme(
     primary = Color(0xFF2563EB),
@@ -188,6 +177,8 @@ private val skyLightScheme = lightColorScheme(
     primaryContainer = Color(0xFFDBEAFE),
     onPrimaryContainer = Color(0xFF1E40AF),
     secondary = Color(0xFF60A5FA),
+    secondaryContainer = Color(0xFFEAF2FF),
+    onSecondaryContainer = Color(0xFF123A6F),
     background = Color(0xFFE0F2FE),
     surface = Color(0xFFF8FCFF),
     surfaceVariant = Color(0xFFECFEFF),
@@ -203,6 +194,8 @@ private val lightScheme = lightColorScheme(
     primaryContainer = Color(0xFFEFF6FF),
     onPrimaryContainer = Color(0xFF1E40AF),
     secondary = Color(0xFF60A5FA),
+    secondaryContainer = Color(0xFFEAF2FF),
+    onSecondaryContainer = Color(0xFF123A6F),
     background = Color(0xFFEEF4FF),
     surface = Color.White,
     surfaceVariant = Color(0xFFF8FAFC),
@@ -279,7 +272,6 @@ fun NoveoRoot(
     onCheckUpdate: () -> Unit,
     onSetBetaUpdatesEnabled: (Boolean) -> Unit,
     onSetDoubleTapReaction: (String) -> Unit,
-    onSetAnimatedEmojiTgsEnabled: (Boolean) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     onRequestPermission: () -> Unit,
@@ -335,7 +327,6 @@ fun NoveoRoot(
         ThemePreset.CHERRY_RED -> cherryRedScheme
         ThemePreset.SNOWY_DAYDREAM -> snowyDaydreamScheme
         ThemePreset.RAINBOW_RAGEBAIT -> rainbowRagebaitScheme
-        ThemePreset.SANOKI_MEOA -> sanokiMeoaScheme
     }
 
     val layoutDirection = LayoutDirection.Ltr
@@ -583,7 +574,7 @@ private fun CaptchaModal(
                             settings.domStorageEnabled = true
                             settings.userAgentString = "NoveoKotlin/0.4.0"
 
-
+                            
                             webViewClient = object : android.webkit.WebViewClient() {
                                 override fun shouldOverrideUrlLoading(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): Boolean {
                                     val url = request?.url?.toString() ?: ""
@@ -599,13 +590,13 @@ private fun CaptchaModal(
                                     super.onPageFinished(view, url)
                                 }
                             }
-
+                            
                             addJavascriptInterface(object {
                                 @android.webkit.JavascriptInterface
                                 fun onCaptchaSolved(token: String) {
                                     onToken(token)
                                 }
-
+                                
                                 @android.webkit.JavascriptInterface
                                 fun notifyParent(dataJson: String) {
                                     val data = org.json.JSONObject(dataJson)
@@ -619,7 +610,7 @@ private fun CaptchaModal(
                                          val msg = org.json.JSONObject()
                                              .put("type", "captcha-parent-auth")
                                              .put("headers", authHeaders)
-
+                                         
                                          post {
                                              evaluateJavascript("window.postMessage($msg, '*')", null)
                                          }
@@ -657,3 +648,4 @@ private fun CaptchaModal(
         }
     )
 }
+
