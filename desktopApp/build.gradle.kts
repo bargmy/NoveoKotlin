@@ -1,7 +1,3 @@
-import org.gradle.jvm.tasks.Jar
-import org.gradle.api.tasks.Sync
-import org.gradle.api.tasks.bundling.Zip
-
 plugins {
     kotlin("jvm")
     id("org.jetbrains.compose")
@@ -31,31 +27,4 @@ compose.desktop {
 
 kotlin {
     jvmToolchain(17)
-}
-
-
-val thinDesktopDistDir = layout.buildDirectory.dir("thinDesktop")
-
-val syncThinDesktopDist by tasks.registering(Sync::class) {
-    dependsOn(tasks.named("jar"))
-    into(thinDesktopDistDir)
-
-    into("lib") {
-        from(configurations.runtimeClasspath)
-        from(tasks.named<Jar>("jar"))
-    }
-
-    into("bin") {
-        from(layout.projectDirectory.file("src/main/scripts/noveo-desktop.bat"))
-        from(layout.projectDirectory.file("src/main/scripts/noveo-desktop"))
-    }
-}
-
-tasks.register<Zip>("createThinDesktopZip") {
-    group = "distribution"
-    description = "Creates a desktop zip that uses system Java instead of bundling a JVM runtime."
-    dependsOn(syncThinDesktopDist)
-    archiveFileName.set("Noveo-1.0.0-thin-windows-x64.zip")
-    destinationDirectory.set(layout.buildDirectory.dir("compose/binaries/thin"))
-    from(thinDesktopDistDir)
 }
