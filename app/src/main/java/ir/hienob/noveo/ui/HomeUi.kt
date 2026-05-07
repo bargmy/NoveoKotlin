@@ -234,6 +234,12 @@ private data class SelectedMediaAttachment(
     val localPath: String
 )
 
+private fun ChatSummary.isSavedMessagesChat(currentUserId: String?): Boolean =
+    id.startsWith("saved_") ||
+        avatarUrl == "saved_messages" ||
+        title == "Saved Messages" ||
+        (chatType == "private" && currentUserId != null && memberIds.size == 1 && memberIds.firstOrNull() == currentUserId)
+
 private fun localAttachmentCacheFile(root: File, file: MessageFileAttachment): File {
     val extension = file.name.substringAfterLast('.', "").ifBlank {
         when {
@@ -355,7 +361,7 @@ class TelegramBubbleShape(
 }
 
 private enum class SettingsSection {
-    MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, CHANGELOG, THEME, NOTIFICATIONS
+    MENU, SUBSCRIPTION, PROFILE, ACCOUNT, PREFERENCES, THEME, NOTIFICATIONS
 }
 
 private data class ThemeSection(
@@ -1704,8 +1710,8 @@ private fun ChatPane(
         uri?.let { onAttachFile(it) }
     }
 
-    val selectedTitle = remember(selectedChat, strings) {
-        if (selectedChat?.id?.startsWith("saved_") == true) strings.savedMessages
+    val selectedTitle = remember(selectedChat, strings, state.session?.userId) {
+        if (selectedChat?.isSavedMessagesChat(state.session?.userId) == true) strings.savedMessages
         else selectedChat?.title?.ifBlank { strings.chatInfo } ?: strings.chatInfo
     }
     
@@ -1726,7 +1732,7 @@ private fun ChatPane(
     val currentAudioMessageId = state.currentAudioMessage?.id
     val currentAudioPlaying = state.isAudioPlaying
     val currentAudioProgress = state.audioProgress
-    val doubleTapEmoji = state.doubleTapReaction
+    val doubleTapEmoji = state.doubleTapReaction.ifBlank { "❤" }
 
     val typingUsers = state.typingUsers[selectedChat?.id].orEmpty()
     
@@ -1754,17 +1760,18 @@ private fun ChatPane(
         }
     }
 
-    val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount, typingText, strings, messages.size) {
+    val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount, typingText, strings, messages.size, sessionUserId) {
         if (selectedChat == null) return@remember ""
         if (typingText != null) return@remember typingText
-        val isSavedMessages = selectedChat.id.startsWith("saved_")
-        if (selectedChat.chatType == "private") {
+        val isSavedMessages = selectedChat.isSavedMessagesChat(sessionUserId)
+        if (isSavedMessages) {
+            formatMessagesCount(messages.size, strings)
+        } else if (selectedChat.chatType == "private") {
             if (isOnline) strings.membersOnline
             else formatLastSeen(profileUser?.lastSeen, strings)
         } else {
-            val total = if (isSavedMessages) messages.size else selectedChat.memberIds.size
             val onlineStr = localizeDigits(onlineCount.toString(), strings.languageCode)
-            val totalMembersText = formatMembersCount(total, strings)
+            val totalMembersText = formatMembersCount(selectedChat.memberIds.size, strings)
             val rawSubtitle = if (onlineCount > 0) "$totalMembersText${strings.comma} $onlineStr ${strings.membersOnline}" else totalMembersText
             if (strings.languageCode == "fa" || strings.languageCode == "ar") "\u200F$rawSubtitle" else rawSubtitle
         }
@@ -3535,7 +3542,6 @@ private fun SettingsModal(
                     SettingsSection.PROFILE -> strings.profile
                     SettingsSection.ACCOUNT -> strings.account
                     SettingsSection.PREFERENCES -> strings.preferences
-                    SettingsSection.CHANGELOG -> strings.changelog
                     SettingsSection.THEME -> strings.themes
                     SettingsSection.NOTIFICATIONS -> strings.notificationSettings
                 },
@@ -3554,7 +3560,6 @@ private fun SettingsModal(
                     SettingsSection.PROFILE -> SettingsProfileSection(strings, me, onUpdateProfile)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
                     SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, currentTheme, onThemeChange, onRequestBatteryOptimization)
-                    SettingsSection.CHANGELOG -> SettingsChangelogSection(strings)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
                     SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings, onRequestPermission)
                 }
@@ -3570,7 +3575,6 @@ private fun SettingsMenu(strings: NoveoStrings, onSectionChange: (SettingsSectio
         SettingsRow(strings.profile, Icons.Outlined.Person) { onSectionChange(SettingsSection.PROFILE) }
         SettingsRow(strings.account, Icons.Outlined.AccountCircle) { onSectionChange(SettingsSection.ACCOUNT) }
         SettingsRow(strings.preferences, Icons.Outlined.Settings) { onSectionChange(SettingsSection.PREFERENCES) }
-        SettingsRow(strings.changelog, Icons.Outlined.History) { onSectionChange(SettingsSection.CHANGELOG) }
     }
 }
 
@@ -3768,7 +3772,7 @@ private fun SettingsPreferencesSection(
                 )
             }
         }
-        SettingsRow("${strings.doubleTapReaction}: ${state.doubleTapReaction}", Icons.Outlined.Star) {
+        SettingsRow("${strings.doubleTapReaction}: ${state.doubleTapReaction.ifBlank { "❤" }}", Icons.Outlined.Star) {
             showReactionDialog = true
         }
 
@@ -3840,7 +3844,7 @@ private fun SettingsPreferencesSection(
                                         onSetDoubleTapReaction(reaction)
                                         showReactionDialog = false
                                     },
-                                color = if (reaction == state.doubleTapReaction) {
+                                color = if (reaction == state.doubleTapReaction.ifBlank { "❤" }) {
                                     MaterialTheme.colorScheme.primaryContainer
                                 } else {
                                     Color.Transparent
@@ -4183,7 +4187,8 @@ private fun GroupInfoModal(
 ) {
     val usersById = state.usersById
     val sessionUserId = state.session?.userId
-    val isSavedMessages = remember(chat.id) { chat.id.startsWith("saved_") }
+    val isSavedMessages = remember(chat, sessionUserId) { chat.isSavedMessagesChat(sessionUserId) }
+    val savedMessagesCount = state.messagesByChat[chat.id]?.size ?: state.messages.size
     val chatTitle = remember(chat.title, strings) {
         if (isSavedMessages) strings.savedMessages
         else chat.title.ifBlank { strings.chatInfo }
@@ -4230,18 +4235,19 @@ private fun GroupInfoModal(
                         ) {
                             Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 InfoItem(label = strings.title, value = chatTitle)
-                                val savedMessagesCount = state.messagesByChat[chat.id]?.size ?: 0
                                 if (!chat.handle.isNullOrBlank()) {
                                     val normalizedHandle = chat.handle.removePrefix("@")
                                     InfoItem(label = strings.link, value = "@$normalizedHandle", onClick = {
                                         clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("@$normalizedHandle"))
                                     })
                                 }
-                                InfoItem(label = strings.type, value = formatChatType(chat.chatType, strings))
+                                if (!isSavedMessages) {
+                                    InfoItem(label = strings.type, value = formatChatType(chat.chatType, strings))
+                                }
                                 if (isSavedMessages) {
                                     InfoItem(
-                                        label = strings.searchMessages,
-                                        value = localizeDigits(savedMessagesCount.toString(), strings.languageCode)
+                                        label = strings.messages,
+                                        value = formatMessagesCount(savedMessagesCount, strings)
                                     )
                                 }
                                 
@@ -4272,7 +4278,7 @@ private fun GroupInfoModal(
                                             ) {
                                                 Text(strings.join)
                                             }
-                                        } else if (chat.title != "Saved Messages") {
+                                        } else if (!isSavedMessages) {
                                             Button(
                                                 onClick = { onLeaveChat(chat.id) },
                                                 modifier = Modifier.weight(1f),
@@ -4291,7 +4297,7 @@ private fun GroupInfoModal(
                         }
 
                         Text(
-                            if (isSavedMessages) strings.searchMessages else strings.members,
+                            if (isSavedMessages) strings.messages else strings.members,
                             style = MaterialTheme.typography.titleMedium, 
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 8.dp),
@@ -4390,7 +4396,7 @@ private fun GroupInfoModal(
                                 }
                             }
                             Text(
-                                formatMembersCount(chat.memberIds.size, strings),
+                                if (isSavedMessages) formatMessagesCount(savedMessagesCount, strings) else formatMembersCount(chat.memberIds.size, strings),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -4420,7 +4426,7 @@ private fun GroupInfoModal(
                                 }
                             }
                             Text(
-                                formatMembersCount(chat.memberIds.size, strings),
+                                if (isSavedMessages) formatMessagesCount(savedMessagesCount, strings) else formatMembersCount(chat.memberIds.size, strings),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp
@@ -4519,8 +4525,8 @@ private fun ChatRow(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val chatTitle = remember(chat.title, strings) {
-        if (chat.title == "Saved Messages") strings.savedMessages
+    val chatTitle = remember(chat, strings, currentUserId) {
+        if (chat.isSavedMessagesChat(currentUserId)) strings.savedMessages
         else chat.title.ifBlank { strings.chatInfo }
     }
     val profileUserId = remember(chat, currentUserId) { resolveProfileUserId(chat, currentUserId) }
@@ -4533,7 +4539,7 @@ private fun ChatRow(
         )
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, isSavedMessages = chat.id.startsWith("saved_"))
+            ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, isSavedMessages = chat.isSavedMessagesChat(currentUserId))
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

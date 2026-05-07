@@ -40,6 +40,7 @@ data class NoveoStrings(
     val deleteConfirmText: String = "Are you sure? This action is permanent and will remove all your data.",
     val selectLanguage: String = "Select Language",
     val messagePlaceholder: String = "Message",
+    val messages: String = "Messages",
     val noMessagesYet: String = "No messages yet",
     val selectChatHint: String = "Select a chat to start messaging",
     val noHandle: String = "No handle",
@@ -228,6 +229,7 @@ private val translations = mapOf(
         deleteConfirmText = "Sind Sie sicher? Diese Aktion ist dauerhaft und entfernt alle Ihre Daten.",
         selectLanguage = "Sprache auswählen",
         messagePlaceholder = "Nachricht",
+        messages = "Nachrichten",
         noMessagesYet = "Noch keine Nachrichten",
         selectChatHint = "Wählen Sie einen Chat aus, um mit dem Messaging zu beginnen",
         noHandle = "Kein Handle",
@@ -380,6 +382,7 @@ private val translations = mapOf(
         deleteConfirmText = "Вы уверены? Это действие необратимо и удалит все ваши данные.",
         selectLanguage = "Выбрать язык",
         messagePlaceholder = "Сообщение",
+        messages = "Сообщения",
         noMessagesYet = "Нет сообщений",
         selectChatHint = "Выберите чат, чтобы начать общение",
         noHandle = "Нет юзернейма",
@@ -532,6 +535,7 @@ private val translations = mapOf(
         deleteConfirmText = "您确定吗？此操作无法撤销，将删除您的所有数据。",
         selectLanguage = "选择语言",
         messagePlaceholder = "输入消息",
+        messages = "消息",
         noMessagesYet = "暂无消息",
         selectChatHint = "选择一个聊天开始沟通",
         noHandle = "无用户名",
@@ -684,6 +688,7 @@ private val translations = mapOf(
         deleteConfirmText = "آیا مطمئن هستید؟ این عمل دائمی است و تمام داده‌های شما را حذف می‌کند.",
         selectLanguage = "انتخاب زبان",
         messagePlaceholder = "پیام",
+        messages = "پیام‌ها",
         noMessagesYet = "هنوز پیامی وجود ندارد",
         selectChatHint = "یک گفتگو را برای شروع انتخاب کنید",
         noHandle = "بدون آیدی",
@@ -855,6 +860,7 @@ private val translations = mapOf(
         deleteConfirmText = "¿Estás seguro? Esta acción es permanente y eliminará todos tus datos.",
         selectLanguage = "Seleccionar idioma",
         messagePlaceholder = "Mensaje",
+        messages = "Mensajes",
         noMessagesYet = "Aún no hay mensajes",
         selectChatHint = "Selecciona un chat para empezar a mensajear",
         noHandle = "Sin nombre de usuario",
@@ -1005,6 +1011,7 @@ private val translations = mapOf(
         deleteConfirmText = "Êtes-vous sûr ? Cette action est permanente et supprimera toutes vos données.",
         selectLanguage = "Choisir la langue",
         messagePlaceholder = "Message",
+        messages = "Messages",
         noMessagesYet = "Pas encore de messages",
         selectChatHint = "Sélectionnez un chat pour commencer à discuter",
         noHandle = "Pas de nom d'utilisateur",
@@ -1156,6 +1163,7 @@ private val translations = mapOf(
         deleteConfirmText = "هل أنت متأكد؟ هذا الإجراء نهائي وسيؤدي لحذف جميع بياناتك.",
         selectLanguage = "اختر اللغة",
         messagePlaceholder = "رسالة",
+        messages = "الرسائل",
         noMessagesYet = "لا توجد رسائل بعد",
         selectChatHint = "اختر دردشة لبدء المراسلة",
         noHandle = "بدون معرف",
@@ -1306,6 +1314,7 @@ private val translations = mapOf(
         deleteConfirmText = "Emin misiniz? Bu işlem kalıcıdır ve tüm verilerinizi siler.",
         selectLanguage = "Dil Seçin",
         messagePlaceholder = "Mesaj",
+        messages = "Mesajlar",
         noMessagesYet = "Henüz mesaj yok",
         selectChatHint = "Mesajlaşmaya başlamak için bir sohbet seçin",
         noHandle = "Kullanıcı adı yok",
@@ -1529,6 +1538,12 @@ fun localizeDigits(input: String, languageCode: String): String {
 fun formatMembersCount(count: Int, strings: NoveoStrings): String {
     val localizedCount = localizeDigits(count.toString(), strings.languageCode)
     return strings.membersCountFormat.replace("%d", localizedCount)
+}
+
+fun formatMessagesCount(count: Int, strings: NoveoStrings): String {
+    val localizedCount = localizeDigits(count.toString(), strings.languageCode)
+    val noun = if (count == 1) strings.messagePlaceholder.lowercase() else strings.messages.lowercase()
+    return "$localizedCount $noun"
 }
 
 fun formatChatType(chatType: String, strings: NoveoStrings): String {

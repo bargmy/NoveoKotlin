@@ -146,13 +146,30 @@ private val snowyDaydreamScheme = lightColorScheme(
     onPrimary = Color.White,
     primaryContainer = Color(0xFFDDE6FF),
     onPrimaryContainer = Color(0xFF102041),
-    secondary = Color(0xFF7B94B8),
+    inversePrimary = Color(0xFF9CC4FF),
+    secondary = Color(0xFF5E7FA8),
+    onSecondary = Color.White,
     secondaryContainer = Color(0xFFEAF2FF),
     onSecondaryContainer = Color(0xFF123A6F),
+    tertiary = Color(0xFF6B8FB8),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFE7F0FF),
+    onTertiaryContainer = Color(0xFF15365F),
     background = Color(0xFFF1F7FF),
-    surface = Color.White.copy(alpha = 0.86f),
+    onBackground = Color(0xFF102041),
+    surface = Color.White.copy(alpha = 0.92f),
     onSurface = Color(0xFF102041),
-    outline = Color(0xFFBFDBFE)
+    surfaceVariant = Color(0xFFEAF2FF),
+    onSurfaceVariant = Color(0xFF375575),
+    surfaceTint = Color(0xFF3B82F6),
+    inverseSurface = Color(0xFF213A5C),
+    inverseOnSurface = Color(0xFFF1F7FF),
+    outline = Color(0xFFBFDBFE),
+    outlineVariant = Color(0xFFD7E8FF),
+    error = Color(0xFFDC2626),
+    errorContainer = Color(0xFFFFE1E1),
+    onError = Color.White,
+    onErrorContainer = Color(0xFF7F1D1D)
 )
 
 private val rainbowRagebaitScheme = darkColorScheme(
