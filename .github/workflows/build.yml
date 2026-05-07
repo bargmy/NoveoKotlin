@@ -212,6 +212,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download Gradle wrapper JAR
+        shell: bash
+        run: |
+          mkdir -p gradle/wrapper
+          curl -fsSL "https://raw.githubusercontent.com/gradle/gradle/v8.14.4/gradle/wrapper/gradle-wrapper.jar" -o gradle/wrapper/gradle-wrapper.jar
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -347,6 +353,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download Gradle wrapper JAR
+        shell: bash
+        run: |
+          mkdir -p gradle/wrapper
+          curl -fsSL "https://raw.githubusercontent.com/gradle/gradle/v8.14.4/gradle/wrapper/gradle-wrapper.jar" -o gradle/wrapper/gradle-wrapper.jar
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -469,6 +481,59 @@ jobs:
           path: build.log
           if-no-files-found: ignore
 
+
+  build_desktop_windows:
+    name: Build Windows desktop package
+    runs-on: windows-latest
+    needs: metadata
+    env:
+      RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Gradle wrapper JAR
+        shell: bash
+        run: |
+          mkdir -p gradle/wrapper
+          curl -fsSL "https://raw.githubusercontent.com/gradle/gradle/v8.14.4/gradle/wrapper/gradle-wrapper.jar" -o gradle/wrapper/gradle-wrapper.jar
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Ensure wrapper is executable
+        shell: bash
+        run: chmod +x ./gradlew
+
+      - name: Build desktop distributables
+        shell: bash
+        run: |
+          ./gradlew --build-cache --configuration-cache :desktopApp:packageReleaseMsi :desktopApp:packageReleaseExe
+
+      - name: Collect desktop artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp desktopApp/build/compose/binaries/main/msi/*.msi "dist/noveo-${RELEASE_TAG}-windows-x64.msi"
+          cp desktopApp/build/compose/binaries/main/exe/*.exe "dist/noveo-${RELEASE_TAG}-windows-x64.exe"
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: dist/*
+          if-no-files-found: error
+
   vital_lint:
     name: Vital release lint
     runs-on: ubuntu-latest
@@ -477,6 +542,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download Gradle wrapper JAR
+        shell: bash
+        run: |
+          mkdir -p gradle/wrapper
+          curl -fsSL "https://raw.githubusercontent.com/gradle/gradle/v8.14.4/gradle/wrapper/gradle-wrapper.jar" -o gradle/wrapper/gradle-wrapper.jar
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -518,6 +589,7 @@ jobs:
       - metadata
       - build_minified
       - build_not_minified
+      - build_desktop_windows
     env:
       RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
 
@@ -531,6 +603,12 @@ jobs:
           pattern: "*-apks"
           path: dist
           merge-multiple: true
+
+      - name: Download desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-windows
+          path: dist
 
       - name: Download release metadata files
         uses: actions/download-artifact@v4
@@ -599,7 +677,10 @@ jobs:
           name: ${{ needs.metadata.outputs.release_name }}
           prerelease: ${{ needs.metadata.outputs.prerelease == 'true' }}
           body_path: release-notes.md
-          files: dist/*.apk
+          files: |
+            dist/*.apk
+            dist/*.msi
+            dist/*.exe
 
       - name: Create high-compression delivery ZIPs
         shell: bash
