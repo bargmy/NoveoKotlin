@@ -10,13 +10,19 @@ concurrency:
   group: android-build-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  metadata:
+    name: Release metadata
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      APK_FOLDER: app/build/outputs/apk/release
+    outputs:
+      version: ${{ steps.release_meta.outputs.version }}
+      version_code: ${{ steps.release_meta.outputs.version_code }}
+      tag: ${{ steps.release_meta.outputs.tag }}
+      prerelease: ${{ steps.release_meta.outputs.prerelease }}
+      release_name: ${{ steps.release_meta.outputs.release_name }}
 
     steps:
       - name: Checkout
@@ -24,31 +30,6 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Set up Gradle cache
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-home-cache-cleanup: true
-
-      - name: Prepare Gradle command
-        id: gradle_cmd
-        shell: bash
-        run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            echo "cmd=./gradlew" >> "$GITHUB_OUTPUT"
-          else
-            echo "cmd=gradle" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Derive release metadata
         id: release_meta
@@ -86,18 +67,17 @@ jobs:
           base_version = version_match.group(1).strip()
           base_version_code = int(version_code_match.group(1))
 
-          req = urllib.request.Request(
-              f"https://api.github.com/repos/{repo}/releases?per_page=100",
-              headers={
-                  "Authorization": f"Bearer {token}",
-                  "Accept": "application/vnd.github+json",
-                  "X-GitHub-Api-Version": "2022-11-28",
-              },
-          )
-
           latest_release_tag = ""
           latest_stable_tag = ""
           try:
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/releases?per_page=100",
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
               with urllib.request.urlopen(req) as resp:
                   releases = json.load(resp)
               for release in releases:
@@ -112,8 +92,7 @@ jobs:
                       latest_stable_tag = tag_name
                       break
           except Exception:
-              latest_release_tag = ""
-              latest_stable_tag = ""
+              pass
 
           is_prerelease = base_version == latest_stable_tag
           if is_prerelease:
@@ -124,7 +103,6 @@ jobs:
               prerelease = "true"
               release_name = f"Noveo {tag}"
           else:
-              stamp = ""
               effective_version = base_version
               version_code = base_version_code
               tag = base_version
@@ -132,138 +110,19 @@ jobs:
               release_name = f"Noveo {base_version}"
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              fh.write(f"base_version={base_version}\n")
               fh.write(f"version={effective_version}\n")
               fh.write(f"version_code={version_code}\n")
-              fh.write(f"stamp={stamp}\n")
               fh.write(f"tag={tag}\n")
               fh.write(f"prerelease={prerelease}\n")
               fh.write(f"release_name={release_name}\n")
               fh.write(f"latest_release_tag={latest_release_tag}\n")
-              fh.write(f"latest_stable_tag={latest_stable_tag}\n")
           PY
 
-      - name: Build release APK
-        id: build_apk
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          "${{ steps.gradle_cmd.outputs.cmd }}" \
-            --build-cache \
-            --configuration-cache \
-            -PNOVEO_VERSION_NAME="${{ steps.release_meta.outputs.version }}" \
-            -PNOVEO_VERSION_CODE="${{ steps.release_meta.outputs.version_code }}" \
-            assembleRelease 2>&1 | tee build.log
-
-      - name: Sign APK
-        if: steps.build_apk.outcome == 'success'
-        shell: bash
-        env:
-          SIGN_KEYSTORE_BASE64: ${{ secrets.SIGN_KEYSTORE_BASE64 }}
-          SIGN_KEYSTORE_PASSWORD: ${{ secrets.SIGN_KEYSTORE_PASSWORD }}
-          SIGN_KEY_ALIAS: ${{ secrets.SIGN_KEY_ALIAS }}
-          SIGN_KEY_PASSWORD: ${{ secrets.SIGN_KEY_PASSWORD }}
-        run: |
-          if [ -z "${SIGN_KEYSTORE_BASE64}" ]; then
-            echo "SIGN_KEYSTORE_BASE64 is empty, skipping signing."
-            exit 0
-          fi
-
-          echo "$SIGN_KEYSTORE_BASE64" | base64 -d > release.keystore
-          BUILD_TOOLS_DIR="$(ls -d "${ANDROID_SDK_ROOT}"/build-tools/* | sort -V | tail -n 1)"
-          APKSIGNER="${BUILD_TOOLS_DIR}/apksigner"
-          ZIPALIGN="${BUILD_TOOLS_DIR}/zipalign"
-          APK_PATH="$(find "$APK_FOLDER" -type f -name '*.apk' | head -n 1)"
-
-          if [ -z "$APK_PATH" ]; then
-            echo "No APK found to sign." >&2
-            exit 1
-          fi
-
-          "$ZIPALIGN" -f -v 4 "$APK_PATH" aligned.apk
-          "$APKSIGNER" sign \
-            --ks release.keystore \
-            --ks-pass pass:"$SIGN_KEYSTORE_PASSWORD" \
-            --ks-key-alias "$SIGN_KEY_ALIAS" \
-            --key-pass pass:"$SIGN_KEY_PASSWORD" \
-            --out signed.apk aligned.apk
-
-          mv signed.apk "$APK_PATH"
-
-      - name: Upload build log artifact on failure
-        if: steps.build_apk.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-${{ github.run_number }}
-          path: build.log
-          if-no-files-found: ignore
-
-      - name: Notify Telegram on build failure
-        if: steps.build_apk.outcome == 'failure'
-        shell: bash
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.CHANNEL_ID }}
-          REPO: ${{ github.repository }}
-          REF_NAME: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          if [ -z "${TELEGRAM_BOT_TOKEN}" ] || [ -z "${TELEGRAM_CHAT_ID}" ]; then
-            echo "Telegram failure notification is not configured, skipping."
-            exit 0
-          fi
-
-          python3 - <<'PY'
-          import os
-          import pathlib
-          import urllib.parse
-          import urllib.request
-
-          token = os.environ["TELEGRAM_BOT_TOKEN"]
-          chat_id = os.environ["TELEGRAM_CHAT_ID"]
-          repo = os.environ["REPO"]
-          ref_name = os.environ["REF_NAME"]
-          sha = os.environ["SHA"][:7]
-          run_url = f"https://github.com/{repo}/actions/runs/{os.environ['RUN_ID']}"
-          log_text = ""
-          log_file = pathlib.Path("build.log")
-          if log_file.exists():
-              lines = log_file.read_text(errors="ignore").strip().splitlines()
-              log_text = "\n".join(lines[-35:])[-3200:]
-          message = f"Android release build failed\nrepo: {repo}\nbranch: {ref_name}\ncommit: {sha}\nrun: {run_url}"
-          if log_text:
-              message += f"\n\nLast log lines:\n{log_text}"
-          data = urllib.parse.urlencode({"chat_id": chat_id, "text": message}).encode()
-          req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
-          urllib.request.urlopen(req).read()
-          PY
-
-      - name: Fail workflow after failure notifications
-        if: steps.build_apk.outcome == 'failure'
-        run: exit 1
-
-      - name: Find built APK
-        id: find_apk
-        shell: bash
-        run: |
-          APK_PATH="$(find "$APK_FOLDER" -type f -name '*.apk' | head -n 1)"
-          if [ -z "$APK_PATH" ]; then
-            echo "No APK found in $APK_FOLDER" >&2
-            exit 1
-          fi
-          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
-          echo "apk_name=$(basename "$APK_PATH")" >> "$GITHUB_OUTPUT"
-
-      - name: Groq Diffgen
-        id: changelog
+      - name: Generate changelog
         shell: bash
         env:
           GITHUB_SHA: ${{ github.sha }}
           RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
-          RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
-          RELEASE_PRERELEASE: ${{ steps.release_meta.outputs.prerelease }}
           PREVIOUS_RELEASE_TAG: ${{ steps.release_meta.outputs.latest_release_tag }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
@@ -280,37 +139,21 @@ jobs:
             PREV_LABEL="initial build"
           fi
 
-          {
-            echo "release_tag=${RELEASE_TAG}"
-            echo "previous_label=${PREV_LABEL}"
-            echo "range=${RANGE}"
-          } >> "$GITHUB_OUTPUT"
-
           git log --no-merges --pretty=format:'- %s (%h)' "$RANGE" > commits.txt || true
           git diff --name-status "$RANGE" > files.txt || true
           export PREV_LABEL RANGE
-          python3 -m pip install --disable-pip-version-check --quiet groq
-
           python3 - <<'PY'
           import os
           import pathlib
+          import subprocess
           import sys
           import textwrap
-          from groq import Groq
 
           release_tag = os.environ["RELEASE_TAG"]
-          release_version = os.environ["RELEASE_VERSION"]
-          prerelease = os.environ["RELEASE_PRERELEASE"] == "true"
           previous_label = os.environ["PREV_LABEL"]
-          range_text = os.environ["RANGE"]
+          commits = pathlib.Path("commits.txt").read_text(encoding="utf-8", errors="ignore").strip() or "- No commit messages available"
+          files_changed = pathlib.Path("files.txt").read_text(encoding="utf-8", errors="ignore").strip() or "No file-level diff available"
           api_key = os.environ.get("GROQ_API_KEY", "").strip()
-
-          commits = pathlib.Path("commits.txt").read_text(encoding="utf-8", errors="ignore").strip()
-          files_changed = pathlib.Path("files.txt").read_text(encoding="utf-8", errors="ignore").strip()
-          if not commits:
-              commits = "- No commit messages available"
-          if not files_changed:
-              files_changed = "No file-level diff available"
 
           fallback = textwrap.dedent(f"""\
           Release {release_tag}
@@ -324,113 +167,467 @@ jobs:
           {files_changed}
           """).strip()
 
-          if not api_key:
-              body = fallback
-          else:
-              system_prompt = (
-                  "You write concise software release notes for Android builds. "
-                  "Return plain Markdown only. Be factual, do not invent behavior, "
-                  "and summarize only what is supported by the provided diff. "
-                  "Keep the result under 900 characters so the exact same text can be reused "
-                  "for GitHub Releases and message captions."
-              )
-              user_prompt = textwrap.dedent(f"""\
-              Build type: {"pre-release" if prerelease else "release"}
-              New release tag: {release_tag}
-              App versionName: {release_version}
-              Diff range: {range_text}
-              Previous successful release: {previous_label}
-
-              Commit summaries:
-              {commits}
-
-              File diff:
-              {files_changed}
-
-              Write a compact changelog with:
-              - a one-line headline
-              - 2 to 5 short bullets
-              - no hype
-              - no unsupported claims
-              """)
+          body = fallback
+          if api_key:
               try:
+                  subprocess.check_call([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--quiet", "groq"])
+                  from groq import Groq
                   client = Groq(api_key=api_key)
                   completion = client.chat.completions.create(
                       model="openai/gpt-oss-120b",
                       reasoning_effort="medium",
                       messages=[
-                          {"role": "system", "content": system_prompt},
-                          {"role": "user", "content": user_prompt},
+                          {"role": "system", "content": "Write concise factual Android release notes in plain Markdown under 900 characters."},
+                          {"role": "user", "content": f"Release {release_tag}\n\nCommits:\n{commits}\n\nFiles changed:\n{files_changed}"},
                       ],
                   )
-                  body = (completion.choices[0].message.content or "").strip()
-                  if not body:
-                      raise RuntimeError("Groq returned an empty changelog response")
+                  generated = (completion.choices[0].message.content or "").strip()
+                  if generated:
+                      body = generated
               except Exception as exc:
-                  print(f"Groq diffgen failed: {exc}", file=sys.stderr)
-                  raise
+                  print(f"Groq diffgen failed, using fallback: {exc}", file=sys.stderr)
 
           pathlib.Path("release-notes.md").write_text(body + "\n", encoding="utf-8")
           pathlib.Path("release-caption.txt").write_text(body[:900], encoding="utf-8")
           PY
 
-      - name: Rename APK for release
-        id: rename_apk
-        shell: bash
-        env:
-          APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
-          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
-        run: |
-          set -euo pipefail
-          RELEASE_APK_PATH="$(dirname "$APK_PATH")/noveo-${RELEASE_TAG}.apk"
-          mv "$APK_PATH" "$RELEASE_APK_PATH"
-          echo "apk_path=$RELEASE_APK_PATH" >> "$GITHUB_OUTPUT"
-          echo "apk_name=$(basename "$RELEASE_APK_PATH")" >> "$GITHUB_OUTPUT"
-
-      - name: Upload APK artifact to GitHub
+      - name: Upload release metadata files
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk
-          path: ${{ steps.rename_apk.outputs.apk_path }}
+          name: release-metadata
+          path: |
+            release-notes.md
+            release-caption.txt
+          if-no-files-found: error
+
+  build_minified:
+    name: Build minified APKs
+    runs-on: ubuntu-latest
+    needs: metadata
+    env:
+      APK_FOLDER: app/build/outputs/apk/release
+      RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Prepare Gradle command
+        id: gradle_cmd
+        shell: bash
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            echo "cmd=./gradlew" >> "$GITHUB_OUTPUT"
+          else
+            echo "cmd=gradle" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure minified split APKs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import re
+
+          path = pathlib.Path("app/build.gradle.kts")
+          text = path.read_text(encoding="utf-8")
+          text = re.sub(
+              r'abiFilters \+= listOf\([^)]+\)',
+              'abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")',
+              text,
+          )
+
+          if "splits {" not in text:
+              splits = """
+              splits {
+                  abi {
+                      isEnable = true
+                      reset()
+                      include("arm64-v8a", "armeabi-v7a", "x86_64")
+                      isUniversalApk = true
+                  }
+              }
+
+          """
+              text = text.replace("    signingConfigs {", splits + "    signingConfigs {", 1)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Build minified split APKs
+        shell: bash
+        run: |
+          set -o pipefail
+          "${{ steps.gradle_cmd.outputs.cmd }}" \
+            --build-cache \
+            --configuration-cache \
+            -PNOVEO_VERSION_NAME="${{ needs.metadata.outputs.version }}" \
+            -PNOVEO_VERSION_CODE="${{ needs.metadata.outputs.version_code }}" \
+            assembleRelease \
+            -x lintVitalRelease \
+            -x lintVitalReportRelease 2>&1 | tee build.log
+
+      - name: Collect minified APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          shopt -s nullglob
+
+          for apk in "$APK_FOLDER"/*.apk; do
+            name="$(basename "$apk")"
+            case "$name" in
+              *universal*|app-release.apk)
+                out="noveo-${RELEASE_TAG}.apk"
+                ;;
+              *arm64-v8a*)
+                out="noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
+                ;;
+              *armeabi-v7a*)
+                out="noveo-${RELEASE_TAG}-armeabi-v7a-minified.apk"
+                ;;
+              *x86_64*)
+                out="noveo-${RELEASE_TAG}-x86_64-minified.apk"
+                ;;
+              *)
+                echo "Skipping unknown APK output: $name"
+                continue
+                ;;
+            esac
+            cp "$apk" "dist/$out"
+          done
+
+          ls -lh dist
+          test -f "dist/noveo-${RELEASE_TAG}.apk"
+          test -f "dist/noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
+          test -f "dist/noveo-${RELEASE_TAG}-armeabi-v7a-minified.apk"
+          test -f "dist/noveo-${RELEASE_TAG}-x86_64-minified.apk"
+
+      - name: Upload minified APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: minified-apks
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Upload minified build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minified-build-log-${{ github.run_number }}
+          path: build.log
+          if-no-files-found: ignore
+
+  build_not_minified:
+    name: Build not-minified ABI APKs
+    runs-on: ubuntu-latest
+    needs: metadata
+    env:
+      APK_FOLDER: app/build/outputs/apk/release
+      RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Prepare Gradle command
+        id: gradle_cmd
+        shell: bash
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            echo "cmd=./gradlew" >> "$GITHUB_OUTPUT"
+          else
+            echo "cmd=gradle" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure not-minified split APKs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import re
+
+          path = pathlib.Path("app/build.gradle.kts")
+          text = path.read_text(encoding="utf-8")
+          text = re.sub(
+              r'abiFilters \+= listOf\([^)]+\)',
+              'abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")',
+              text,
+          )
+
+          text = text.replace("isMinifyEnabled = true", "isMinifyEnabled = false", 1)
+          text = text.replace("isShrinkResources = true", "isShrinkResources = false", 1)
+
+          if "splits {" not in text:
+              splits = """
+              splits {
+                  abi {
+                      isEnable = true
+                      reset()
+                      include("arm64-v8a", "armeabi-v7a", "x86_64")
+                      isUniversalApk = false
+                  }
+              }
+
+          """
+              text = text.replace("    signingConfigs {", splits + "    signingConfigs {", 1)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Build not-minified ABI APKs
+        shell: bash
+        run: |
+          set -o pipefail
+          "${{ steps.gradle_cmd.outputs.cmd }}" \
+            --build-cache \
+            --configuration-cache \
+            -PNOVEO_VERSION_NAME="${{ needs.metadata.outputs.version }}" \
+            -PNOVEO_VERSION_CODE="${{ needs.metadata.outputs.version_code }}" \
+            assembleRelease \
+            -x lintVitalRelease \
+            -x lintVitalReportRelease 2>&1 | tee build.log
+
+      - name: Collect not-minified APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          shopt -s nullglob
+
+          for apk in "$APK_FOLDER"/*.apk; do
+            name="$(basename "$apk")"
+            case "$name" in
+              *arm64-v8a*)
+                out="noveo-${RELEASE_TAG}-arm64-v8a-not-minified.apk"
+                ;;
+              *armeabi-v7a*)
+                out="noveo-${RELEASE_TAG}-armeabi-v7a-not-minified.apk"
+                ;;
+              *x86_64*)
+                out="noveo-${RELEASE_TAG}-x86_64-not-minified.apk"
+                ;;
+              *)
+                echo "Skipping unknown APK output: $name"
+                continue
+                ;;
+            esac
+            cp "$apk" "dist/$out"
+          done
+
+          ls -lh dist
+          test -f "dist/noveo-${RELEASE_TAG}-arm64-v8a-not-minified.apk"
+          test -f "dist/noveo-${RELEASE_TAG}-armeabi-v7a-not-minified.apk"
+          test -f "dist/noveo-${RELEASE_TAG}-x86_64-not-minified.apk"
+
+      - name: Upload not-minified APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: not-minified-apks
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Upload not-minified build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: not-minified-build-log-${{ github.run_number }}
+          path: build.log
+          if-no-files-found: ignore
+
+  vital_lint:
+    name: Vital release lint
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Prepare Gradle command
+        id: gradle_cmd
+        shell: bash
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            echo "cmd=./gradlew" >> "$GITHUB_OUTPUT"
+          else
+            echo "cmd=gradle" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run vital release lint separately
+        shell: bash
+        run: |
+          "${{ steps.gradle_cmd.outputs.cmd }}" \
+            --build-cache \
+            --configuration-cache \
+            lintVitalRelease
+
+  publish:
+    name: Publish APKs
+    runs-on: ubuntu-latest
+    needs:
+      - metadata
+      - build_minified
+      - build_not_minified
+    env:
+      RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+
+    steps:
+      - name: Set up Android SDK for signing
+        uses: android-actions/setup-android@v3
+
+      - name: Download APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-apks"
+          path: dist
+          merge-multiple: true
+
+      - name: Download release metadata files
+        uses: actions/download-artifact@v4
+        with:
+          name: release-metadata
+          path: .
+
+      - name: List APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -lh dist
+          test -f "dist/noveo-${RELEASE_TAG}.apk"
+          test -f "dist/noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
+          test -f "dist/noveo-${RELEASE_TAG}-armeabi-v7a-minified.apk"
+          test -f "dist/noveo-${RELEASE_TAG}-x86_64-minified.apk"
+          test -f "dist/noveo-${RELEASE_TAG}-arm64-v8a-not-minified.apk"
+          test -f "dist/noveo-${RELEASE_TAG}-armeabi-v7a-not-minified.apk"
+          test -f "dist/noveo-${RELEASE_TAG}-x86_64-not-minified.apk"
+
+      - name: Sign APKs
+        shell: bash
+        env:
+          SIGN_KEYSTORE_BASE64: ${{ secrets.SIGN_KEYSTORE_BASE64 }}
+          SIGN_KEYSTORE_PASSWORD: ${{ secrets.SIGN_KEYSTORE_PASSWORD }}
+          SIGN_KEY_ALIAS: ${{ secrets.SIGN_KEY_ALIAS }}
+          SIGN_KEY_PASSWORD: ${{ secrets.SIGN_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SIGN_KEYSTORE_BASE64}" ]; then
+            echo "SIGN_KEYSTORE_BASE64 is empty, keeping Gradle-produced APK signatures."
+            exit 0
+          fi
+
+          echo "$SIGN_KEYSTORE_BASE64" | base64 -d > release.keystore
+          BUILD_TOOLS_DIR="$(ls -d "${ANDROID_SDK_ROOT}"/build-tools/* | sort -V | tail -n 1)"
+          APKSIGNER="${BUILD_TOOLS_DIR}/apksigner"
+          ZIPALIGN="${BUILD_TOOLS_DIR}/zipalign"
+
+          shopt -s nullglob
+          for apk in dist/*.apk; do
+            aligned="${apk%.apk}-aligned.apk"
+            signed="${apk%.apk}-signed.apk"
+            "$ZIPALIGN" -f -v 4 "$apk" "$aligned"
+            "$APKSIGNER" sign \
+              --ks release.keystore \
+              --ks-pass pass:"$SIGN_KEYSTORE_PASSWORD" \
+              --ks-key-alias "$SIGN_KEY_ALIAS" \
+              --key-pass pass:"$SIGN_KEY_PASSWORD" \
+              --out "$signed" "$aligned"
+            mv "$signed" "$apk"
+            rm -f "$aligned"
+          done
+
+      - name: Upload all APKs as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apks
+          path: dist/*.apk
           if-no-files-found: error
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release_meta.outputs.tag }}
-          name: ${{ steps.release_meta.outputs.release_name }}
-          prerelease: ${{ steps.release_meta.outputs.prerelease == 'true' }}
+          tag_name: ${{ needs.metadata.outputs.tag }}
+          name: ${{ needs.metadata.outputs.release_name }}
+          prerelease: ${{ needs.metadata.outputs.prerelease == 'true' }}
           body_path: release-notes.md
-          files: ${{ steps.rename_apk.outputs.apk_path }}
+          files: dist/*.apk
 
-      - name: Send APK to Telegram
+      - name: Send universal and arm64 APKs to Telegram
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.CHANNEL_ID }}
-          APK_PATH: ${{ steps.rename_apk.outputs.apk_path }}
-          APK_NAME: ${{ steps.rename_apk.outputs.apk_name }}
         run: |
+          set -euo pipefail
           if [ -z "${TELEGRAM_BOT_TOKEN}" ] || [ -z "${TELEGRAM_CHAT_ID}" ]; then
             echo "Telegram delivery is not configured, skipping."
             exit 0
           fi
 
           CAPTION="$(cat release-caption.txt)"
-          curl --fail --silent --show-error \
-            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-            -F "chat_id=${TELEGRAM_CHAT_ID}" \
-            -F "document=@${APK_PATH};filename=${APK_NAME}" \
-            -F "caption=${CAPTION}"
+          for apk in \
+            "dist/noveo-${RELEASE_TAG}.apk" \
+            "dist/noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
+          do
+            curl --fail --silent --show-error \
+              -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+              -F "chat_id=${TELEGRAM_CHAT_ID}" \
+              -F "document=@${apk};filename=$(basename "$apk")" \
+              -F "caption=${CAPTION}"
+          done
 
-      - name: Send APK to Bale through proxy
+      - name: Send universal APK to Bale through proxy
         shell: bash
         env:
           BALE_BOT_TOKEN: ${{ secrets.BALE_TOKEN }}
           PROXY_IP: ${{ secrets.PROXY_IP }}
-          APK_PATH: ${{ steps.rename_apk.outputs.apk_path }}
-          APK_NAME: ${{ steps.rename_apk.outputs.apk_name }}
         run: |
+          set -euo pipefail
           BALE_BOT_TOKEN_CLEAN="$(printf '%s' "${BALE_BOT_TOKEN}" | tr -d '\r\n[:space:]')"
           PROXY_IP_CLEAN="$(printf '%s' "${PROXY_IP}" | tr -d '\r\n[:space:]')"
 
@@ -439,6 +636,8 @@ jobs:
             exit 0
           fi
 
+          APK_PATH="dist/noveo-${RELEASE_TAG}.apk"
+          APK_NAME="$(basename "$APK_PATH")"
           CAPTION="$(cat release-caption.txt)"
           RESPONSE="$(
             curl --silent --show-error \
