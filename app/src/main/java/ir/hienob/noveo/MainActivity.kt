@@ -87,7 +87,6 @@ class MainActivity : ComponentActivity() {
                 onCheckUpdate = { viewModel.checkForUpdate(manual = true) },
                 onSetBetaUpdatesEnabled = viewModel::setBetaUpdatesEnabled,
                 onSetDoubleTapReaction = viewModel::setDoubleTapReaction,
-                onSetAnimatedEmojiTgsEnabled = viewModel::setAnimatedEmojiTgsEnabled,
                 onUpdateNotificationSettings = { viewModel.updateNotificationSettings(it) },
                 onRequestBatteryOptimization = { viewModel.requestDisableBatteryOptimization() },
                 onRequestPermission = {
@@ -209,4 +208,3 @@ class MainActivity : ComponentActivity() {
         startActivity(intent)
     }
 }
-
