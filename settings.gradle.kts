@@ -24,5 +24,6 @@ include(":core:network")
 include(":core:datastore")
 include(":core:notifications")
 include(":core:voice")
+include(":core:ui")
 
 include(":desktopApp")

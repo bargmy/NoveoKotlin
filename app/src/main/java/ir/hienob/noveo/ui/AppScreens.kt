@@ -53,6 +53,8 @@ import ir.hienob.noveo.app.StartupState
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.data.SavedSticker
+import ir.hienob.noveo.core.ui.NoveoTheme
+import ir.hienob.noveo.core.ui.NoveoThemePreset
 
 internal enum class ThemePreset(val label: String) {
     SKY_LIGHT("Sky Light"),
@@ -66,6 +68,20 @@ internal enum class ThemePreset(val label: String) {
     CHERRY_RED("Cherry Red"),
     SNOWY_DAYDREAM("Snowy Daydream"),
     RAINBOW_RAGEBAIT("Rainbow Ragebait")
+}
+
+private fun ThemePreset.toSharedTheme(): NoveoThemePreset = when (this) {
+    ThemePreset.SKY_LIGHT -> NoveoThemePreset.SKY_LIGHT
+    ThemePreset.LIGHT -> NoveoThemePreset.LIGHT
+    ThemePreset.SUNSET_LIGHT -> NoveoThemePreset.SUNSET_LIGHT
+    ThemePreset.DARK -> NoveoThemePreset.DARK
+    ThemePreset.OCEAN_DARK -> NoveoThemePreset.OCEAN_DARK
+    ThemePreset.PLUM_DARK -> NoveoThemePreset.PLUM_DARK
+    ThemePreset.OLED_DARK -> NoveoThemePreset.OLED_DARK
+    ThemePreset.SUNSET_SHIMMER -> NoveoThemePreset.SUNSET_SHIMMER
+    ThemePreset.CHERRY_RED -> NoveoThemePreset.CHERRY_RED
+    ThemePreset.SNOWY_DAYDREAM -> NoveoThemePreset.SNOWY_DAYDREAM
+    ThemePreset.RAINBOW_RAGEBAIT -> NoveoThemePreset.RAINBOW_RAGEBAIT
 }
 
 private val sunsetLightScheme = lightColorScheme(
@@ -348,7 +364,7 @@ fun NoveoRoot(
 
     val layoutDirection = LayoutDirection.Ltr
     CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-        MaterialTheme(colorScheme = colorScheme) {
+        NoveoTheme(theme = currentTheme.toSharedTheme()) {
             Surface(modifier = Modifier.fillMaxSize()) {
                 if (state.captchaInfo != null) {
                     CaptchaModal(
