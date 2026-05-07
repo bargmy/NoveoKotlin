@@ -601,7 +601,26 @@ jobs:
           body_path: release-notes.md
           files: dist/*.apk
 
-      - name: Send universal and arm64 APKs to Telegram
+      - name: Create high-compression delivery ZIPs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p delivery
+
+          UNIVERSAL_APK="dist/noveo-${RELEASE_TAG}.apk"
+          ARM64_APK="dist/noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
+
+          test -f "$UNIVERSAL_APK"
+          test -f "$ARM64_APK"
+
+          # APK files are already compressed internally, so this may not reduce size much,
+          # but -9 gives the highest ZIP compression level for delivery packages.
+          zip -9 -j "delivery/noveo-${RELEASE_TAG}.zip" "$UNIVERSAL_APK"
+          zip -9 -j "delivery/noveo-${RELEASE_TAG}-arm64-v8a-minified.zip" "$ARM64_APK"
+
+          ls -lh delivery
+
+      - name: Send universal and arm64 ZIPs to Telegram as one message
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TOKEN }}
@@ -613,48 +632,70 @@ jobs:
             exit 0
           fi
 
-          CAPTION="$(cat release-caption.txt)"
-          for apk in \
-            "dist/noveo-${RELEASE_TAG}.apk" \
-            "dist/noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
-          do
-            curl --fail --silent --show-error \
-              -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-              -F "chat_id=${TELEGRAM_CHAT_ID}" \
-              -F "document=@${apk};filename=$(basename "$apk")" \
-              -F "caption=${CAPTION}"
-          done
+          UNIVERSAL_ZIP="delivery/noveo-${RELEASE_TAG}.zip"
+          ARM64_ZIP="delivery/noveo-${RELEASE_TAG}-arm64-v8a-minified.zip"
+          test -f "$UNIVERSAL_ZIP"
+          test -f "$ARM64_ZIP"
 
-      - name: Send universal APK to Bale through proxy
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          caption = pathlib.Path("release-caption.txt").read_text(encoding="utf-8", errors="ignore")[:900]
+          media = [
+              {
+                  "type": "document",
+                  "media": "attach://universal",
+                  "caption": caption,
+              },
+              {
+                  "type": "document",
+                  "media": "attach://arm64",
+              },
+          ]
+          pathlib.Path("telegram-media.json").write_text(json.dumps(media), encoding="utf-8")
+          PY
+
+          curl --fail --silent --show-error \
+            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup" \
+            -F "chat_id=${TELEGRAM_CHAT_ID}" \
+            -F "media=$(cat telegram-media.json)" \
+            -F "universal=@${UNIVERSAL_ZIP};filename=$(basename "$UNIVERSAL_ZIP")" \
+            -F "arm64=@${ARM64_ZIP};filename=$(basename "$ARM64_ZIP")"
+
+      - name: Send universal ZIP directly to Bale
         shell: bash
         env:
           BALE_BOT_TOKEN: ${{ secrets.BALE_TOKEN }}
-          PROXY_IP: ${{ secrets.PROXY_IP }}
+          BALE_CHAT_ID: "5730731066"
         run: |
           set -euo pipefail
           BALE_BOT_TOKEN_CLEAN="$(printf '%s' "${BALE_BOT_TOKEN}" | tr -d '\r\n[:space:]')"
-          PROXY_IP_CLEAN="$(printf '%s' "${PROXY_IP}" | tr -d '\r\n[:space:]')"
 
-          if [ -z "${BALE_BOT_TOKEN_CLEAN}" ] || [ -z "${PROXY_IP_CLEAN}" ]; then
-            echo "Proxy delivery is not configured, skipping."
+          if [ -z "${BALE_BOT_TOKEN_CLEAN}" ] || [ -z "${BALE_CHAT_ID}" ]; then
+            echo "Bale delivery is not configured, skipping."
             exit 0
           fi
 
-          APK_PATH="dist/noveo-${RELEASE_TAG}.apk"
-          APK_NAME="$(basename "$APK_PATH")"
+          UNIVERSAL_ZIP="delivery/noveo-${RELEASE_TAG}.zip"
+          test -f "$UNIVERSAL_ZIP"
+
           CAPTION="$(cat release-caption.txt)"
           RESPONSE="$(
-            curl --silent --show-error \
-              -X POST "http://${PROXY_IP_CLEAN}:8787/upload-apk" \
-              -H "X-Bot-Token: ${BALE_BOT_TOKEN_CLEAN}" \
-              -F "document=@${APK_PATH};filename=${APK_NAME}" \
+            curl --fail --silent --show-error \
+              --max-time 300 \
+              --retry 2 \
+              --retry-delay 5 \
+              -X POST "https://tapi.bale.ai/bot${BALE_BOT_TOKEN_CLEAN}/sendDocument" \
+              -F "chat_id=${BALE_CHAT_ID}" \
+              -F "document=@${UNIVERSAL_ZIP};filename=$(basename "$UNIVERSAL_ZIP")" \
               -F "caption=${CAPTION}"
           )"
 
-          echo "Proxy response:"
+          echo "Bale response:"
           echo "${RESPONSE}"
 
           if ! echo "${RESPONSE}" | python3 -c "import sys, json; print(json.load(sys.stdin).get('ok', False))" | grep -q "True"; then
-            echo "Proxy upload failed according to response JSON." >&2
+            echo "Direct Bale upload failed according to response JSON." >&2
             exit 1
           fi
