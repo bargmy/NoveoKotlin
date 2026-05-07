@@ -54,11 +54,20 @@ class SessionStore(context: Context) {
             .apply()
     }
 
-    fun readDoubleTapReaction(): String = prefs.getString("double_tap_reaction", "❤") ?: "❤"
+    private fun normalizeDoubleTapReaction(reaction: String?): String {
+        val value = reaction?.trim().orEmpty()
+        return when (value) {
+            "", "❤" -> "❤️"
+            else -> value
+        }
+    }
+
+    fun readDoubleTapReaction(): String =
+        normalizeDoubleTapReaction(prefs.getString("double_tap_reaction", "❤️"))
 
     fun writeDoubleTapReaction(reaction: String) {
         prefs.edit()
-            .putString("double_tap_reaction", reaction)
+            .putString("double_tap_reaction", normalizeDoubleTapReaction(reaction))
             .apply()
     }
 
