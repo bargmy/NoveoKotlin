@@ -517,7 +517,7 @@ jobs:
       - name: Build desktop distributables
         shell: bash
         run: |
-          ./gradlew --build-cache --configuration-cache :desktopApp:packageReleaseMsi :desktopApp:packageReleaseExe -x :desktopApp:proguardReleaseJars
+          ./gradlew --build-cache --configuration-cache :desktopApp:packageReleaseMsi :desktopApp:packageReleaseExe
 
       - name: Collect desktop artifacts
         shell: bash
