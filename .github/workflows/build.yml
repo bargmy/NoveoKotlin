@@ -485,7 +485,7 @@ jobs:
 
 
   build_desktop_windows:
-    name: Build Windows desktop package
+    name: Build Windows desktop artifacts
     runs-on: windows-latest
     needs: metadata
     env:
@@ -517,10 +517,10 @@ jobs:
         shell: bash
         run: chmod +x ./gradlew
 
-      - name: Build thin desktop distributable
+      - name: Build thin desktop distributable and Windows EXE installer
         shell: bash
         run: |
-          ./gradlew --build-cache --configuration-cache :desktopApp:createThinDesktopZip
+          ./gradlew --build-cache --configuration-cache :desktopApp:createThinDesktopZip :desktopApp:packageReleaseExe
 
       - name: Collect desktop artifacts
         shell: bash
@@ -529,6 +529,10 @@ jobs:
           mkdir -p dist
           find desktopApp/build/compose/binaries -maxdepth 4 -type f -print
           cp desktopApp/build/compose/binaries/thin/*.zip "dist/noveo-${RELEASE_TAG}-windows-x64-thin.zip"
+          cp desktopApp/build/compose/binaries/main-exe/*.exe "dist/Noveo-Setup-${RELEASE_TAG}.exe"
+          ls -lh dist
+          test -f "dist/noveo-${RELEASE_TAG}-windows-x64-thin.zip"
+          test -f "dist/Noveo-Setup-${RELEASE_TAG}.exe"
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
