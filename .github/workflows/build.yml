@@ -246,9 +246,11 @@ jobs:
 
           path = pathlib.Path("app/build.gradle.kts")
           text = path.read_text(encoding="utf-8")
+          # ABI splits and ndk.abiFilters cannot be used together.
+          # Remove the repo's abiFilters only in this temporary CI checkout.
           text = re.sub(
-              r'abiFilters \+= listOf\([^)]+\)',
-              'abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")',
+              r'\n\s*abiFilters \+= listOf\([^)]+\)',
+              '',
               text,
           )
 
@@ -379,9 +381,11 @@ jobs:
 
           path = pathlib.Path("app/build.gradle.kts")
           text = path.read_text(encoding="utf-8")
+          # ABI splits and ndk.abiFilters cannot be used together.
+          # Remove the repo's abiFilters only in this temporary CI checkout.
           text = re.sub(
-              r'abiFilters \+= listOf\([^)]+\)',
-              'abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")',
+              r'\n\s*abiFilters \+= listOf\([^)]+\)',
+              '',
               text,
           )
 
