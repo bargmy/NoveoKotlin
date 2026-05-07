@@ -231,6 +231,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-home-cache-cleanup: true
+          cache-read-only: false
 
       - name: Prepare Gradle command
         id: gradle_cmd
@@ -372,6 +373,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-home-cache-cleanup: true
+          cache-read-only: false
 
       - name: Prepare Gradle command
         id: gradle_cmd
@@ -509,6 +511,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-home-cache-cleanup: true
+          cache-read-only: false
 
       - name: Ensure wrapper is executable
         shell: bash
@@ -524,8 +527,26 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp desktopApp/build/compose/binaries/main/msi/*.msi "dist/noveo-${RELEASE_TAG}-windows-x64.msi"
-          cp desktopApp/build/compose/binaries/main/exe/*.exe "dist/noveo-${RELEASE_TAG}-windows-x64.exe"
+          shopt -s nullglob
+
+          msi_files=(desktopApp/build/compose/binaries/main-release/msi/*.msi)
+          exe_files=(desktopApp/build/compose/binaries/main-release/exe/*.exe)
+
+          if [ ${#msi_files[@]} -ne 1 ]; then
+            echo "Expected exactly one MSI in desktopApp/build/compose/binaries/main-release/msi, found ${#msi_files[@]}" >&2
+            find desktopApp/build/compose/binaries -type f -name '*.msi' -print >&2 || true
+            exit 1
+          fi
+
+          if [ ${#exe_files[@]} -ne 1 ]; then
+            echo "Expected exactly one EXE in desktopApp/build/compose/binaries/main-release/exe, found ${#exe_files[@]}" >&2
+            find desktopApp/build/compose/binaries -type f -name '*.exe' -print >&2 || true
+            exit 1
+          fi
+
+          cp "${msi_files[0]}" "dist/noveo-${RELEASE_TAG}-windows-x64.msi"
+          cp "${exe_files[0]}" "dist/noveo-${RELEASE_TAG}-windows-x64.exe"
+          ls -lh dist
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
@@ -562,6 +583,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-home-cache-cleanup: true
+          cache-read-only: false
 
       - name: Prepare Gradle command
         id: gradle_cmd
