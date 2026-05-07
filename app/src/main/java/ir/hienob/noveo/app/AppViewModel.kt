@@ -1026,12 +1026,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun sendSticker(sticker: SavedSticker) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
+        val directRecipientId = _uiState.value.directRecipientId
         sendPreparedMessage(
             session = session,
             chatId = chatId,
             text = "",
             file = sticker.toMessageAttachment(),
-            replyToId = _uiState.value.replyingToMessage?.id
+            replyToId = _uiState.value.replyingToMessage?.id,
+            directRecipientId = directRecipientId
         )
     }
 
@@ -1061,6 +1063,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(text: String) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
+        val directRecipientId = _uiState.value.directRecipientId
         val replyingTo = _uiState.value.replyingToMessage
         val editingMessage = _uiState.value.editingMessage
         val attachment = _uiState.value.pendingAttachment
@@ -1111,9 +1114,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
+                val isStillViewingTargetChat = _uiState.value.selectedChatId == chatId
                 _uiState.value = _uiState.value.copy(
-                    messages = _uiState.value.messages + pendingMsg,
-                    replyingToMessage = null,
+                    messages = if (isStillViewingTargetChat) {
+                        mergeMessages(_uiState.value.messages, listOf(pendingMsg))
+                    } else {
+                        _uiState.value.messages
+                    },
+                    replyingToMessage = if (isStillViewingTargetChat) null else _uiState.value.replyingToMessage,
                     messagesByChat = messageCacheByChat.toMap()
                 )
                 persistCachedHomeState()
@@ -1135,9 +1143,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         .put("replyToId", replyingTo?.id)
                         .put("clientTempId", tempId)
                     
-                    val directRecipient = _uiState.value.directRecipientId
-                    if (directRecipient != null) {
-                        payload.put("recipientId", directRecipient)
+                    if (directRecipientId != null) {
+                        payload.put("recipientId", directRecipientId)
                     }
 
                     NoveoNotificationService.send(payload)
@@ -1183,7 +1190,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         chatId: String,
         text: String,
         file: MessageFileAttachment?,
-        replyToId: String?
+        replyToId: String?,
+        directRecipientId: String?
     ) {
         val tempId = "temp-${System.currentTimeMillis()}"
         viewModelScope.launch {
@@ -1205,9 +1213,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
+                val isStillViewingTargetChat = _uiState.value.selectedChatId == chatId
                 _uiState.value = _uiState.value.copy(
-                    messages = _uiState.value.messages + pendingMsg,
-                    replyingToMessage = null,
+                    messages = if (isStillViewingTargetChat) {
+                        mergeMessages(_uiState.value.messages, listOf(pendingMsg))
+                    } else {
+                        _uiState.value.messages
+                    },
+                    replyingToMessage = if (isStillViewingTargetChat) null else _uiState.value.replyingToMessage,
                     messagesByChat = messageCacheByChat.toMap()
                 )
                 persistCachedHomeState()
@@ -1229,9 +1242,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         .put("replyToId", replyToId)
                         .put("clientTempId", tempId)
 
-                    val directRecipient = _uiState.value.directRecipientId
-                    if (directRecipient != null) {
-                        payload.put("recipientId", directRecipient)
+                    if (directRecipientId != null) {
+                        payload.put("recipientId", directRecipientId)
                     }
 
                     NoveoNotificationService.send(payload)
