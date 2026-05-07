@@ -485,7 +485,7 @@ jobs:
 
 
   build_desktop_windows:
-    name: Build Windows desktop setup
+    name: Build Windows desktop artifacts
     runs-on: windows-latest
     needs: metadata
     env:
@@ -517,33 +517,32 @@ jobs:
         shell: bash
         run: chmod +x ./gradlew
 
-      - name: Build bundled Windows setup EXE
+      - name: Build Windows setup EXE
         shell: bash
         run: |
           ./gradlew --build-cache --configuration-cache :desktopApp:packageReleaseExe
 
-      - name: Collect desktop setup EXE
+      - name: Collect desktop setup
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
           find desktopApp/build/compose/binaries -maxdepth 5 -type f -print
-          exe_source="$(find desktopApp/build/compose/binaries -path '*/main-release/exe/*.exe' -type f | head -n 1)"
-          if [ -z "$exe_source" ]; then
-            echo "Could not find Compose Desktop release EXE under main-release/exe." >&2
-            echo "Available EXE files:" >&2
-            find desktopApp/build/compose/binaries -name '*.exe' -type f -print >&2
+          mapfile -t setup_exes < <(find desktopApp/build/compose/binaries -path "*/main-release/exe/*.exe" -type f | sort)
+          if [ "${#setup_exes[@]}" -eq 0 ]; then
+            echo "No Compose Desktop setup EXE was produced." >&2
+            find desktopApp/build/compose/binaries -maxdepth 5 -type f -print >&2
             exit 1
           fi
-          cp "$exe_source" "dist/Noveo-Setup-${RELEASE_TAG}.exe"
+          cp "${setup_exes[0]}" "dist/Noveo-Setup-${RELEASE_TAG}.exe"
           ls -lh dist
           test -f "dist/Noveo-Setup-${RELEASE_TAG}.exe"
 
-      - name: Upload desktop setup artifact
+      - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-windows-setup
-          path: dist/*.exe
+          name: desktop-windows
+          path: dist/*
           if-no-files-found: error
 
   vital_lint:
@@ -617,10 +616,10 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Download desktop setup artifact
+      - name: Download desktop artifacts
         uses: actions/download-artifact@v4
         with:
-          name: desktop-windows-setup
+          name: desktop-windows
           path: dist
 
       - name: Download release metadata files
@@ -641,7 +640,6 @@ jobs:
           test -f "dist/noveo-${RELEASE_TAG}-arm64-v8a-not-minified.apk"
           test -f "dist/noveo-${RELEASE_TAG}-armeabi-v7a-not-minified.apk"
           test -f "dist/noveo-${RELEASE_TAG}-x86_64-not-minified.apk"
-          test -f "dist/Noveo-Setup-${RELEASE_TAG}.exe"
 
       - name: Sign APKs
         shell: bash
@@ -677,13 +675,11 @@ jobs:
             rm -f "$aligned"
           done
 
-      - name: Upload release artifacts
+      - name: Upload all APKs as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-artifacts
-          path: |
-            dist/*.apk
-            dist/*.exe
+          name: release-apks
+          path: dist/*.apk
           if-no-files-found: error
 
       - name: Publish GitHub release
