@@ -405,6 +405,7 @@ fun NoveoHomeFrame(
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
+    onJoinChat: (String) -> Unit = {},
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onOpenSettings: () -> Unit = {},
@@ -456,6 +457,7 @@ fun NoveoHomeFrame(
                             onBackToChats = onBackToChats,
                             onSend = onSend,
                             onTyping = onTyping,
+                            onJoinChat = onJoinChat,
                             onOpenAttachments = { activeModal = AndroidHomeModal.ATTACHMENTS },
                             onOpenStickers = { activeModal = AndroidHomeModal.STICKERS },
                             onOpenChatInfo = { activeModal = AndroidHomeModal.CHAT_INFO },
@@ -520,6 +522,7 @@ fun NoveoHomeFrame(
                                 onBackToChats = onBackToChats,
                                 onSend = onSend,
                                 onTyping = onTyping,
+                                onJoinChat = onJoinChat,
                                 onOpenAttachments = { activeModal = AndroidHomeModal.ATTACHMENTS },
                                 onOpenStickers = { activeModal = AndroidHomeModal.STICKERS },
                                 onOpenChatInfo = { activeModal = AndroidHomeModal.CHAT_INFO },
@@ -1215,6 +1218,7 @@ private fun AndroidStyleConversationPane(
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
+    onJoinChat: (String) -> Unit,
     onOpenAttachments: () -> Unit,
     onOpenStickers: () -> Unit,
     onOpenChatInfo: () -> Unit,
@@ -1228,8 +1232,10 @@ private fun AndroidStyleConversationPane(
     var replyingToMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
     var editingMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
     val pinnedMessage = remember(state.messages) { state.messages.lastOrNull { it.isPinned } }
+    val isMember = state.currentUserId?.let { chat.memberIds.contains(it) } == true
     val canWriteToChat = state.canSendMessage && chat.canChat &&
-        (chat.chatType == "private" || state.currentUserId?.let { chat.memberIds.contains(it) } == true)
+        (chat.chatType == "private" || isMember)
+    val canJoinChat = chat.chatType != "private" && !isMember
 
     LaunchedEffect(canWriteToChat, chat.id) {
         if (!canWriteToChat) {
@@ -1433,6 +1439,13 @@ private fun AndroidStyleConversationPane(
                     }
                 )
             }
+        } else if (canJoinChat) {
+            AndroidJoinChatBar(
+                strings = strings,
+                tgColors = tgColors,
+                onJoin = { onJoinChat(chat.id) },
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+            )
         }
 
         contextMenuState?.let { menuState ->
@@ -1449,6 +1462,60 @@ private fun AndroidStyleConversationPane(
 }
 
 @Composable
+@Composable
+private fun AndroidJoinChatBar(
+    strings: NoveoStrings,
+    tgColors: TelegramHomeColors,
+    onJoin: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .padding(horizontal = 6.dp)
+            .padding(bottom = 4.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .clickable(onClick = onJoin),
+                shape = RoundedCornerShape(24.dp),
+                color = tgColors.composerField,
+                shadowElevation = 1.dp
+            ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = strings.join,
+                        color = tgColors.composerBlue,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            Surface(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clickable(onClick = onJoin),
+                shape = CircleShape,
+                color = tgColors.composerField,
+                shadowElevation = 1.dp
+            ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                        contentDescription = null,
+                        tint = tgColors.composerBlue,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
 private fun AndroidPinnedMessageBar(
     message: NoveoHomeMessage,
     strings: NoveoStrings,

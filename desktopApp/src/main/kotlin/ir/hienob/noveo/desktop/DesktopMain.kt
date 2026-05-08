@@ -60,6 +60,7 @@ fun main() = application {
                     onBackToChats = desktopState::backToChats,
                     onSend = desktopState::sendMessage,
                     onTyping = desktopState::sendTyping,
+                    onJoinChat = desktopState::joinChat,
                     onRefresh = desktopState::refreshHome,
                     onLogout = desktopState::logout
                 )
@@ -159,6 +160,43 @@ private class DesktopStateHolder {
 
     fun sendTyping() {
         // Desktop typing events can be wired once the long-lived websocket bridge is extracted.
+    }
+
+    fun joinChat(chatId: String) {
+        val currentSession = session ?: return
+        val currentHome = _state.value.home
+        val optimisticChats = currentHome.chats.map { chat ->
+            if (chat.id == chatId) {
+                chat.copy(
+                    memberIds = (chat.memberIds + currentSession.userId).distinct(),
+                    canChat = true
+                )
+            } else {
+                chat
+            }
+        }
+        _state.value = _state.value.copy(
+            home = currentHome.copy(
+                chats = optimisticChats,
+                selectedChatId = chatId,
+                loading = true,
+                error = null
+            )
+        )
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.joinChat(currentSession, chatId) }
+                val snapshot = withContext(Dispatchers.IO) { api.loadHome(currentSession) }
+                applyHomeSnapshot(snapshot, selectedChatId = chatId)
+            }.onFailure { error ->
+                _state.value = _state.value.copy(
+                    home = _state.value.home.copy(
+                        loading = false,
+                        error = error.message ?: "Unable to join chat"
+                    )
+                )
+            }
+        }
     }
 
     fun sendMessage(text: String) {

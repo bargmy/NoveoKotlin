@@ -104,6 +104,47 @@ internal class DesktopNoveoApi(
         failure.get()?.let { error(it) }
     }
 
+    fun joinChat(session: DesktopSession, chatId: String) {
+        val latch = CountDownLatch(1)
+        val failure = AtomicReference<String?>(null)
+        val done = AtomicBoolean(false)
+        val socket = client.newWebSocket(request(), object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                webSocket.send(reconnect(session).toString())
+            }
+
+            override fun onMessage(webSocket: WebSocket, textMsg: String) {
+                val msg = JSONObject(textMsg)
+                when (msg.optString("type")) {
+                    "login_success" -> {
+                        webSocket.send(
+                            JSONObject()
+                                .put("type", "join_channel")
+                                .put("chatId", chatId)
+                                .toString()
+                        )
+                        if (done.compareAndSet(false, true)) latch.countDown()
+                        webSocket.close(1000, null)
+                    }
+                    "auth_failed", "error" -> {
+                        failure.set(msg.optString("message", "Unable to join"))
+                        if (done.compareAndSet(false, true)) latch.countDown()
+                        webSocket.close(1000, null)
+                    }
+                }
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                failure.set(fail(response, t, "joining chat"))
+                if (done.compareAndSet(false, true)) latch.countDown()
+            }
+        })
+        val finished = latch.await(10, TimeUnit.SECONDS)
+        socket.cancel()
+        if (!finished) error("Join timeout")
+        failure.get()?.let { error(it) }
+    }
+
     private fun auth(payload: JSONObject): DesktopSession {
         val latch = CountDownLatch(1)
         val result = AtomicReference<DesktopSession?>(null)
