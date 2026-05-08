@@ -30,6 +30,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -44,6 +47,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Call
@@ -51,9 +55,12 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.InsertEmoticon
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Reply
 import androidx.compose.material.icons.outlined.Search
@@ -310,91 +317,61 @@ fun NoveoHomeFrame(
     }
     val tgColors = telegramHomeColors()
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            val compact = maxWidth < 760.dp
-            val selectedChat = state.selectedChat
-            if (compact) {
-                AnimatedContent(
-                    targetState = selectedChat != null,
-                    label = "android_compact_chat_switch",
-                    transitionSpec = {
-                        val transition = if (targetState) {
-                            (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it / 4 } + fadeOut())
-                        } else {
-                            (slideInHorizontally { -it / 4 } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
-                        }
-                        transition.using(SizeTransform(clip = false))
-                    }
-                ) { showingChat ->
-                    if (showingChat && selectedChat != null) {
-                        AndroidStyleConversationPane(
-                            state = state,
-                            chat = selectedChat,
-                            strings = strings,
-                            compact = true,
-                            tgColors = tgColors,
-                            onBackToChats = onBackToChats,
-                            onSend = onSend,
-                            onTyping = onTyping,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        AndroidStyleSidebarPane(
-                            state = state,
-                            strings = strings,
-                            chats = filteredChats,
-                            showSearch = showSearch,
-                            searchQuery = searchQuery,
-                            showMenu = showMenu,
-                            onSearchQuery = { searchQuery = it },
-                            onMenuClick = { showMenu = !showMenu },
-                            onSearchToggle = { showSearch = !showSearch; if (showSearch) searchQuery = "" },
-                            onOpenChat = onOpenChat,
-                            onRefresh = onRefresh,
-                            onLogout = onLogout,
-                            onOpenSettings = onOpenSettings,
-                            onStartNewChat = onStartNewChat,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+    // IMPORTANT: desktop intentionally stays on the Android compact/mobile route.
+    // The old desktop two-pane branch was the main visual mismatch. Android HomeUi.kt
+    // uses this full-screen list <-> chat transition on phones, so desktop follows it
+    // instead of inventing a desktop layout.
+    Surface(
+        modifier = modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        val selectedChat = state.selectedChat
+        AnimatedContent(
+            targetState = selectedChat != null,
+            label = "android_compact_chat_switch",
+            transitionSpec = {
+                val transition = if (targetState) {
+                    (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it / 4 } + fadeOut())
+                } else {
+                    (slideInHorizontally { -it / 4 } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
                 }
+                transition.using(SizeTransform(clip = false))
+            }
+        ) { showingChat ->
+            if (showingChat && selectedChat != null) {
+                AndroidStyleConversationPane(
+                    state = state,
+                    chat = selectedChat,
+                    strings = strings,
+                    compact = true,
+                    tgColors = tgColors,
+                    onBackToChats = onBackToChats,
+                    onSend = onSend,
+                    onTyping = onTyping,
+                    modifier = Modifier.fillMaxSize()
+                )
             } else {
-                Row(Modifier.fillMaxSize()) {
-                    AndroidStyleSidebarPane(
-                        state = state,
-                        strings = strings,
-                        chats = filteredChats,
-                        showSearch = showSearch,
-                        searchQuery = searchQuery,
-                        showMenu = showMenu,
-                        onSearchQuery = { searchQuery = it },
-                        onMenuClick = { showMenu = !showMenu },
-                        onSearchToggle = { showSearch = !showSearch; if (showSearch) searchQuery = "" },
-                        onOpenChat = onOpenChat,
-                        onRefresh = onRefresh,
-                        onLogout = onLogout,
-                        onOpenSettings = onOpenSettings,
-                        onStartNewChat = onStartNewChat,
-                        modifier = Modifier.width(372.dp).fillMaxHeight()
-                    )
-                    Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)))
-                    if (selectedChat != null) {
-                        AndroidStyleConversationPane(
-                            state = state,
-                            chat = selectedChat,
-                            strings = strings,
-                            compact = false,
-                            tgColors = tgColors,
-                            onBackToChats = onBackToChats,
-                            onSend = onSend,
-                            onTyping = onTyping,
-                            modifier = Modifier.weight(1f).fillMaxHeight()
-                        )
-                    } else {
-                        AndroidWelcomePane(strings = strings, modifier = Modifier.weight(1f).fillMaxHeight())
-                    }
-                }
+                AndroidStyleSidebarPane(
+                    state = state,
+                    strings = strings,
+                    chats = filteredChats,
+                    showSearch = showSearch,
+                    searchQuery = searchQuery,
+                    showMenu = showMenu,
+                    onSearchQuery = { searchQuery = it },
+                    onMenuClick = { showMenu = !showMenu },
+                    onSearchToggle = { showSearch = !showSearch; if (showSearch) searchQuery = "" },
+                    onOpenChat = onOpenChat,
+                    onRefresh = onRefresh,
+                    onLogout = onLogout,
+                    onOpenSettings = onOpenSettings,
+                    onStartNewChat = onStartNewChat,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
     }
@@ -919,45 +896,71 @@ private fun AndroidStyleComposer(
     onSend: () -> Unit
 ) {
     val showSendButton = draft.isNotBlank() || sending
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-        Surface(
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(24.dp),
-            color = tgColors.composerField,
-            shadowElevation = 1.dp
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 10.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+    val targetButtonColor = if (!showSendButton) tgColors.composerField else tgColors.composerBlue
+    val targetScale by animateFloatAsState(targetValue = if (showSendButton) 1f else 0.95f, animationSpec = tween(150), label = "androidMicSendScale")
+
+    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp).padding(bottom = 4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Surface(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(24.dp),
+                color = tgColors.composerField,
+                shadowElevation = 1.dp
             ) {
-                HeaderIconButton(icon = Icons.Outlined.Add, onClick = {}, tint = tgColors.composerIcon, modifier = Modifier.size(40.dp))
-                BasicTextField(
-                    value = draft,
-                    onValueChange = onDraftChange,
-                    enabled = enabled && !sending,
-                    cursorBrush = SolidColor(tgColors.composerCursor),
-                    textStyle = TextStyle(color = tgColors.composerText, fontSize = 16.sp, lineHeight = 20.sp),
-                    modifier = Modifier.weight(1f).padding(vertical = 8.dp),
-                    maxLines = 5,
-                    decorationBox = { inner ->
-                        if (draft.isBlank()) Text(placeholder, color = tgColors.composerHint, fontSize = 16.sp)
-                        inner()
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                ) {
+                    HeaderIconButton(
+                        icon = Icons.Outlined.InsertEmoticon,
+                        onClick = {},
+                        tint = tgColors.composerIcon,
+                        modifier = Modifier.padding(start = 4.dp).size(40.dp)
+                    )
+                    Box(modifier = Modifier.weight(1f).padding(vertical = 10.dp, horizontal = 4.dp), contentAlignment = Alignment.CenterStart) {
+                        if (draft.isBlank()) {
+                            Text(placeholder, color = tgColors.composerHint, fontSize = 17.sp)
+                        }
+                        BasicTextField(
+                            value = draft,
+                            onValueChange = onDraftChange,
+                            enabled = enabled && !sending,
+                            cursorBrush = SolidColor(tgColors.composerCursor),
+                            textStyle = TextStyle(color = tgColors.composerText, fontSize = 17.sp, lineHeight = 22.sp),
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 6
+                        )
                     }
-                )
-                HeaderIconButton(icon = Icons.Outlined.KeyboardArrowDown, onClick = {}, tint = tgColors.composerIcon, modifier = Modifier.size(40.dp))
+                    HeaderIconButton(
+                        icon = Icons.Outlined.AttachFile,
+                        onClick = {},
+                        tint = tgColors.composerIcon,
+                        modifier = Modifier.padding(end = 4.dp).size(40.dp)
+                    )
+                }
             }
-        }
-        Spacer(Modifier.width(8.dp))
-        val targetScale by animateFloatAsState(targetValue = if (showSendButton) 1f else 0.95f, animationSpec = tween(150), label = "desktopSendScale")
-        Surface(
-            modifier = Modifier.size(48.dp).graphicsLayer { scaleX = targetScale; scaleY = targetScale },
-            shape = CircleShape,
-            color = if (showSendButton) tgColors.composerBlue else tgColors.composerField,
-            shadowElevation = 1.dp
-        ) {
-            Box(Modifier.fillMaxSize().clickable(enabled = enabled && !sending && draft.isNotBlank(), onClick = onSend), contentAlignment = Alignment.Center) {
-                if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
-                else Icon(Icons.Outlined.Send, contentDescription = null, tint = if (showSendButton) Color.White else tgColors.composerIcon, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(6.dp))
+            Surface(
+                modifier = Modifier.size(48.dp).graphicsLayer { scaleX = targetScale; scaleY = targetScale },
+                shape = CircleShape,
+                color = targetButtonColor,
+                shadowElevation = 1.dp
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize().clickable(enabled = enabled && !sending && draft.isNotBlank(), onClick = onSend),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (sending) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
+                    } else {
+                        Icon(
+                            imageVector = if (showSendButton) Icons.Outlined.Send else Icons.Outlined.Mic,
+                            contentDescription = null,
+                            tint = if (showSendButton) Color.White else tgColors.composerIcon,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -973,17 +976,50 @@ private fun MessageContextMenuOverlay(message: NoveoHomeMessage, strings: NoveoS
                 onClick = onDismiss
             )
         )
-        Surface(
-            modifier = Modifier.align(if (message.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart).padding(18.dp),
-            shape = RoundedCornerShape(22.dp),
-            color = tgColors.incomingBubble,
-            shadowElevation = 8.dp
+        Column(
+            modifier = Modifier
+                .align(if (message.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Column(Modifier.width(220.dp).padding(vertical = 6.dp)) {
-                MenuItem(strings.reply, Icons.Outlined.Reply, tgColors.headerIcon, tgColors.incomingText, onDismiss)
-                MenuItem(strings.copyText, Icons.Outlined.ContentCopy, tgColors.headerIcon, tgColors.incomingText, onDismiss)
-                if (message.isOutgoing) MenuItem(strings.edit, Icons.Outlined.Edit, tgColors.headerIcon, tgColors.incomingText, onDismiss)
-                MenuItem(strings.delete, Icons.Outlined.Delete, Color(0xFFE53935), Color(0xFFE53935), onDismiss)
+            Surface(
+                color = tgColors.incomingBubble,
+                shape = RoundedCornerShape(26.dp),
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.width(320.dp).height(52.dp).padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    ANDROID_CONTEXT_MENU_REACTIONS.forEach { emoji ->
+                        Box(
+                            modifier = Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onDismiss),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(emoji, fontSize = 20.sp)
+                        }
+                    }
+                    Box(
+                        modifier = Modifier.size(32.dp).clip(CircleShape).background(if (tgColors.isDark) Color(0xFF2C353F) else Color(0xFFF0F2F5)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = tgColors.incomingTime, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = tgColors.incomingBubble,
+                shadowElevation = 8.dp
+            ) {
+                Column(Modifier.width(220.dp).padding(vertical = 4.dp)) {
+                    MenuItem(strings.reply, Icons.Outlined.Reply, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+                    MenuItem(strings.copyText, Icons.Outlined.ContentCopy, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+                    if (message.isOutgoing) MenuItem(strings.edit, Icons.Outlined.Edit, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+                    MenuItem(strings.forward, Icons.AutoMirrored.Outlined.ArrowForward, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+                    MenuItem(strings.delete, Icons.Outlined.Delete, Color(0xFFE53935), Color(0xFFE53935), onDismiss)
+                }
             }
         }
     }
