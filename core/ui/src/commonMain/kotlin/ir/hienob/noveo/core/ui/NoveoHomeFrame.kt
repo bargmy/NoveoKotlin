@@ -198,6 +198,7 @@ private enum class AndroidHomeModal {
     NEW_CHAT,
     SETTINGS,
     PROFILE,
+    ACCOUNT,
     ATTACHMENTS,
     STICKERS,
     CHAT_INFO,
@@ -210,6 +211,8 @@ private enum class AndroidHomeModal {
  */
 data class NoveoHomeFrameState(
     val currentUserId: String? = null,
+    val currentUsername: String = "",
+    val currentUserBio: String = "",
     val chats: List<NoveoHomeChat> = emptyList(),
     val selectedChatId: String? = null,
     val messages: List<NoveoHomeMessage> = emptyList(),
@@ -428,6 +431,11 @@ fun NoveoHomeFrame(
     onPickGalleryAttachment: () -> Unit = {},
     onPickFileAttachment: () -> Unit = {},
     onRemoveAttachment: () -> Unit = {},
+    onCancelSend: () -> Unit = {},
+    onCreateChat: (String, String, String?, String?) -> Unit = { _, _, _, _ -> },
+    onUpdateProfile: (String, String) -> Unit = { _, _ -> },
+    onChangePassword: (String, String) -> Unit = { _, _ -> },
+    onDeleteAccount: (String) -> Unit = {},
     onTyping: () -> Unit,
     onJoinChat: (String) -> Unit = {},
     onLeaveChat: (String) -> Unit = {},
@@ -626,6 +634,12 @@ fun NoveoHomeFrame(
                     onLeaveChat = onLeaveChat,
                     onPickGalleryAttachment = onPickGalleryAttachment,
                     onPickFileAttachment = onPickFileAttachment,
+                    onCreateChat = onCreateChat,
+                    onUpdateProfile = onUpdateProfile,
+                    onChangePassword = onChangePassword,
+                    onDeleteAccount = onDeleteAccount,
+                    onOpenProfile = { activeModal = AndroidHomeModal.PROFILE },
+                    onOpenAccount = { activeModal = AndroidHomeModal.ACCOUNT },
                     onLogout = onLogout
                 )
             }
@@ -647,6 +661,12 @@ private fun AndroidHomeModalOverlay(
     onLeaveChat: (String) -> Unit,
     onPickGalleryAttachment: () -> Unit,
     onPickFileAttachment: () -> Unit,
+    onCreateChat: (String, String, String?, String?) -> Unit,
+    onUpdateProfile: (String, String) -> Unit,
+    onChangePassword: (String, String) -> Unit,
+    onDeleteAccount: (String) -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenAccount: () -> Unit,
     onLogout: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -695,9 +715,38 @@ private fun AndroidHomeModalOverlay(
                 AndroidModalCard(onDismiss = onDismiss) {
                     when (target) {
                         AndroidHomeModal.CONTACTS -> AndroidContactsSurface(state = state, strings = strings)
-                        AndroidHomeModal.NEW_CHAT -> AndroidNewChatSurface(strings = strings, onStartNewChat = onStartNewChat)
-                        AndroidHomeModal.SETTINGS -> AndroidSettingsSurface(strings = strings, onOpenSettings = onOpenSettings, onLogout = onLogout)
-                        AndroidHomeModal.PROFILE -> AndroidProfileSurface(strings = strings, state = state)
+                        AndroidHomeModal.NEW_CHAT -> AndroidNewChatSurface(
+                            strings = strings,
+                            onCreateChat = { title, type, handle, bio ->
+                                onDismiss()
+                                onCreateChat(title, type, handle, bio)
+                            }
+                        )
+                        AndroidHomeModal.SETTINGS -> AndroidSettingsSurface(
+                            strings = strings,
+                            onOpenProfile = onOpenProfile,
+                            onOpenAccount = onOpenAccount,
+                            onLogout = onLogout
+                        )
+                        AndroidHomeModal.PROFILE -> AndroidProfileSurface(
+                            strings = strings,
+                            state = state,
+                            onUpdateProfile = { username, bio ->
+                                onDismiss()
+                                onUpdateProfile(username, bio)
+                            }
+                        )
+                        AndroidHomeModal.ACCOUNT -> AndroidAccountSurface(
+                            strings = strings,
+                            onChangePassword = { oldPassword, newPassword ->
+                                onDismiss()
+                                onChangePassword(oldPassword, newPassword)
+                            },
+                            onDeleteAccount = { password ->
+                                onDismiss()
+                                onDeleteAccount(password)
+                            }
+                        )
                         AndroidHomeModal.CHAT_INFO -> AndroidChatInfoSurface(
                             strings = strings,
                             chat = selectedChat,
@@ -821,40 +870,262 @@ private fun AndroidContactRow(chat: NoveoHomeChat, strings: NoveoStrings) {
 }
 
 @Composable
-private fun AndroidNewChatSurface(strings: NoveoStrings, onStartNewChat: () -> Unit) {
+private fun AndroidNewChatSurface(
+    strings: NoveoStrings,
+    onCreateChat: (String, String, String?, String?) -> Unit
+) {
+    var title by rememberSaveable { mutableStateOf("") }
+    var handle by rememberSaveable { mutableStateOf("") }
+    var bio by rememberSaveable { mutableStateOf("") }
+    var type by rememberSaveable { mutableStateOf("group") }
+
     AndroidModalHeader(strings.newChat, strings.handleOptional, Icons.Outlined.Add)
-    AndroidSettingsRow(strings.group, strings.bioOptional, Icons.Outlined.AccountCircle, onClick = onStartNewChat)
-    AndroidSettingsRow(strings.channel, strings.handleOptional, Icons.Outlined.Info, onClick = onStartNewChat)
-    AndroidSettingsRow(strings.privateChatType, strings.messageButton, Icons.Outlined.Person, onClick = onStartNewChat)
+    AndroidChatTypeSelector(
+        selected = type,
+        strings = strings,
+        onSelected = { type = it }
+    )
+    Spacer(Modifier.height(12.dp))
+    AndroidFormField(
+        value = title,
+        onValueChange = { title = it },
+        label = strings.title,
+        placeholder = strings.newChat
+    )
+    Spacer(Modifier.height(10.dp))
+    AndroidFormField(
+        value = handle,
+        onValueChange = { handle = it },
+        label = strings.handleOptional,
+        placeholder = "@handle"
+    )
+    Spacer(Modifier.height(10.dp))
+    AndroidFormField(
+        value = bio,
+        onValueChange = { bio = it },
+        label = strings.bioOptional,
+        placeholder = strings.about,
+        minHeight = 76
+    )
+    Spacer(Modifier.height(16.dp))
+    AndroidPrimaryActionRow(
+        label = strings.create,
+        enabled = title.trim().isNotBlank(),
+        onClick = {
+            onCreateChat(
+                title.trim(),
+                type,
+                handle.trim().removePrefix("@").takeIf { it.isNotBlank() },
+                bio.trim().takeIf { it.isNotBlank() }
+            )
+        }
+    )
 }
 
 @Composable
-private fun AndroidSettingsSurface(strings: NoveoStrings, onOpenSettings: () -> Unit, onLogout: () -> Unit) {
+private fun AndroidChatTypeSelector(
+    selected: String,
+    strings: NoveoStrings,
+    onSelected: (String) -> Unit
+) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            "group" to strings.group,
+            "channel" to strings.channel,
+            "private" to strings.privateChatType
+        ).forEach { (value, label) ->
+            val active = selected == value
+            Surface(
+                modifier = Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).clickable { onSelected(value) },
+                shape = RoundedCornerShape(18.dp),
+                color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                border = BorderStroke(1.dp, if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidSettingsSurface(
+    strings: NoveoStrings,
+    onOpenProfile: () -> Unit,
+    onOpenAccount: () -> Unit,
+    onLogout: () -> Unit
+) {
     AndroidModalHeader(strings.settings, strings.preferences, Icons.Outlined.Settings)
-    AndroidSettingsRow(strings.profile, strings.displayName, Icons.Outlined.AccountCircle, onClick = onOpenSettings)
-    AndroidSettingsRow(strings.account, strings.changePassword, Icons.Outlined.Lock, onClick = onOpenSettings)
-    AndroidSettingsRow(strings.themes, strings.themeLightDesc, Icons.Outlined.Star, onClick = onOpenSettings)
-    AndroidSettingsRow(strings.notificationSettings, strings.enableNotifications, Icons.Outlined.Info, onClick = onOpenSettings)
+    AndroidSettingsRow(strings.profile, strings.displayName, Icons.Outlined.AccountCircle, onClick = onOpenProfile)
+    AndroidSettingsRow(strings.account, strings.changePassword, Icons.Outlined.Lock, onClick = onOpenAccount)
+    AndroidSettingsRow(strings.themes, strings.themeLightDesc, Icons.Outlined.Star, onClick = {})
+    AndroidSettingsRow(strings.notificationSettings, strings.enableNotifications, Icons.Outlined.Info, onClick = {})
     Spacer(Modifier.height(6.dp))
     TextButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text(strings.logout, color = MaterialTheme.colorScheme.error) }
 }
 
 @Composable
-private fun AndroidProfileSurface(strings: NoveoStrings, state: NoveoHomeFrameState) {
+private fun AndroidProfileSurface(
+    strings: NoveoStrings,
+    state: NoveoHomeFrameState,
+    onUpdateProfile: (String, String) -> Unit
+) {
+    var displayName by rememberSaveable(state.currentUsername) {
+        mutableStateOf(state.currentUsername.ifBlank { strings.brandName })
+    }
+    var bio by rememberSaveable(state.currentUserBio) { mutableStateOf(state.currentUserBio) }
+
     AndroidModalHeader(strings.profile, strings.about, Icons.Outlined.AccountCircle)
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        ProfileCircle(name = strings.brandName, size = 70.dp)
+        ProfileCircle(name = displayName.ifBlank { strings.brandName }, size = 70.dp)
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
-            Text(strings.brandName, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text(displayName.ifBlank { strings.brandName }, fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(state.currentUserId ?: strings.userId, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(4.dp))
             Text(strings.online, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
         }
     }
     Spacer(Modifier.height(12.dp))
-    AndroidSettingsRow(strings.savedMessages, strings.messages, Icons.Outlined.Bookmark, onClick = {})
-    AndroidSettingsRow(strings.language, strings.selectLanguage, Icons.Outlined.Info, onClick = {})
+    AndroidFormField(
+        value = displayName,
+        onValueChange = { displayName = it },
+        label = strings.displayName,
+        placeholder = strings.displayName
+    )
+    Spacer(Modifier.height(10.dp))
+    AndroidFormField(
+        value = bio,
+        onValueChange = { bio = it },
+        label = strings.bioOptional,
+        placeholder = strings.about,
+        minHeight = 76
+    )
+    Spacer(Modifier.height(16.dp))
+    AndroidPrimaryActionRow(
+        label = strings.saveChanges,
+        enabled = displayName.trim().isNotBlank(),
+        onClick = { onUpdateProfile(displayName.trim(), bio.trim()) }
+    )
+}
+
+@Composable
+private fun AndroidAccountSurface(
+    strings: NoveoStrings,
+    onChangePassword: (String, String) -> Unit,
+    onDeleteAccount: (String) -> Unit
+) {
+    var oldPassword by rememberSaveable { mutableStateOf("") }
+    var newPassword by rememberSaveable { mutableStateOf("") }
+    var deletePassword by rememberSaveable { mutableStateOf("") }
+
+    AndroidModalHeader(strings.account, strings.changePassword, Icons.Outlined.Lock)
+    AndroidFormField(
+        value = oldPassword,
+        onValueChange = { oldPassword = it },
+        label = strings.oldPassword,
+        placeholder = strings.oldPassword
+    )
+    Spacer(Modifier.height(10.dp))
+    AndroidFormField(
+        value = newPassword,
+        onValueChange = { newPassword = it },
+        label = strings.newPassword,
+        placeholder = strings.newPassword
+    )
+    Spacer(Modifier.height(12.dp))
+    AndroidPrimaryActionRow(
+        label = strings.changePassword,
+        enabled = oldPassword.isNotBlank() && newPassword.isNotBlank(),
+        onClick = { onChangePassword(oldPassword, newPassword) }
+    )
+    Spacer(Modifier.height(18.dp))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+    Spacer(Modifier.height(12.dp))
+    Text(strings.deleteAccount, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(8.dp))
+    AndroidFormField(
+        value = deletePassword,
+        onValueChange = { deletePassword = it },
+        label = strings.passwordPlaceholder,
+        placeholder = strings.passwordPlaceholder
+    )
+    Spacer(Modifier.height(10.dp))
+    Surface(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(enabled = deletePassword.isNotBlank()) { onDeleteAccount(deletePassword) },
+        shape = RoundedCornerShape(20.dp),
+        color = if (deletePassword.isNotBlank()) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    ) {
+        Text(
+            text = strings.deleteAccount,
+            modifier = Modifier.padding(vertical = 12.dp),
+            color = if (deletePassword.isNotBlank()) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun AndroidFormField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    placeholder: String,
+    minHeight: Int = 48
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(5.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth().heightIn(min = minHeight.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+        ) {
+            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), contentAlignment = Alignment.CenterStart) {
+                if (value.isBlank()) {
+                    Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    maxLines = if (minHeight > 60) 3 else 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidPrimaryActionRow(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(vertical = 12.dp),
+            color = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            fontWeight = FontWeight.Bold
+        )
+    }
 }
 
 @Composable
@@ -1616,6 +1887,7 @@ private fun AndroidStyleConversationPane(
                     onCancelReply = { replyingToMessage = null },
                     onCancelEdit = { editingMessage = null; draft = "" },
                     onRemoveAttachment = onRemoveAttachment,
+                    onCancelSend = onCancelSend,
                     onOpenAttachments = onOpenAttachments,
                     onOpenStickers = onOpenStickers,
                     onSend = {
@@ -2410,6 +2682,7 @@ private fun AndroidStyleComposer(
     onCancelReply: () -> Unit = {},
     onCancelEdit: () -> Unit = {},
     onRemoveAttachment: () -> Unit = {},
+    onCancelSend: () -> Unit = {},
     onOpenAttachments: () -> Unit = {},
     onOpenStickers: () -> Unit = {},
     onSend: () -> Unit
@@ -2520,7 +2793,9 @@ private fun AndroidStyleComposer(
             shadowElevation = 1.dp
         ) {
             Box(
-                modifier = Modifier.fillMaxSize().clip(CircleShape).clickable(enabled = enabled && !sending && showSendButton, onClick = ::sendFromComposer),
+                modifier = Modifier.fillMaxSize().clip(CircleShape).clickable(enabled = enabled && showSendButton) {
+                    if (sending) onCancelSend() else sendFromComposer()
+                },
                 contentAlignment = Alignment.Center
             ) {
                 if (sending) {
@@ -2932,4 +3207,9 @@ private fun UnreadBadge(count: Int) {
     Box(modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary).padding(horizontal = 8.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
         Text(count.coerceAtMost(99).toString(), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall)
     }
+}
+
+@Composable
+private fun AndroidUnreadBadge(count: Int) {
+    UnreadBadge(count)
 }

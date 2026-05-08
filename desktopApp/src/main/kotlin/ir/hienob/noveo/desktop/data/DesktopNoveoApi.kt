@@ -35,6 +35,8 @@ internal data class DesktopSession(
 
 internal data class DesktopHomeSnapshot(
     val session: DesktopSession,
+    val currentUsername: String = "",
+    val currentUserBio: String = "",
     val chats: List<NoveoHomeChat>,
     val messagesByChat: Map<String, List<NoveoHomeMessage>>,
     val totalUnreadCount: Int
@@ -65,8 +67,11 @@ internal class DesktopNoveoApi(
         val sync = sync(session)
         val chats = parseChats(sync.history, sync.usersById, session.userId)
         val messagesByChat = parseMessagesByChat(sync.history, sync.usersById, session.userId)
+        val currentUser = sync.usersById[session.userId]
         return DesktopHomeSnapshot(
             session = session,
+            currentUsername = currentUser?.username.orEmpty(),
+            currentUserBio = currentUser?.bio.orEmpty(),
             chats = chats,
             messagesByChat = messagesByChat,
             totalUnreadCount = chats.sumOf { it.unreadCount }
@@ -319,6 +324,54 @@ internal class DesktopNoveoApi(
         }
     }
 
+    fun createChat(session: DesktopSession, name: String, type: String, handle: String?, bio: String?) {
+        val body = JSONObject()
+            .put("title", name)
+            .put("chatType", type)
+            .put("handle", handle)
+            .put("bio", bio)
+            .toString()
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url("https://noveo.ir:8443/chat/create")
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .post(body)
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Chat creation failed (${response.code})")
+        }
+    }
+
+    fun updateProfile(session: DesktopSession, username: String, bio: String) {
+        sendChatAction(
+            session,
+            JSONObject()
+                .put("type", "update_profile")
+                .put("username", username)
+                .put("bio", bio)
+        )
+    }
+
+    fun changePassword(session: DesktopSession, oldPassword: String, newPassword: String) {
+        sendChatAction(
+            session,
+            JSONObject()
+                .put("type", "change_password")
+                .put("oldPassword", oldPassword)
+                .put("newPassword", newPassword)
+        )
+    }
+
+    fun deleteAccount(session: DesktopSession, password: String) {
+        sendChatAction(
+            session,
+            JSONObject()
+                .put("type", "delete_account")
+                .put("password", password)
+        )
+    }
+
     private fun sendChatAction(session: DesktopSession, payload: JSONObject) {
         val latch = CountDownLatch(1)
         val failure = AtomicReference<String?>(null)
@@ -488,7 +541,8 @@ private data class DesktopUser(
     val avatarUrl: String? = null,
     val handle: String? = null,
     val isOnline: Boolean = false,
-    val isVerified: Boolean = false
+    val isVerified: Boolean = false,
+    val bio: String = ""
 )
 
 private fun parseUsers(payload: JSONObject): Pair<Map<String, DesktopUser>, Set<String>> {
@@ -510,7 +564,8 @@ private fun parseUsers(payload: JSONObject): Pair<Map<String, DesktopUser>, Set<
             avatarUrl = resolveAssetUrl(item, "avatarUrl", "avatar", "photo", "image"),
             handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
             isOnline = onlineIds.contains(userId) || item.optBoolean("online", false),
-            isVerified = item.optBoolean("isVerified", false)
+            isVerified = item.optBoolean("isVerified", false),
+            bio = item.optString("bio").sanitizeServerString()
         )
     }
     return users to onlineIds

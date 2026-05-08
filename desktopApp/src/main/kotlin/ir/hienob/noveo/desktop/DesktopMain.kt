@@ -25,8 +25,10 @@ import java.awt.Frame
 import java.io.File
 import java.net.URI
 import java.util.Properties
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,6 +74,11 @@ fun main() = application {
                     onPickGalleryAttachment = { desktopState.pickAttachment(galleryOnly = true) },
                     onPickFileAttachment = { desktopState.pickAttachment(galleryOnly = false) },
                     onRemoveAttachment = desktopState::removeAttachment,
+                    onCancelSend = desktopState::cancelSend,
+                    onCreateChat = desktopState::createChat,
+                    onUpdateProfile = desktopState::updateProfile,
+                    onChangePassword = desktopState::changePassword,
+                    onDeleteAccount = desktopState::deleteAccount,
                     onTyping = desktopState::sendTyping,
                     onJoinChat = desktopState::joinChat,
                     onLeaveChat = desktopState::leaveChat,
@@ -99,6 +106,7 @@ private class DesktopStateHolder {
     private var messagesByChat: Map<String, List<NoveoHomeMessage>> = emptyMap()
     private var selectedAttachmentFile: File? = null
     private var selectedAttachmentMimeType: String = "application/octet-stream"
+    private var activeSendJob: Job? = null
 
     private val _state = MutableStateFlow(DesktopUiState())
     val state = _state.asStateFlow()
@@ -210,6 +218,19 @@ private class DesktopStateHolder {
         _state.value = _state.value.copy(home = _state.value.home.copy(pendingAttachment = null))
     }
 
+    fun cancelSend() {
+        activeSendJob?.cancel()
+        activeSendJob = null
+        _state.value = _state.value.copy(
+            home = _state.value.home.copy(
+                messages = _state.value.home.messages.filterNot { it.pending },
+                isSendingMessage = false,
+                pendingAttachment = _state.value.home.pendingAttachment?.copy(isUploading = false, progress = 0f),
+                error = null
+            )
+        )
+    }
+
     fun sendTyping() {
         // Desktop typing events can be wired once the long-lived websocket bridge is extracted.
     }
@@ -317,7 +338,8 @@ private class DesktopStateHolder {
                 error = null
             )
         )
-        scope.launch {
+        activeSendJob?.cancel()
+        activeSendJob = scope.launch {
             runCatching {
                 val uploadedFile = if (attachmentFile != null) {
                     withContext(Dispatchers.IO) {
@@ -336,14 +358,17 @@ private class DesktopStateHolder {
                 val snapshot = withContext(Dispatchers.IO) { api.loadHome(currentSession) }
                 applyHomeSnapshot(snapshot, selectedChatId = chatId)
             }.onFailure { error ->
+                if (error is CancellationException) return@onFailure
                 _state.value = _state.value.copy(
                     home = _state.value.home.copy(
+                        messages = _state.value.home.messages.filterNot { it.id == pendingMessage.id },
                         isSendingMessage = false,
                         pendingAttachment = _state.value.home.pendingAttachment?.copy(isUploading = false, progress = 0f),
                         error = error.message ?: "Send failed"
                     )
                 )
             }
+            activeSendJob = null
         }
     }
 
@@ -453,6 +478,58 @@ private class DesktopStateHolder {
         }
     }
 
+    fun createChat(name: String, type: String, handle: String?, bio: String?) {
+        val currentSession = session ?: return
+        _state.value = _state.value.copy(home = _state.value.home.copy(loading = true, error = null))
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.createChat(currentSession, name, type, handle, bio) }
+                val snapshot = withContext(Dispatchers.IO) { api.loadHome(currentSession) }
+                val createdChat = snapshot.chats.firstOrNull { it.title.equals(name, ignoreCase = true) }
+                applyHomeSnapshot(snapshot, selectedChatId = createdChat?.id ?: _state.value.home.selectedChatId)
+            }.onFailure { error ->
+                _state.value = _state.value.copy(home = _state.value.home.copy(loading = false, error = error.message ?: "Chat creation failed"))
+            }
+        }
+    }
+
+    fun updateProfile(username: String, bio: String) {
+        val currentSession = session ?: return
+        _state.value = _state.value.copy(home = _state.value.home.copy(loading = true, error = null))
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.updateProfile(currentSession, username, bio) }
+                val snapshot = withContext(Dispatchers.IO) { api.loadHome(currentSession) }
+                applyHomeSnapshot(snapshot, selectedChatId = _state.value.home.selectedChatId)
+            }.onFailure { error ->
+                _state.value = _state.value.copy(home = _state.value.home.copy(loading = false, error = error.message ?: "Profile update failed"))
+            }
+        }
+    }
+
+    fun changePassword(oldPassword: String, newPassword: String) {
+        val currentSession = session ?: return
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.changePassword(currentSession, oldPassword, newPassword) }
+            }.onFailure { error ->
+                _state.value = _state.value.copy(home = _state.value.home.copy(error = error.message ?: "Password change failed"))
+            }
+        }
+    }
+
+    fun deleteAccount(password: String) {
+        val currentSession = session ?: return
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.deleteAccount(currentSession, password) }
+                logout()
+            }.onFailure { error ->
+                _state.value = _state.value.copy(home = _state.value.home.copy(error = error.message ?: "Account deletion failed"))
+            }
+        }
+    }
+
     fun logout() {
         session = null
         messagesByChat = emptyMap()
@@ -502,6 +579,8 @@ private class DesktopStateHolder {
             ),
             home = NoveoHomeFrameState(
                 currentUserId = snapshot.session.userId,
+                currentUsername = snapshot.currentUsername,
+                currentUserBio = snapshot.currentUserBio,
                 chats = snapshot.chats,
                 selectedChatId = actualSelectedId,
                 messages = actualSelectedId?.let { messagesByChat[it] }.orEmpty(),
