@@ -460,6 +460,7 @@ fun NoveoHomeFrame(
                             onTyping = onTyping,
                             onJoinChat = onJoinChat,
                             onLeaveChat = onLeaveChat,
+                            onRefresh = onRefresh,
                             onOpenAttachments = { activeModal = AndroidHomeModal.ATTACHMENTS },
                             onOpenStickers = { activeModal = AndroidHomeModal.STICKERS },
                             onOpenChatInfo = { activeModal = AndroidHomeModal.CHAT_INFO },
@@ -526,6 +527,7 @@ fun NoveoHomeFrame(
                                 onTyping = onTyping,
                                 onJoinChat = onJoinChat,
                                 onLeaveChat = onLeaveChat,
+                                onRefresh = onRefresh,
                                 onOpenAttachments = { activeModal = AndroidHomeModal.ATTACHMENTS },
                                 onOpenStickers = { activeModal = AndroidHomeModal.STICKERS },
                                 onOpenChatInfo = { activeModal = AndroidHomeModal.CHAT_INFO },
@@ -1273,6 +1275,7 @@ private fun AndroidStyleConversationPane(
     onTyping: () -> Unit,
     onJoinChat: (String) -> Unit,
     onLeaveChat: (String) -> Unit,
+    onRefresh: () -> Unit,
     onOpenAttachments: () -> Unit,
     onOpenStickers: () -> Unit,
     onOpenChatInfo: () -> Unit,
@@ -1283,13 +1286,30 @@ private fun AndroidStyleConversationPane(
     val scope = rememberCoroutineScope()
     var contextMenuState by remember { mutableStateOf<AndroidContextMenuState?>(null) }
     var showMoreMenu by remember { mutableStateOf(false) }
+    var showMessageSearch by rememberSaveable(chat.id) { mutableStateOf(false) }
+    var messageSearchQuery by rememberSaveable(chat.id) { mutableStateOf("") }
     var replyingToMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
     var editingMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
     val pinnedMessage = remember(state.messages) { state.messages.lastOrNull { it.isPinned } }
+    val visibleMessages = remember(state.messages, showMessageSearch, messageSearchQuery) {
+        if (!showMessageSearch || messageSearchQuery.isBlank()) {
+            state.messages
+        } else {
+            val query = messageSearchQuery.trim()
+            state.messages.filter { message ->
+                message.text.contains(query, ignoreCase = true) ||
+                    message.senderName.contains(query, ignoreCase = true) ||
+                    message.replyPreview?.contains(query, ignoreCase = true) == true ||
+                    message.attachmentName?.contains(query, ignoreCase = true) == true
+            }
+        }
+    }
     val isMember = state.currentUserId?.let { chat.memberIds.contains(it) } == true
     val canWriteToChat = state.canSendMessage && chat.canChat &&
         (chat.chatType == "private" || isMember)
     val canJoinChat = chat.chatType != "private" && !isMember
+    val showCannotSendBar = !canWriteToChat && !canJoinChat
+    val showBottomInputSurface = canWriteToChat || canJoinChat || showCannotSendBar
 
     LaunchedEffect(canWriteToChat, chat.id) {
         if (!canWriteToChat) {
@@ -1303,31 +1323,36 @@ private fun AndroidStyleConversationPane(
         editingMessage?.let { draft = it.text }
     }
 
-    LaunchedEffect(chat.id, state.messages.size) {
-        if (state.messages.isNotEmpty()) {
-            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: state.messages.lastIndex
-            val nearBottom = state.messages.lastIndex - lastVisible <= 2
-            if (nearBottom) listState.animateScrollToItem(state.messages.lastIndex)
-            else if (listState.layoutInfo.totalItemsCount == 0) listState.scrollToItem(state.messages.lastIndex)
+    LaunchedEffect(chat.id, visibleMessages.size, showMessageSearch) {
+        if (visibleMessages.isNotEmpty()) {
+            val lastIndex = visibleMessages.lastIndex
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: lastIndex
+            val nearBottom = lastIndex - lastVisible <= 2
+            if (nearBottom) listState.animateScrollToItem(lastIndex)
+            else if (listState.layoutInfo.totalItemsCount == 0) listState.scrollToItem(lastIndex)
         }
     }
 
-    val showScrollToBottom = remember(state.messages.size, listState.firstVisibleItemIndex) {
-        state.messages.isNotEmpty() && listState.firstVisibleItemIndex < state.messages.lastIndex - 8
+    val showScrollToBottom = remember(visibleMessages.size, listState.firstVisibleItemIndex) {
+        visibleMessages.isNotEmpty() && listState.firstVisibleItemIndex < visibleMessages.lastIndex - 8
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(tgColors.chatSurface)) {
         val maxBubbleWidth = maxWidth * 0.78f
+        val topChromePadding = 64.dp +
+            (if (pinnedMessage != null) 48.dp else 0.dp) +
+            (if (showMessageSearch) 56.dp else 0.dp)
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 8.dp, top = if (pinnedMessage != null) 104.dp else 64.dp, end = 8.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(start = 8.dp, top = topChromePadding, end = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             if (state.messages.isEmpty()) item { EmptyMessagesSurface(strings, tgColors) }
-            itemsIndexed(state.messages, key = { _, message -> message.id }) { index, message ->
-                val prev = state.messages.getOrNull(index - 1)
-                val next = state.messages.getOrNull(index + 1)
+            else if (visibleMessages.isEmpty()) item { EmptyMessageSearchSurface(strings, tgColors, messageSearchQuery) }
+            itemsIndexed(visibleMessages, key = { _, message -> message.id }) { index, message ->
+                val prev = visibleMessages.getOrNull(index - 1)
+                val next = visibleMessages.getOrNull(index + 1)
                 if (message.dateLabel.isNotBlank() && prev?.dateLabel != message.dateLabel) {
                     AndroidDateSeparator(message.dateLabel, tgColors)
                 }
@@ -1348,7 +1373,7 @@ private fun AndroidStyleConversationPane(
             }
         }
 
-        if (canWriteToChat) {
+        if (showBottomInputSurface) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(150.dp).align(Alignment.BottomCenter).offset(y = 42.dp).background(
                     Brush.verticalGradient(
@@ -1413,7 +1438,14 @@ private fun AndroidStyleConversationPane(
                     HeaderIconButton(icon = Icons.Outlined.MoreVert, onClick = { showMoreMenu = true }, tint = tgColors.headerIcon, modifier = Modifier.padding(end = 4.dp))
                     DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
                         DropdownMenuItem(text = { Text(strings.chatInfo) }, onClick = { showMoreMenu = false; onOpenChatInfo() })
-                        DropdownMenuItem(text = { Text(strings.searchMessages) }, onClick = { showMoreMenu = false })
+                        DropdownMenuItem(
+                            text = { Text(strings.searchMessages) },
+                            onClick = {
+                                showMoreMenu = false
+                                showMessageSearch = true
+                                messageSearchQuery = ""
+                            }
+                        )
                         if (chat.chatType != "private" && isMember) {
                             DropdownMenuItem(
                                 text = { Text(strings.leave, color = MaterialTheme.colorScheme.error) },
@@ -1423,7 +1455,7 @@ private fun AndroidStyleConversationPane(
                                 }
                             )
                         }
-                        DropdownMenuItem(text = { Text(strings.refresh) }, onClick = { showMoreMenu = false })
+                        DropdownMenuItem(text = { Text(strings.refresh) }, onClick = { showMoreMenu = false; onRefresh() })
                     }
                 }
             }
@@ -1440,6 +1472,28 @@ private fun AndroidStyleConversationPane(
         }
 
         AnimatedVisibility(
+            visible = showMessageSearch,
+            enter = fadeIn() + slideInVertically { -it / 2 },
+            exit = fadeOut() + slideOutVertically { -it / 2 },
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .offset(y = if (pinnedMessage != null) 104.dp else 56.dp)
+        ) {
+            AndroidMessageSearchBar(
+                query = messageSearchQuery,
+                strings = strings,
+                tgColors = tgColors,
+                resultCount = visibleMessages.size,
+                onQueryChange = { messageSearchQuery = it },
+                onClose = {
+                    showMessageSearch = false
+                    messageSearchQuery = ""
+                }
+            )
+        }
+
+        AnimatedVisibility(
             visible = showScrollToBottom,
             enter = fadeIn() + slideInVertically { it / 2 },
             exit = fadeOut() + slideOutVertically { it / 2 },
@@ -1448,7 +1502,7 @@ private fun AndroidStyleConversationPane(
             Surface(
                 modifier = Modifier.size(42.dp).clickable {
                     scope.launch {
-                        val target = state.messages.lastIndex
+                        val target = visibleMessages.lastIndex
                         if (target >= 0) {
                             if (listState.firstVisibleItemIndex < target - 20) listState.scrollToItem((target - 10).coerceAtLeast(0))
                             listState.animateScrollToItem(target)
@@ -1509,6 +1563,12 @@ private fun AndroidStyleConversationPane(
                 onJoin = { onJoinChat(chat.id) },
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
             )
+        } else {
+            AndroidCannotSendBar(
+                strings = strings,
+                tgColors = tgColors,
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+            )
         }
 
         contextMenuState?.let { menuState ->
@@ -1520,6 +1580,72 @@ private fun AndroidStyleConversationPane(
                 onEdit = { editingMessage = menuState.message; replyingToMessage = null; contextMenuState = null },
                 onDismiss = { contextMenuState = null }
             )
+        }
+    }
+}
+
+@Composable
+private fun AndroidMessageSearchBar(
+    query: String,
+    strings: NoveoStrings,
+    tgColors: TelegramHomeColors,
+    resultCount: Int,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().height(56.dp),
+        color = tgColors.incomingBubble,
+        tonalElevation = 1.dp,
+        shadowElevation = 1.dp
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HeaderIconButton(icon = Icons.AutoMirrored.Outlined.ArrowBack, onClick = onClose, tint = tgColors.headerIcon)
+            SearchField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = strings.searchMessages,
+                modifier = Modifier.weight(1f).height(42.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = if (query.isBlank()) strings.searchMessages else "$resultCount ${strings.messages}",
+                color = tgColors.headerSubtitle,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(min = 54.dp, max = 96.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyMessageSearchSurface(strings: NoveoStrings, tgColors: TelegramHomeColors, query: String) {
+    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 80.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Outlined.Search, contentDescription = null, tint = tgColors.headerSubtitle.copy(alpha = 0.65f), modifier = Modifier.size(42.dp))
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = strings.noMessagesYet,
+                color = tgColors.headerTitle,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center
+            )
+            if (query.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = query,
+                    color = tgColors.headerSubtitle,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
@@ -1573,6 +1699,51 @@ private fun AndroidJoinChatBar(
                         modifier = Modifier.size(24.dp)
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidCannotSendBar(
+    strings: NoveoStrings,
+    tgColors: TelegramHomeColors,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .padding(horizontal = 6.dp)
+            .padding(bottom = 4.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = tgColors.composerField.copy(alpha = 0.96f),
+            shadowElevation = 1.dp
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Lock,
+                    contentDescription = null,
+                    tint = tgColors.composerIcon,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = strings.cannotSendMessage,
+                    color = tgColors.composerIcon,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
