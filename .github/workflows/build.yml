@@ -118,11 +118,14 @@ jobs:
               fh.write(f"latest_release_tag={latest_release_tag}\n")
           PY
 
-      - name: Generate changelog
+      - name: Groq Diffgen
+        id: changelog
         shell: bash
         env:
           GITHUB_SHA: ${{ github.sha }}
           RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
+          RELEASE_PRERELEASE: ${{ steps.release_meta.outputs.prerelease }}
           PREVIOUS_RELEASE_TAG: ${{ steps.release_meta.outputs.latest_release_tag }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
@@ -139,21 +142,37 @@ jobs:
             PREV_LABEL="initial build"
           fi
 
+          {
+            echo "release_tag=${RELEASE_TAG}"
+            echo "previous_label=${PREV_LABEL}"
+            echo "range=${RANGE}"
+          } >> "$GITHUB_OUTPUT"
+
           git log --no-merges --pretty=format:'- %s (%h)' "$RANGE" > commits.txt || true
           git diff --name-status "$RANGE" > files.txt || true
           export PREV_LABEL RANGE
+          python3 -m pip install --disable-pip-version-check --quiet groq
+
           python3 - <<'PY'
           import os
           import pathlib
-          import subprocess
           import sys
           import textwrap
+          from groq import Groq
 
           release_tag = os.environ["RELEASE_TAG"]
+          release_version = os.environ["RELEASE_VERSION"]
+          prerelease = os.environ["RELEASE_PRERELEASE"] == "true"
           previous_label = os.environ["PREV_LABEL"]
-          commits = pathlib.Path("commits.txt").read_text(encoding="utf-8", errors="ignore").strip() or "- No commit messages available"
-          files_changed = pathlib.Path("files.txt").read_text(encoding="utf-8", errors="ignore").strip() or "No file-level diff available"
+          range_text = os.environ["RANGE"]
           api_key = os.environ.get("GROQ_API_KEY", "").strip()
+
+          commits = pathlib.Path("commits.txt").read_text(encoding="utf-8", errors="ignore").strip()
+          files_changed = pathlib.Path("files.txt").read_text(encoding="utf-8", errors="ignore").strip()
+          if not commits:
+              commits = "- No commit messages available"
+          if not files_changed:
+              files_changed = "No file-level diff available"
 
           fallback = textwrap.dedent(f"""\
           Release {release_tag}
@@ -167,25 +186,51 @@ jobs:
           {files_changed}
           """).strip()
 
-          body = fallback
-          if api_key:
+          if not api_key:
+              body = fallback
+          else:
+              system_prompt = (
+                  "You write concise software release notes for Android builds. "
+                  "Return plain Markdown only. Be factual, do not invent behavior, "
+                  "and summarize only what is supported by the provided diff. "
+                  "Keep the result under 900 characters so the exact same text can be reused "
+                  "for GitHub Releases and message captions."
+              )
+              user_prompt = textwrap.dedent(f"""\
+              Build type: {"pre-release" if prerelease else "release"}
+              New release tag: {release_tag}
+              App versionName: {release_version}
+              Diff range: {range_text}
+              Previous successful release: {previous_label}
+
+              Commit summaries:
+              {commits}
+
+              File diff:
+              {files_changed}
+
+              Write a compact changelog with:
+              - a one-line headline
+              - 2 to 5 short bullets
+              - no hype
+              - no unsupported claims
+              """)
               try:
-                  subprocess.check_call([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--quiet", "groq"])
-                  from groq import Groq
                   client = Groq(api_key=api_key)
                   completion = client.chat.completions.create(
                       model="openai/gpt-oss-120b",
                       reasoning_effort="medium",
                       messages=[
-                          {"role": "system", "content": "Write concise factual Android release notes in plain Markdown under 900 characters."},
-                          {"role": "user", "content": f"Release {release_tag}\n\nCommits:\n{commits}\n\nFiles changed:\n{files_changed}"},
+                          {"role": "system", "content": system_prompt},
+                          {"role": "user", "content": user_prompt},
                       ],
                   )
-                  generated = (completion.choices[0].message.content or "").strip()
-                  if generated:
-                      body = generated
+                  body = (completion.choices[0].message.content or "").strip()
+                  if not body:
+                      raise RuntimeError("Groq returned an empty changelog response")
               except Exception as exc:
-                  print(f"Groq diffgen failed, using fallback: {exc}", file=sys.stderr)
+                  print(f"Groq diffgen failed: {exc}", file=sys.stderr)
+                  raise
 
           pathlib.Path("release-notes.md").write_text(body + "\n", encoding="utf-8")
           pathlib.Path("release-caption.txt").write_text(body[:900], encoding="utf-8")
@@ -203,7 +248,9 @@ jobs:
   build_minified:
     name: Build minified APKs
     runs-on: ubuntu-latest
-    needs: metadata
+    needs:
+      - metadata
+      - vital_lint
     env:
       APK_FOLDER: app/build/outputs/apk/release
       RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
@@ -345,7 +392,9 @@ jobs:
   build_not_minified:
     name: Build not-minified ABI APKs
     runs-on: ubuntu-latest
-    needs: metadata
+    needs:
+      - metadata
+      - vital_lint
     env:
       APK_FOLDER: app/build/outputs/apk/release
       RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
@@ -483,110 +532,9 @@ jobs:
           path: build.log
           if-no-files-found: ignore
 
-
-  build_desktop_windows:
-    name: Build Windows desktop artifacts
-    runs-on: windows-latest
-    needs: metadata
-    env:
-      RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download Gradle wrapper JAR
-        shell: bash
-        run: |
-          mkdir -p gradle/wrapper
-          curl -fsSL "https://raw.githubusercontent.com/gradle/gradle/v8.14.4/gradle/wrapper/gradle-wrapper.jar" -o gradle/wrapper/gradle-wrapper.jar
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Gradle cache
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-home-cache-cleanup: true
-          cache-read-only: false
-
-      - name: Ensure wrapper is executable
-        shell: bash
-        run: chmod +x ./gradlew
-
-      - name: Derive Windows package version
-        id: desktop_version
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import os
-          import re
-
-          tag = os.environ.get("RELEASE_TAG", "1.0.0")
-          match = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$", tag)
-          if not match:
-              print("package_version=1.0.0")
-          else:
-              major, minor, patch, stamp = match.groups()
-              if stamp:
-                  # Windows MSI ProductVersion has three numeric fields. Keep prereleases
-                  # installable/upgradable by folding the timestamp into the build field.
-                  build = int(patch) * 1000 + int(stamp[-3:])
-                  build = max(0, min(build, 65535))
-                  print(f"package_version={major}.{minor}.{build}")
-              else:
-                  print(f"package_version={major}.{minor}.{patch}")
-          PY
-
-      - name: Build bundled Windows installers
-        shell: bash
-        run: |
-          ./gradlew --build-cache --configuration-cache \
-            -PNOVEO_DESKTOP_PACKAGE_VERSION="${{ steps.desktop_version.outputs.package_version }}" \
-            :desktopApp:packageReleaseExe \
-            :desktopApp:packageReleaseMsi
-
-      - name: Collect desktop installers
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          find desktopApp/build/compose/binaries -maxdepth 5 -type f -print
-
-          exe_path="$(find desktopApp/build/compose/binaries -path '*/main-release/exe/*.exe' -type f | head -n 1)"
-          msi_path="$(find desktopApp/build/compose/binaries -path '*/main-release/msi/*.msi' -type f | head -n 1)"
-
-          if [ -z "$exe_path" ]; then
-            echo "No bundled Windows EXE installer found under desktopApp/build/compose/binaries" >&2
-            exit 1
-          fi
-          if [ -z "$msi_path" ]; then
-            echo "No bundled Windows MSI installer found under desktopApp/build/compose/binaries" >&2
-            exit 1
-          fi
-
-          cp "$exe_path" "dist/Noveo-Setup-${RELEASE_TAG}.exe"
-          cp "$msi_path" "dist/Noveo-${RELEASE_TAG}.msi"
-
-          ls -lh dist
-          test -s "dist/Noveo-Setup-${RELEASE_TAG}.exe"
-          test -s "dist/Noveo-${RELEASE_TAG}.msi"
-
-      - name: Upload desktop artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: desktop-windows
-          path: dist/*
-          if-no-files-found: error
-
   vital_lint:
     name: Vital release lint
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     steps:
       - name: Checkout
@@ -627,19 +575,28 @@ jobs:
       - name: Run vital release lint separately
         shell: bash
         run: |
+          set -o pipefail
           "${{ steps.gradle_cmd.outputs.cmd }}" \
             --build-cache \
             --configuration-cache \
-            lintVitalRelease
+            lintVitalRelease 2>&1 | tee vital-lint.log
+
+      - name: Upload vital lint log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vital-lint-log-${{ github.run_number }}
+          path: vital-lint.log
+          if-no-files-found: ignore
 
   publish:
     name: Publish APKs
     runs-on: ubuntu-latest
     needs:
       - metadata
+      - vital_lint
       - build_minified
       - build_not_minified
-      - build_desktop_windows
     env:
       RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
 
@@ -653,12 +610,6 @@ jobs:
           pattern: "*-apks"
           path: dist
           merge-multiple: true
-
-      - name: Download desktop artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: desktop-windows
-          path: dist
 
       - name: Download release metadata files
         uses: actions/download-artifact@v4
@@ -729,8 +680,6 @@ jobs:
           body_path: release-notes.md
           files: |
             dist/*.apk
-            dist/*.msi
-            dist/*.exe
 
       - name: Create high-compression delivery ZIPs
         shell: bash
@@ -793,40 +742,3 @@ jobs:
             -F "media=$(cat telegram-media.json)" \
             -F "universal=@${UNIVERSAL_ZIP};filename=$(basename "$UNIVERSAL_ZIP")" \
             -F "arm64=@${ARM64_ZIP};filename=$(basename "$ARM64_ZIP")"
-
-      - name: Send universal ZIP directly to Bale
-        shell: bash
-        env:
-          BALE_BOT_TOKEN: ${{ secrets.BALE_TOKEN }}
-          BALE_CHAT_ID: "5730731066"
-        run: |
-          set -euo pipefail
-          BALE_BOT_TOKEN_CLEAN="$(printf '%s' "${BALE_BOT_TOKEN}" | tr -d '\r\n[:space:]')"
-
-          if [ -z "${BALE_BOT_TOKEN_CLEAN}" ] || [ -z "${BALE_CHAT_ID}" ]; then
-            echo "Bale delivery is not configured, skipping."
-            exit 0
-          fi
-
-          UNIVERSAL_ZIP="delivery/noveo-${RELEASE_TAG}.zip"
-          test -f "$UNIVERSAL_ZIP"
-
-          CAPTION="$(cat release-caption.txt)"
-          RESPONSE="$(
-            curl --fail --silent --show-error \
-              --max-time 300 \
-              --retry 2 \
-              --retry-delay 5 \
-              -X POST "https://tapi.bale.ai/bot${BALE_BOT_TOKEN_CLEAN}/sendDocument" \
-              -F "chat_id=${BALE_CHAT_ID}" \
-              -F "document=@${UNIVERSAL_ZIP};filename=$(basename "$UNIVERSAL_ZIP")" \
-              -F "caption=${CAPTION}"
-          )"
-
-          echo "Bale response:"
-          echo "${RESPONSE}"
-
-          if ! echo "${RESPONSE}" | python3 -c "import sys, json; print(json.load(sys.stdin).get('ok', False))" | grep -q "True"; then
-            echo "Direct Bale upload failed according to response JSON." >&2
-            exit 1
-          fi
