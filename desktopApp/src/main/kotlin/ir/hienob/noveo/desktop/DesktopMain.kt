@@ -10,6 +10,7 @@ import androidx.compose.ui.window.rememberWindowState
 import ir.hienob.noveo.core.ui.NoveoHomeFrame
 import ir.hienob.noveo.core.ui.NoveoHomeFrameState
 import ir.hienob.noveo.core.ui.NoveoHomeMessage
+import ir.hienob.noveo.core.ui.NoveoPendingAttachment
 import ir.hienob.noveo.core.ui.NoveoRootFrame
 import ir.hienob.noveo.core.ui.NoveoRootFrameState
 import ir.hienob.noveo.core.ui.NoveoStartupSurface
@@ -19,6 +20,8 @@ import ir.hienob.noveo.desktop.data.DesktopHomeSnapshot
 import ir.hienob.noveo.desktop.data.DesktopNoveoApi
 import ir.hienob.noveo.desktop.data.DesktopSession
 import java.awt.Desktop
+import java.awt.FileDialog
+import java.awt.Frame
 import java.io.File
 import java.net.URI
 import java.util.Properties
@@ -58,7 +61,17 @@ fun main() = application {
                     strings = strings,
                     onOpenChat = desktopState::openChat,
                     onBackToChats = desktopState::backToChats,
-                    onSend = desktopState::sendMessage,
+                    onSend = { text -> desktopState.sendMessage(text, null) },
+                    onSendMessage = desktopState::sendMessage,
+                    onEditMessage = desktopState::editMessage,
+                    onToggleReaction = desktopState::toggleReaction,
+                    onDeleteMessage = desktopState::deleteMessage,
+                    onPinMessage = desktopState::pinMessage,
+                    onForwardMessage = desktopState::forwardMessage,
+                    onDownloadFile = desktopState::downloadFile,
+                    onPickGalleryAttachment = { desktopState.pickAttachment(galleryOnly = true) },
+                    onPickFileAttachment = { desktopState.pickAttachment(galleryOnly = false) },
+                    onRemoveAttachment = desktopState::removeAttachment,
                     onTyping = desktopState::sendTyping,
                     onJoinChat = desktopState::joinChat,
                     onLeaveChat = desktopState::leaveChat,
@@ -84,6 +97,8 @@ private class DesktopStateHolder {
     private val sessionStore = DesktopSessionStore()
     private var session: DesktopSession? = null
     private var messagesByChat: Map<String, List<NoveoHomeMessage>> = emptyMap()
+    private var selectedAttachmentFile: File? = null
+    private var selectedAttachmentMimeType: String = "application/octet-stream"
 
     private val _state = MutableStateFlow(DesktopUiState())
     val state = _state.asStateFlow()
@@ -159,6 +174,42 @@ private class DesktopStateHolder {
         }
     }
 
+    fun pickAttachment(galleryOnly: Boolean) {
+        val selected = runCatching {
+            val dialog = FileDialog(null as Frame?, if (galleryOnly) "Select image or video" else "Select file", FileDialog.LOAD)
+            if (galleryOnly) {
+                dialog.filenameFilter = java.io.FilenameFilter { _, name ->
+                    val lower = name.lowercase()
+                    lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+                        lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".mp4") ||
+                        lower.endsWith(".webm") || lower.endsWith(".mov")
+                }
+            }
+            dialog.isVisible = true
+            val fileName = dialog.file ?: return
+            File(dialog.directory, fileName).takeIf { it.isFile }
+        }.getOrNull() ?: return
+
+        selectedAttachmentFile = selected
+        selectedAttachmentMimeType = inferMimeType(selected)
+        _state.value = _state.value.copy(
+            home = _state.value.home.copy(
+                pendingAttachment = NoveoPendingAttachment(
+                    fileName = selected.name,
+                    mimeType = selectedAttachmentMimeType,
+                    sizeLabel = desktopFormatBytes(selected.length())
+                ),
+                error = null
+            )
+        )
+    }
+
+    fun removeAttachment() {
+        selectedAttachmentFile = null
+        selectedAttachmentMimeType = "application/octet-stream"
+        _state.value = _state.value.copy(home = _state.value.home.copy(pendingAttachment = null))
+    }
+
     fun sendTyping() {
         // Desktop typing events can be wired once the long-lived websocket bridge is extracted.
     }
@@ -232,7 +283,7 @@ private class DesktopStateHolder {
         }
     }
 
-    fun sendMessage(text: String) {
+    fun sendMessage(text: String, replyToId: String?) {
         val currentSession = session ?: return
         val chatId = _state.value.home.selectedChatId ?: return
         val selectedChat = _state.value.home.chats.firstOrNull { it.id == chatId } ?: return
@@ -240,34 +291,165 @@ private class DesktopStateHolder {
         val canWrite = _state.value.home.canSendMessage && selectedChat.canChat &&
             (selectedChat.chatType == "private" || isMember)
         if (!canWrite) return
+        val attachmentFile = selectedAttachmentFile
+        val attachmentMimeType = selectedAttachmentMimeType
+        if (text.isBlank() && attachmentFile == null) return
+        val replySource = replyToId?.let { id -> _state.value.home.messages.firstOrNull { it.id == id } }
+        val pendingAttachment = _state.value.home.pendingAttachment
         val pendingMessage = NoveoHomeMessage(
             id = "pending-${System.currentTimeMillis()}",
             senderId = currentSession.userId,
             senderName = "You",
             text = text,
             isOutgoing = true,
-            pending = true
+            pending = true,
+            attachmentName = pendingAttachment?.fileName,
+            attachmentType = pendingAttachment?.mimeType,
+            attachmentSizeLabel = pendingAttachment?.sizeLabel,
+            replyAuthor = replySource?.senderName,
+            replyPreview = replySource?.text?.ifBlank { replySource.attachmentName.orEmpty() }
         )
         _state.value = _state.value.copy(
             home = _state.value.home.copy(
                 messages = _state.value.home.messages + pendingMessage,
                 isSendingMessage = true,
+                pendingAttachment = pendingAttachment?.copy(isUploading = attachmentFile != null, progress = 0f),
                 error = null
             )
         )
         scope.launch {
             runCatching {
-                withContext(Dispatchers.IO) { api.sendMessage(currentSession, chatId, text) }
+                val uploadedFile = if (attachmentFile != null) {
+                    withContext(Dispatchers.IO) {
+                        api.uploadFile(currentSession, attachmentFile, attachmentMimeType) { progress ->
+                            _state.value = _state.value.copy(
+                                home = _state.value.home.copy(
+                                    pendingAttachment = _state.value.home.pendingAttachment?.copy(progress = progress.coerceIn(0f, 1f), isUploading = true)
+                                )
+                            )
+                        }
+                    }
+                } else null
+                withContext(Dispatchers.IO) { api.sendMessage(currentSession, chatId, text, replyToId, uploadedFile) }
+                selectedAttachmentFile = null
+                selectedAttachmentMimeType = "application/octet-stream"
                 val snapshot = withContext(Dispatchers.IO) { api.loadHome(currentSession) }
                 applyHomeSnapshot(snapshot, selectedChatId = chatId)
             }.onFailure { error ->
                 _state.value = _state.value.copy(
                     home = _state.value.home.copy(
                         isSendingMessage = false,
+                        pendingAttachment = _state.value.home.pendingAttachment?.copy(isUploading = false, progress = 0f),
                         error = error.message ?: "Send failed"
                     )
                 )
             }
+        }
+    }
+
+    fun editMessage(messageId: String, newText: String) {
+        val currentSession = session ?: return
+        val chatId = _state.value.home.selectedChatId ?: return
+        _state.value = _state.value.copy(
+            home = _state.value.home.copy(
+                messages = _state.value.home.messages.map { message ->
+                    if (message.id == messageId) message.copy(text = newText, edited = true) else message
+                },
+                error = null
+            )
+        )
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.editMessage(currentSession, chatId, messageId, newText) }
+                val snapshot = withContext(Dispatchers.IO) { api.loadHome(currentSession) }
+                applyHomeSnapshot(snapshot, selectedChatId = chatId)
+            }.onFailure { error ->
+                _state.value = _state.value.copy(home = _state.value.home.copy(error = error.message ?: "Edit failed"))
+            }
+        }
+    }
+
+    fun toggleReaction(messageId: String, emoji: String) {
+        val currentSession = session ?: return
+        val chatId = _state.value.home.selectedChatId ?: return
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.toggleReaction(currentSession, chatId, messageId, emoji) }
+                val snapshot = withContext(Dispatchers.IO) { api.loadHome(currentSession) }
+                applyHomeSnapshot(snapshot, selectedChatId = chatId)
+            }.onFailure { error ->
+                _state.value = _state.value.copy(home = _state.value.home.copy(error = error.message ?: "Reaction failed"))
+            }
+        }
+    }
+
+    fun deleteMessage(messageId: String) {
+        val currentSession = session ?: return
+        val chatId = _state.value.home.selectedChatId ?: return
+        _state.value = _state.value.copy(
+            home = _state.value.home.copy(
+                messages = _state.value.home.messages.filterNot { it.id == messageId },
+                error = null
+            )
+        )
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.deleteMessage(currentSession, chatId, messageId) }
+                val snapshot = withContext(Dispatchers.IO) { api.loadHome(currentSession) }
+                applyHomeSnapshot(snapshot, selectedChatId = chatId)
+            }.onFailure { error ->
+                _state.value = _state.value.copy(home = _state.value.home.copy(error = error.message ?: "Delete failed"))
+            }
+        }
+    }
+
+    fun pinMessage(messageId: String, pin: Boolean) {
+        val currentSession = session ?: return
+        val chatId = _state.value.home.selectedChatId ?: return
+        _state.value = _state.value.copy(
+            home = _state.value.home.copy(
+                messages = _state.value.home.messages.map { message ->
+                    if (message.id == messageId) message.copy(isPinned = pin) else if (pin) message.copy(isPinned = false) else message
+                },
+                error = null
+            )
+        )
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.pinMessage(currentSession, chatId, messageId, pin) }
+                val snapshot = withContext(Dispatchers.IO) { api.loadHome(currentSession) }
+                applyHomeSnapshot(snapshot, selectedChatId = chatId)
+            }.onFailure { error ->
+                _state.value = _state.value.copy(home = _state.value.home.copy(error = error.message ?: "Pin failed"))
+            }
+        }
+    }
+
+
+    fun forwardMessage(messageId: String, targetChatId: String) {
+        val currentSession = session ?: return
+        val sourceChatId = _state.value.home.selectedChatId ?: return
+        val sourceMessage = _state.value.home.messages.firstOrNull { it.id == messageId } ?: return
+        _state.value = _state.value.copy(home = _state.value.home.copy(loading = true, error = null))
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.forwardMessage(currentSession, targetChatId, sourceMessage) }
+                val snapshot = withContext(Dispatchers.IO) { api.loadHome(currentSession) }
+                applyHomeSnapshot(snapshot, selectedChatId = sourceChatId)
+            }.onFailure { error ->
+                _state.value = _state.value.copy(home = _state.value.home.copy(loading = false, error = error.message ?: "Forward failed"))
+            }
+        }
+    }
+
+    fun downloadFile(messageId: String) {
+        val attachmentUrl = _state.value.home.messages.firstOrNull { it.id == messageId }?.attachmentUrl.orEmpty()
+        if (attachmentUrl.isBlank()) return
+        runCatching {
+            val uri = URI(attachmentUrl)
+            if (Desktop.isDesktopSupported()) Desktop.getDesktop().browse(uri)
+        }.onFailure { error ->
+            _state.value = _state.value.copy(home = _state.value.home.copy(error = error.message ?: "Unable to open file"))
         }
     }
 
@@ -325,7 +507,8 @@ private class DesktopStateHolder {
                 messages = actualSelectedId?.let { messagesByChat[it] }.orEmpty(),
                 totalUnreadCount = snapshot.totalUnreadCount,
                 loading = false,
-                isSendingMessage = false
+                isSendingMessage = false,
+                pendingAttachment = null
             )
         )
     }
@@ -363,6 +546,35 @@ private class DesktopSessionStore {
     fun clear() {
         runCatching { file.delete() }
     }
+}
+
+private fun inferMimeType(file: File): String = when (file.extension.lowercase()) {
+    "jpg", "jpeg" -> "image/jpeg"
+    "png" -> "image/png"
+    "gif" -> "image/gif"
+    "webp" -> "image/webp"
+    "mp4" -> "video/mp4"
+    "webm" -> "video/webm"
+    "mov" -> "video/quicktime"
+    "mp3" -> "audio/mpeg"
+    "m4a" -> "audio/mp4"
+    "wav" -> "audio/wav"
+    "ogg" -> "audio/ogg"
+    "pdf" -> "application/pdf"
+    "txt" -> "text/plain"
+    else -> "application/octet-stream"
+}
+
+private fun desktopFormatBytes(size: Long): String {
+    if (size <= 0L) return ""
+    val units = arrayOf("B", "KB", "MB", "GB")
+    var value = size.toDouble()
+    var unit = 0
+    while (value >= 1024.0 && unit < units.lastIndex) {
+        value /= 1024.0
+        unit++
+    }
+    return if (unit == 0) "${size} ${units[unit]}" else String.format(java.util.Locale.US, "%.1f %s", value, units[unit])
 }
 
 private fun openNoveoWeb() {

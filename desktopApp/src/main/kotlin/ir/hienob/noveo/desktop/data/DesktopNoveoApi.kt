@@ -2,6 +2,8 @@ package ir.hienob.noveo.desktop.data
 
 import ir.hienob.noveo.core.ui.NoveoHomeChat
 import ir.hienob.noveo.core.ui.NoveoHomeMessage
+import java.io.File
+import java.io.InterruptedIOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -10,6 +12,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -17,6 +21,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
+import okio.BufferedSink
 import org.json.JSONObject
 
 private const val CLIENT_VERSION = "desktop"
@@ -33,6 +38,13 @@ internal data class DesktopHomeSnapshot(
     val chats: List<NoveoHomeChat>,
     val messagesByChat: Map<String, List<NoveoHomeMessage>>,
     val totalUnreadCount: Int
+)
+
+internal data class DesktopUploadedFile(
+    val url: String,
+    val name: String,
+    val type: String,
+    val size: Long
 )
 
 internal class DesktopNoveoApi(
@@ -61,11 +73,29 @@ internal class DesktopNoveoApi(
         )
     }
 
-    fun sendMessage(session: DesktopSession, chatId: String, text: String) {
+    fun sendMessage(
+        session: DesktopSession,
+        chatId: String,
+        text: String,
+        replyToId: String? = null,
+        file: DesktopUploadedFile? = null
+    ) {
         val latch = CountDownLatch(1)
         val failure = AtomicReference<String?>(null)
         val done = AtomicBoolean(false)
-        val content = JSONObject().put("text", text.takeIf { it.isNotBlank() }).toString()
+        val contentObject = JSONObject().put("text", text.takeIf { it.isNotBlank() })
+        if (file != null) {
+            contentObject.put(
+                "file",
+                JSONObject()
+                    .put("url", file.url)
+                    .put("name", file.name)
+                    .put("type", file.type)
+                    .put("size", file.size)
+            )
+        }
+        val content = contentObject.toString()
+        val clientTempId = "desktop-${System.currentTimeMillis()}"
         val socket = client.newWebSocket(request(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send(reconnect(session).toString())
@@ -80,6 +110,8 @@ internal class DesktopNoveoApi(
                                 .put("type", "message")
                                 .put("chatId", chatId)
                                 .put("content", content)
+                                .put("replyToId", replyToId)
+                                .put("clientTempId", clientTempId)
                                 .toString()
                         )
                     }
@@ -104,6 +136,129 @@ internal class DesktopNoveoApi(
         socket.cancel()
         if (!finished) error("Send timeout")
         failure.get()?.let { error(it) }
+    }
+
+
+    fun uploadFile(
+        session: DesktopSession,
+        file: File,
+        mimeType: String,
+        onProgress: (Float) -> Unit
+    ): DesktopUploadedFile {
+        val totalBytes = file.length().coerceAtLeast(1L)
+        val requestBody = object : RequestBody() {
+            override fun contentType() = mimeType.toMediaType()
+            override fun contentLength() = file.length()
+            override fun writeTo(sink: BufferedSink) {
+                file.inputStream().use { input ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var uploaded = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read == -1) break
+                        if (Thread.currentThread().isInterrupted) throw InterruptedIOException("Upload canceled")
+                        sink.write(buffer, 0, read)
+                        uploaded += read
+                        onProgress(uploaded.toFloat() / totalBytes.toFloat())
+                    }
+                }
+            }
+        }
+        val multipart = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("file", file.name, requestBody)
+            .build()
+        val uploadRequest = Request.Builder()
+            .url("https://noveo.ir:8443/upload/file")
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .header("User-Agent", "NoveoKotlin/$CLIENT_VERSION")
+            .header("X-Noveo-Client", "kotlin-desktop")
+            .header("X-Noveo-Version", CLIENT_VERSION)
+            .post(multipart)
+            .build()
+        client.newCall(uploadRequest).execute().use { response ->
+            if (!response.isSuccessful) {
+                val body = response.body?.string().orEmpty()
+                error("Upload failed (${response.code}): $body")
+            }
+            val payload = JSONObject(response.body?.string().orEmpty())
+            if (!payload.optBoolean("success", false)) error(payload.optString("error", "Upload failed"))
+            val uploaded = payload.optJSONObject("file") ?: error("Missing file info in upload response")
+            return DesktopUploadedFile(
+                url = uploaded.optString("url").sanitizeServerString(),
+                name = uploaded.optString("name").sanitizeServerString().ifBlank { file.name },
+                type = uploaded.optString("type").sanitizeServerString().ifBlank { mimeType },
+                size = uploaded.optLong("size", file.length())
+            )
+        }
+    }
+
+    fun forwardMessage(session: DesktopSession, targetChatId: String, message: NoveoHomeMessage) {
+        val content = JSONObject()
+        if (message.text.isNotBlank()) content.put("text", message.text)
+        if (!message.attachmentUrl.isNullOrBlank() || !message.attachmentName.isNullOrBlank()) {
+            val file = JSONObject()
+            message.attachmentUrl?.takeIf { it.isNotBlank() }?.let { file.put("url", it) }
+            message.attachmentName?.takeIf { it.isNotBlank() }?.let { file.put("name", it) }
+            message.attachmentType?.takeIf { it.isNotBlank() }?.let { file.put("type", it) }
+            if (file.length() > 0) content.put("file", file)
+        }
+        content.put(
+            "forwardedInfo",
+            JSONObject()
+                .put("from", message.senderName)
+                .put("originalTs", message.rawTimestamp)
+        )
+        sendChatAction(
+            session,
+            JSONObject()
+                .put("type", "message")
+                .put("chatId", targetChatId)
+                .put("content", content.toString())
+                .put("replyToId", JSONObject.NULL)
+                .put("clientTempId", "desktop-forward-${System.currentTimeMillis()}")
+        )
+    }
+
+    fun editMessage(session: DesktopSession, chatId: String, messageId: String, newText: String) {
+        sendChatAction(
+            session,
+            JSONObject()
+                .put("type", "edit_message")
+                .put("chatId", chatId)
+                .put("messageId", messageId)
+                .put("newContent", newText)
+        )
+    }
+
+    fun toggleReaction(session: DesktopSession, chatId: String, messageId: String, emoji: String) {
+        sendChatAction(
+            session,
+            JSONObject()
+                .put("type", "toggle_reaction")
+                .put("chatId", chatId)
+                .put("messageId", messageId)
+                .put("reaction", emoji)
+        )
+    }
+
+    fun deleteMessage(session: DesktopSession, chatId: String, messageId: String) {
+        sendChatAction(
+            session,
+            JSONObject()
+                .put("type", "delete_message")
+                .put("chatId", chatId)
+                .put("messageId", messageId)
+        )
+    }
+
+    fun pinMessage(session: DesktopSession, chatId: String, messageId: String, pin: Boolean) {
+        val payload = JSONObject()
+            .put("type", if (pin) "pin_message" else "unpin_message")
+            .put("chatId", chatId)
+        if (pin) payload.put("messageId", messageId)
+        sendChatAction(session, payload)
     }
 
     fun joinChat(session: DesktopSession, chatId: String) {
@@ -162,6 +317,42 @@ internal class DesktopNoveoApi(
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("Leave failed (${response.code})")
         }
+    }
+
+    private fun sendChatAction(session: DesktopSession, payload: JSONObject) {
+        val latch = CountDownLatch(1)
+        val failure = AtomicReference<String?>(null)
+        val done = AtomicBoolean(false)
+        val socket = client.newWebSocket(request(), object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                webSocket.send(reconnect(session).toString())
+            }
+
+            override fun onMessage(webSocket: WebSocket, textMsg: String) {
+                val msg = JSONObject(textMsg)
+                when (msg.optString("type")) {
+                    "login_success" -> {
+                        webSocket.send(payload.toString())
+                        if (done.compareAndSet(false, true)) latch.countDown()
+                        webSocket.close(1000, null)
+                    }
+                    "auth_failed", "error" -> {
+                        failure.set(msg.optString("message", "Action failed"))
+                        if (done.compareAndSet(false, true)) latch.countDown()
+                        webSocket.close(1000, null)
+                    }
+                }
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                failure.set(fail(response, t, "sending chat action"))
+                if (done.compareAndSet(false, true)) latch.countDown()
+            }
+        })
+        val finished = latch.await(10, TimeUnit.SECONDS)
+        socket.cancel()
+        if (!finished) error("Action timeout")
+        failure.get()?.let { error(it) }
     }
 
     private fun auth(payload: JSONObject): DesktopSession {
@@ -420,6 +611,7 @@ private fun parseMessage(message: JSONObject, chatId: String, usersById: Map<Str
         senderName = usersById[senderId]?.username ?: message.optString("senderName").sanitizeServerString().ifBlank { "Unknown" },
         text = content.text.ifBlank { if (content.attachmentName == null) " " else "" },
         time = formatTime(timestamp),
+        rawTimestamp = timestamp,
         isOutgoing = senderId == selfUserId,
         pending = message.optBoolean("pending", false),
         edited = message.optLong("editedAt", 0L) > 0,
@@ -428,6 +620,7 @@ private fun parseMessage(message: JSONObject, chatId: String, usersById: Map<Str
         replyAuthor = replyObject?.optString("senderName")?.sanitizeServerString(),
         replyPreview = replyObject?.let { parseMessageContent(it.opt("content")).previewText },
         attachmentName = content.attachmentName,
+        attachmentUrl = content.attachmentUrl,
         attachmentType = content.attachmentType,
         attachmentSizeLabel = content.attachmentSizeLabel,
         reactions = parseReactionCounts(message.opt("reactions")),
@@ -442,6 +635,7 @@ private data class ParsedMessageContent(
     val text: String = "",
     val previewText: String = "",
     val attachmentName: String? = null,
+    val attachmentUrl: String? = null,
     val attachmentType: String? = null,
     val attachmentSizeLabel: String? = null,
     val inlineKeyboard: Any? = null
@@ -465,6 +659,7 @@ private fun parseMessageContent(raw: Any?): ParsedMessageContent {
     payload.optJSONObject("file")?.let { file ->
         val type = file.optString("type").sanitizeServerString()
         val name = file.optString("name").sanitizeServerString().ifBlank { file.optString("fileName").sanitizeServerString() }
+        val url = resolveAssetUrl(file, "url", "src", "path", "downloadUrl", "fileUrl")
         val size = file.optLong("size", 0L).takeIf { it > 0 }?.let(::formatBytes)
         val preview = when {
             type.startsWith("image/", true) -> "Photo"
@@ -477,6 +672,7 @@ private fun parseMessageContent(raw: Any?): ParsedMessageContent {
             text = text,
             previewText = text.ifBlank { preview },
             attachmentName = name.ifBlank { preview },
+            attachmentUrl = url,
             attachmentType = type.ifBlank { preview },
             attachmentSizeLabel = size,
             inlineKeyboard = inlineKeyboard

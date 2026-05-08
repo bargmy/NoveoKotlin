@@ -127,6 +127,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.key
@@ -135,6 +136,7 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -198,7 +200,8 @@ private enum class AndroidHomeModal {
     PROFILE,
     ATTACHMENTS,
     STICKERS,
-    CHAT_INFO
+    CHAT_INFO,
+    FORWARD
 }
 
 /**
@@ -215,7 +218,8 @@ data class NoveoHomeFrameState(
     val error: String? = null,
     val isSendingMessage: Boolean = false,
     val canSendMessage: Boolean = true,
-    val activeCallTitle: String? = null
+    val activeCallTitle: String? = null,
+    val pendingAttachment: NoveoPendingAttachment? = null
 ) {
     val selectedChat: NoveoHomeChat?
         get() = chats.firstOrNull { it.id == selectedChatId }
@@ -235,12 +239,21 @@ data class NoveoHomeChat(
     val memberIds: List<String> = emptyList()
 )
 
+data class NoveoPendingAttachment(
+    val fileName: String,
+    val mimeType: String = "application/octet-stream",
+    val sizeLabel: String = "",
+    val isUploading: Boolean = false,
+    val progress: Float = 0f
+)
+
 data class NoveoHomeMessage(
     val id: String,
     val senderId: String,
     val senderName: String,
     val text: String,
     val time: String = "",
+    val rawTimestamp: Long = 0L,
     val isOutgoing: Boolean = false,
     val pending: Boolean = false,
     val edited: Boolean = false,
@@ -249,6 +262,7 @@ data class NoveoHomeMessage(
     val replyAuthor: String? = null,
     val replyPreview: String? = null,
     val attachmentName: String? = null,
+    val attachmentUrl: String? = null,
     val attachmentType: String? = null,
     val attachmentSizeLabel: String? = null,
     val reactions: Map<String, Int> = emptyMap(),
@@ -404,6 +418,16 @@ fun NoveoHomeFrame(
     onOpenChat: (String) -> Unit,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
+    onSendMessage: (String, String?) -> Unit = { text, _ -> onSend(text) },
+    onEditMessage: (String, String) -> Unit = { _, _ -> },
+    onToggleReaction: (String, String) -> Unit = { _, _ -> },
+    onDeleteMessage: (String) -> Unit = {},
+    onPinMessage: (String, Boolean) -> Unit = { _, _ -> },
+    onForwardMessage: (String, String) -> Unit = { _, _ -> },
+    onDownloadFile: (String) -> Unit = {},
+    onPickGalleryAttachment: () -> Unit = {},
+    onPickFileAttachment: () -> Unit = {},
+    onRemoveAttachment: () -> Unit = {},
     onTyping: () -> Unit,
     onJoinChat: (String) -> Unit = {},
     onLeaveChat: (String) -> Unit = {},
@@ -457,6 +481,14 @@ fun NoveoHomeFrame(
                             tgColors = tgColors,
                             onBackToChats = onBackToChats,
                             onSend = onSend,
+                            onSendMessage = onSendMessage,
+                            onEditMessage = onEditMessage,
+                            onToggleReaction = onToggleReaction,
+                            onDeleteMessage = onDeleteMessage,
+                            onPinMessage = onPinMessage,
+                            onForwardMessage = onForwardMessage,
+                            onDownloadFile = onDownloadFile,
+                            onRemoveAttachment = onRemoveAttachment,
                             onTyping = onTyping,
                             onJoinChat = onJoinChat,
                             onLeaveChat = onLeaveChat,
@@ -524,6 +556,14 @@ fun NoveoHomeFrame(
                                 tgColors = tgColors,
                                 onBackToChats = onBackToChats,
                                 onSend = onSend,
+                                onSendMessage = onSendMessage,
+                                onEditMessage = onEditMessage,
+                                onToggleReaction = onToggleReaction,
+                                onDeleteMessage = onDeleteMessage,
+                                onPinMessage = onPinMessage,
+                                onForwardMessage = onForwardMessage,
+                                onDownloadFile = onDownloadFile,
+                                onRemoveAttachment = onRemoveAttachment,
                                 onTyping = onTyping,
                                 onJoinChat = onJoinChat,
                                 onLeaveChat = onLeaveChat,
@@ -584,6 +624,8 @@ fun NoveoHomeFrame(
                     onOpenSettings = onOpenSettings,
                     onRefresh = onRefresh,
                     onLeaveChat = onLeaveChat,
+                    onPickGalleryAttachment = onPickGalleryAttachment,
+                    onPickFileAttachment = onPickFileAttachment,
                     onLogout = onLogout
                 )
             }
@@ -603,6 +645,8 @@ private fun AndroidHomeModalOverlay(
     onOpenSettings: () -> Unit,
     onRefresh: () -> Unit,
     onLeaveChat: (String) -> Unit,
+    onPickGalleryAttachment: () -> Unit,
+    onPickFileAttachment: () -> Unit,
     onLogout: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -622,7 +666,17 @@ private fun AndroidHomeModalOverlay(
             ) {
                 AndroidBottomSheetSurface {
                     when (modal) {
-                        AndroidHomeModal.ATTACHMENTS -> AndroidAttachmentSourceSurface(strings = strings)
+                        AndroidHomeModal.ATTACHMENTS -> AndroidAttachmentSourceSurface(
+                            strings = strings,
+                            onGallery = {
+                                onDismiss()
+                                onPickGalleryAttachment()
+                            },
+                            onFiles = {
+                                onDismiss()
+                                onPickFileAttachment()
+                            }
+                        )
                         AndroidHomeModal.STICKERS -> AndroidStickerSurface(strings = strings)
                         else -> Unit
                     }
@@ -804,7 +858,11 @@ private fun AndroidProfileSurface(strings: NoveoStrings, state: NoveoHomeFrameSt
 }
 
 @Composable
-private fun AndroidAttachmentSourceSurface(strings: NoveoStrings) {
+private fun AndroidAttachmentSourceSurface(
+    strings: NoveoStrings,
+    onGallery: () -> Unit,
+    onFiles: () -> Unit
+) {
     val tgColors = telegramHomeColors()
     Text(
         text = strings.selectSource,
@@ -820,13 +878,15 @@ private fun AndroidAttachmentSourceSurface(strings: NoveoStrings) {
             label = strings.gallery,
             icon = Icons.Outlined.Collections,
             color = Color(0xFF2EA6FF),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            onClick = onGallery
         )
         AndroidAttachmentChoice(
             label = strings.files,
             icon = Icons.Outlined.Description,
             color = Color(0xFF34C759),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            onClick = onFiles
         )
     }
 }
@@ -836,12 +896,13 @@ private fun AndroidAttachmentChoice(
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .clickable { }
+            .clickable(onClick = onClick)
             .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -1272,6 +1333,14 @@ private fun AndroidStyleConversationPane(
     tgColors: TelegramHomeColors,
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
+    onSendMessage: (String, String?) -> Unit,
+    onEditMessage: (String, String) -> Unit,
+    onToggleReaction: (String, String) -> Unit,
+    onDeleteMessage: (String) -> Unit,
+    onPinMessage: (String, Boolean) -> Unit,
+    onForwardMessage: (String, String) -> Unit,
+    onDownloadFile: (String) -> Unit,
+    onRemoveAttachment: () -> Unit,
     onTyping: () -> Unit,
     onJoinChat: (String) -> Unit,
     onLeaveChat: (String) -> Unit,
@@ -1290,6 +1359,8 @@ private fun AndroidStyleConversationPane(
     var messageSearchQuery by rememberSaveable(chat.id) { mutableStateOf("") }
     var replyingToMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
     var editingMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
+    var forwardingMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
+    val clipboard = LocalClipboardManager.current
     val pinnedMessage = remember(state.messages) { state.messages.lastOrNull { it.isPinned } }
     val visibleMessages = remember(state.messages, showMessageSearch, messageSearchQuery) {
         if (!showMessageSearch || messageSearchQuery.isBlank()) {
@@ -1541,17 +1612,25 @@ private fun AndroidStyleConversationPane(
                     tgColors = tgColors,
                     replyingTo = replyingToMessage,
                     editingMessage = editingMessage,
+                    pendingAttachment = state.pendingAttachment,
                     onCancelReply = { replyingToMessage = null },
                     onCancelEdit = { editingMessage = null; draft = "" },
+                    onRemoveAttachment = onRemoveAttachment,
                     onOpenAttachments = onOpenAttachments,
                     onOpenStickers = onOpenStickers,
                     onSend = {
                         val text = draft.trim()
-                        if (text.isNotBlank() && canWriteToChat) {
+                        if ((text.isNotBlank() || state.pendingAttachment != null) && canWriteToChat) {
+                            val replyId = replyingToMessage?.id
+                            val editId = editingMessage?.id
                             draft = ""
                             replyingToMessage = null
                             editingMessage = null
-                            onSend(text)
+                            if (editId != null) {
+                                onEditMessage(editId, text)
+                            } else {
+                                onSendMessage(text, replyId)
+                            }
                         }
                     }
                 )
@@ -1571,6 +1650,20 @@ private fun AndroidStyleConversationPane(
             )
         }
 
+        forwardingMessage?.let { message ->
+            AndroidForwardPickerOverlay(
+                message = message,
+                chats = state.chats,
+                currentChatId = chat.id,
+                strings = strings,
+                onDismiss = { forwardingMessage = null },
+                onForward = { targetChatId ->
+                    onForwardMessage(message.id, targetChatId)
+                    forwardingMessage = null
+                }
+            )
+        }
+
         contextMenuState?.let { menuState ->
             MessageContextMenuOverlay(
                 state = menuState,
@@ -1578,8 +1671,86 @@ private fun AndroidStyleConversationPane(
                 tgColors = tgColors,
                 onReply = { replyingToMessage = menuState.message; editingMessage = null; contextMenuState = null },
                 onEdit = { editingMessage = menuState.message; replyingToMessage = null; contextMenuState = null },
+                onToggleReaction = { emoji -> onToggleReaction(menuState.message.id, emoji); contextMenuState = null },
+                onPin = { onPinMessage(menuState.message.id, !menuState.message.isPinned); contextMenuState = null },
+                onCopyText = {
+                    if (menuState.message.text.isNotBlank()) clipboard.setText(AnnotatedString(menuState.message.text))
+                    contextMenuState = null
+                },
+                onForward = { forwardingMessage = menuState.message; contextMenuState = null },
+                onSeenBy = { contextMenuState = null },
+                onAddAsSticker = { contextMenuState = null },
+                onDownload = { onDownloadFile(menuState.message.id); contextMenuState = null },
+                onDelete = { onDeleteMessage(menuState.message.id); contextMenuState = null },
                 onDismiss = { contextMenuState = null }
             )
+        }
+    }
+}
+
+
+@Composable
+private fun AndroidForwardPickerOverlay(
+    message: NoveoHomeMessage,
+    chats: List<NoveoHomeChat>,
+    currentChatId: String,
+    strings: NoveoStrings,
+    onDismiss: () -> Unit,
+    onForward: (String) -> Unit
+) {
+    val targets = remember(chats, currentChatId) {
+        chats.filter { it.id != currentChatId && it.canChat }
+    }
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.42f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                )
+        )
+        AnimatedContent(
+            targetState = message.id,
+            label = "android_forward_picker",
+            transitionSpec = {
+                (fadeIn(tween(180)) + slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it / 5 })
+                    .togetherWith(fadeOut(tween(120)) + slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it / 6 })
+            },
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            AndroidModalCard(onDismiss = onDismiss) {
+                AndroidModalHeader(strings.forward, message.text.ifBlank { message.attachmentName ?: strings.messagePlaceholder }, Icons.AutoMirrored.Outlined.ArrowForward)
+                if (targets.isEmpty()) {
+                    AndroidEmptyModalText(strings.noContacts)
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(targets, key = { it.id }) { chat ->
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onForward(chat.id) }
+                            ) {
+                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    ProfileCircle(name = chat.title, isSavedMessages = chat.title == strings.savedMessages || chat.title == "Saved Messages", size = 42.dp)
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(chat.title.ifBlank { strings.unknown }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                            if (chat.unreadCount > 0) AndroidUnreadBadge(chat.unreadCount)
+                                        }
+                                        Text(chat.subtitle.ifBlank { if (chat.isOnline) strings.online else strings.offline }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -2235,13 +2406,15 @@ private fun AndroidStyleComposer(
     tgColors: TelegramHomeColors,
     replyingTo: NoveoHomeMessage? = null,
     editingMessage: NoveoHomeMessage? = null,
+    pendingAttachment: NoveoPendingAttachment? = null,
     onCancelReply: () -> Unit = {},
     onCancelEdit: () -> Unit = {},
+    onRemoveAttachment: () -> Unit = {},
     onOpenAttachments: () -> Unit = {},
     onOpenStickers: () -> Unit = {},
     onSend: () -> Unit
 ) {
-    val showSendButton = draft.isNotBlank() || sending
+    val showSendButton = draft.isNotBlank() || pendingAttachment != null || sending
     val buttonColor by animateColorAsState(
         targetValue = if (sending) Color.Red else if (!showSendButton) tgColors.composerField else tgColors.composerBlue,
         label = "buttonColor"
@@ -2249,7 +2422,7 @@ private fun AndroidStyleComposer(
     val iconColor = if (!showSendButton) tgColors.composerIcon else Color.White
     val micScale by animateFloatAsState(targetValue = if (showSendButton) 1f else 0.96f, animationSpec = tween(150), label = "micScale")
     fun sendFromComposer() {
-        if (enabled && !sending && draft.trim().isNotBlank()) {
+        if (enabled && !sending && (draft.trim().isNotBlank() || pendingAttachment != null)) {
             onSend()
         }
     }
@@ -2278,6 +2451,13 @@ private fun AndroidStyleComposer(
                                 preview = editingMessage.text,
                                 tgColors = tgColors,
                                 onCancel = onCancelEdit
+                            )
+                        }
+                        if (pendingAttachment != null) {
+                            AndroidComposerAttachmentBar(
+                                attachment = pendingAttachment,
+                                tgColors = tgColors,
+                                onCancel = onRemoveAttachment
                             )
                         }
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -2396,6 +2576,54 @@ private fun AndroidComposerContextBar(
     }
 }
 
+
+@Composable
+private fun AndroidComposerAttachmentBar(
+    attachment: NoveoPendingAttachment,
+    tgColors: TelegramHomeColors,
+    onCancel: () -> Unit
+) {
+    val clampedProgress = attachment.progress.coerceIn(0f, 1f)
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 10.dp, top = 8.dp, bottom = 2.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = tgColors.composerPanel.copy(alpha = 0.85f)
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(tgColors.composerBlue.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.Description, contentDescription = null, tint = tgColors.composerBlue, modifier = Modifier.size(21.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(attachment.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis, color = tgColors.composerText, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        text = if (attachment.isUploading) "${(clampedProgress * 100).roundToInt()}%" else attachment.sizeLabel.ifBlank { stringsFileLabel(attachment.mimeType) },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = tgColors.composerHint,
+                        fontSize = 12.sp
+                    )
+                }
+                IconButton(onClick = onCancel, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Outlined.Close, contentDescription = null, tint = tgColors.composerIcon, modifier = Modifier.size(18.dp))
+                }
+            }
+            if (attachment.isUploading) {
+                Box(Modifier.fillMaxWidth().height(2.dp).background(tgColors.composerDivider)) {
+                    Box(Modifier.fillMaxWidth(clampedProgress).height(2.dp).background(tgColors.composerBlue))
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ComposerGlassIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -2424,6 +2652,14 @@ private fun MessageContextMenuOverlay(
     tgColors: TelegramHomeColors,
     onReply: () -> Unit,
     onEdit: () -> Unit,
+    onToggleReaction: (String) -> Unit,
+    onPin: () -> Unit,
+    onCopyText: () -> Unit,
+    onForward: () -> Unit,
+    onSeenBy: () -> Unit,
+    onAddAsSticker: () -> Unit,
+    onDownload: () -> Unit,
+    onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val message = state.message
@@ -2484,7 +2720,7 @@ private fun MessageContextMenuOverlay(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             if (renderBelow && !expanded) {
-                AndroidMessageActionMenu(message, strings, tgColors, onReply, onEdit, onDismiss)
+                AndroidMessageActionMenu(message, strings, tgColors, onReply, onEdit, onPin, onCopyText, onForward, onSeenBy, onAddAsSticker, onDownload, onDelete)
             }
 
             Surface(
@@ -2514,7 +2750,7 @@ private fun MessageContextMenuOverlay(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             items(ANDROID_CONTEXT_MENU_REACTIONS) { emoji ->
-                                ReactionButton(emoji = emoji, expanded = true, tgColors = tgColors, onClick = onDismiss)
+                                ReactionButton(emoji = emoji, expanded = true, tgColors = tgColors, onClick = { onToggleReaction(emoji) })
                             }
                         }
                     }
@@ -2525,7 +2761,7 @@ private fun MessageContextMenuOverlay(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         ANDROID_CONTEXT_MENU_QUICK_REACTIONS.forEach { emoji ->
-                            ReactionButton(emoji = emoji, expanded = false, tgColors = tgColors, onClick = onDismiss)
+                            ReactionButton(emoji = emoji, expanded = false, tgColors = tgColors, onClick = { onToggleReaction(emoji) })
                         }
                         Box(
                             modifier = Modifier.size(32.dp).clip(CircleShape).background(if (tgColors.isDark) Color(0xFF2C353F) else Color(0xFFF0F2F5)).clickable { expanded = true },
@@ -2538,7 +2774,7 @@ private fun MessageContextMenuOverlay(
             }
 
             if (!renderBelow && !expanded) {
-                AndroidMessageActionMenu(message, strings, tgColors, onReply, onEdit, onDismiss)
+                AndroidMessageActionMenu(message, strings, tgColors, onReply, onEdit, onPin, onCopyText, onForward, onSeenBy, onAddAsSticker, onDownload, onDelete)
             }
         }
     }
@@ -2575,7 +2811,13 @@ private fun AndroidMessageActionMenu(
     tgColors: TelegramHomeColors,
     onReply: () -> Unit,
     onEdit: () -> Unit,
-    onDismiss: () -> Unit
+    onPin: () -> Unit,
+    onCopyText: () -> Unit,
+    onForward: () -> Unit,
+    onSeenBy: () -> Unit,
+    onAddAsSticker: () -> Unit,
+    onDownload: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -2587,21 +2829,21 @@ private fun AndroidMessageActionMenu(
             if (message.isOutgoing && message.text.isNotBlank()) {
                 MenuItem(strings.edit, Icons.Outlined.Edit, tgColors.headerIcon, tgColors.incomingText, onEdit)
             }
-            MenuItem(if (message.isPinned) strings.unpin else strings.pin, Icons.Outlined.Bookmark, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+            MenuItem(if (message.isPinned) strings.unpin else strings.pin, Icons.Outlined.Bookmark, tgColors.headerIcon, tgColors.incomingText, onPin)
             if (message.text.isNotBlank()) {
-                MenuItem(strings.copyText, Icons.Outlined.Description, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+                MenuItem(strings.copyText, Icons.Outlined.Description, tgColors.headerIcon, tgColors.incomingText, onCopyText)
             }
-            MenuItem(strings.forward, Icons.AutoMirrored.Outlined.ArrowForward, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+            MenuItem(strings.forward, Icons.AutoMirrored.Outlined.ArrowForward, tgColors.headerIcon, tgColors.incomingText, onForward)
             if (message.seen && message.isOutgoing) {
-                MenuItem(strings.seenBy, Icons.Outlined.Check, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+                MenuItem(strings.seenBy, Icons.Outlined.Check, tgColors.headerIcon, tgColors.incomingText, onSeenBy)
             }
             if (message.attachmentType?.startsWith("image/", ignoreCase = true) == true) {
-                MenuItem(strings.addAsSticker, Icons.Outlined.Star, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+                MenuItem(strings.addAsSticker, Icons.Outlined.Star, tgColors.headerIcon, tgColors.incomingText, onAddAsSticker)
             }
             if (!message.attachmentName.isNullOrBlank()) {
-                MenuItem(strings.download, Icons.Outlined.KeyboardArrowDown, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+                MenuItem(strings.download, Icons.Outlined.KeyboardArrowDown, tgColors.headerIcon, tgColors.incomingText, onDownload)
             }
-            MenuItem(strings.delete, Icons.Outlined.Delete, Color(0xFFE53935), Color(0xFFE53935), onDismiss)
+            MenuItem(strings.delete, Icons.Outlined.Delete, Color(0xFFE53935), Color(0xFFE53935), onDelete)
         }
     }
 }
