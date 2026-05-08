@@ -4,6 +4,7 @@ import ir.hienob.noveo.core.ui.NoveoHomeChat
 import ir.hienob.noveo.core.ui.NoveoHomeMessage
 import java.io.File
 import java.io.InterruptedIOException
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -370,6 +371,76 @@ internal class DesktopNoveoApi(
                 .put("type", "delete_account")
                 .put("password", password)
         )
+    }
+
+    fun searchPublic(session: DesktopSession, query: String): List<NoveoHomeChat> {
+        val normalizedQuery = query.trim()
+        if (normalizedQuery.length < 2) return emptyList()
+        val encodedQuery = URLEncoder.encode(normalizedQuery, Charsets.UTF_8.name())
+        val request = Request.Builder()
+            .url("https://noveo.ir:8443/user/public-search?q=$encodedQuery")
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Public search failed (${response.code})")
+            val payload = JSONObject(response.body?.string().orEmpty().ifBlank { "{}" })
+            val dataArray = when {
+                payload.optJSONArray("users") != null -> payload.optJSONArray("users")
+                payload.optJSONArray("results") != null -> payload.optJSONArray("results")
+                payload.optJSONArray("data") != null -> payload.optJSONArray("data")
+                else -> JSONArray()
+            } ?: JSONArray()
+
+            return buildList {
+                for (index in 0 until dataArray.length()) {
+                    val item = dataArray.optJSONObject(index) ?: continue
+                    val chatType = item.optString("chatType", item.optString("type", "")).sanitizeServerString()
+                    val userId = item.optString("userId").sanitizeServerString()
+                        .ifBlank { item.optString("user_id").sanitizeServerString() }
+                        .ifBlank { item.optString("id").sanitizeServerString().takeIf { chatType.isBlank() }.orEmpty() }
+                    val rawChatId = item.optString("chatId").sanitizeServerString()
+                        .ifBlank { item.optString("chat_id").sanitizeServerString() }
+                        .ifBlank { item.optString("id").sanitizeServerString().takeIf { chatType.isNotBlank() }.orEmpty() }
+                    val resolvedChatType = chatType.ifBlank { "private" }
+                    val resolvedChatId = when {
+                        rawChatId.isNotBlank() -> rawChatId
+                        userId.isNotBlank() -> listOf(session.userId, userId).sorted().joinToString("_")
+                        else -> ""
+                    }
+                    if (resolvedChatId.isBlank()) continue
+                    val title = item.optString("title").sanitizeServerString()
+                        .ifBlank { item.optString("username").sanitizeServerString() }
+                        .ifBlank { item.optString("name").sanitizeServerString() }
+                        .ifBlank { item.optString("handle").sanitizeServerString() }
+                        .ifBlank { resolvedChatId }
+                    val handle = item.optString("handle").sanitizeServerString()
+                    val bio = item.optString("bio").sanitizeServerString()
+                    val memberIds = parseStringList(item.optJSONArray("members")).ifEmpty {
+                        if (userId.isNotBlank()) listOf(session.userId, userId) else emptyList()
+                    }
+                    val subtitle = handle.takeIf { it.isNotBlank() }?.let { "@$it" }
+                        ?: bio.takeIf { it.isNotBlank() }
+                        ?: item.optString("lastMessagePreview").sanitizeServerString()
+                    add(
+                        NoveoHomeChat(
+                            id = resolvedChatId,
+                            title = title,
+                            subtitle = subtitle,
+                            time = "",
+                            unreadCount = 0,
+                            avatarInitial = title.take(1).ifBlank { "N" },
+                            isOnline = item.optBoolean("online", false) || item.optBoolean("isOnline", false),
+                            isVerified = item.optBoolean("isVerified", false),
+                            canChat = item.optBoolean("canChat", true),
+                            chatType = resolvedChatType,
+                            memberIds = memberIds
+                        )
+                    )
+                }
+            }
+        }
     }
 
     private fun sendChatAction(session: DesktopSession, payload: JSONObject) {

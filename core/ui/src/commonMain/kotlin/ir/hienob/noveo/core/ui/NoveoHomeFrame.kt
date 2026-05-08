@@ -443,6 +443,7 @@ fun NoveoHomeFrame(
     onLogout: () -> Unit,
     onOpenSettings: () -> Unit = {},
     onStartNewChat: () -> Unit = {},
+    onSearchPublic: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showMenu by rememberSaveable { mutableStateOf(false) }
@@ -452,6 +453,15 @@ fun NoveoHomeFrame(
     val filteredChats = remember(state.chats, searchQuery) {
         if (searchQuery.isBlank()) state.chats
         else state.chats.filter { it.title.contains(searchQuery, true) || it.subtitle.contains(searchQuery, true) }
+    }
+    LaunchedEffect(showSearch, searchQuery) {
+        val query = searchQuery.trim()
+        if (showSearch && query.length >= 2) {
+            kotlinx.coroutines.delay(350)
+            if (query == searchQuery.trim()) {
+                onSearchPublic(query)
+            }
+        }
     }
     val tgColors = telegramHomeColors()
 
@@ -497,6 +507,7 @@ fun NoveoHomeFrame(
                             onForwardMessage = onForwardMessage,
                             onDownloadFile = onDownloadFile,
                             onRemoveAttachment = onRemoveAttachment,
+                            onCancelSend = onCancelSend,
                             onTyping = onTyping,
                             onJoinChat = onJoinChat,
                             onLeaveChat = onLeaveChat,
@@ -572,6 +583,7 @@ fun NoveoHomeFrame(
                                 onForwardMessage = onForwardMessage,
                                 onDownloadFile = onDownloadFile,
                                 onRemoveAttachment = onRemoveAttachment,
+                                onCancelSend = onCancelSend,
                                 onTyping = onTyping,
                                 onJoinChat = onJoinChat,
                                 onLeaveChat = onLeaveChat,
@@ -1612,6 +1624,7 @@ private fun AndroidStyleConversationPane(
     onForwardMessage: (String, String) -> Unit,
     onDownloadFile: (String) -> Unit,
     onRemoveAttachment: () -> Unit,
+    onCancelSend: () -> Unit,
     onTyping: () -> Unit,
     onJoinChat: (String) -> Unit,
     onLeaveChat: (String) -> Unit,

@@ -83,7 +83,8 @@ fun main() = application {
                     onJoinChat = desktopState::joinChat,
                     onLeaveChat = desktopState::leaveChat,
                     onRefresh = desktopState::refreshHome,
-                    onLogout = desktopState::logout
+                    onLogout = desktopState::logout,
+                    onSearchPublic = desktopState::searchPublic
                 )
             }
         )
@@ -107,6 +108,7 @@ private class DesktopStateHolder {
     private var selectedAttachmentFile: File? = null
     private var selectedAttachmentMimeType: String = "application/octet-stream"
     private var activeSendJob: Job? = null
+    private var lastPublicSearchQuery: String = ""
 
     private val _state = MutableStateFlow(DesktopUiState())
     val state = _state.asStateFlow()
@@ -178,6 +180,25 @@ private class DesktopStateHolder {
                 applyHomeSnapshot(snapshot, selectedChatId = selectedChatId)
             }.onFailure { error ->
                 _state.value = _state.value.copy(home = _state.value.home.copy(loading = false, error = error.message ?: "Refresh failed"))
+            }
+        }
+    }
+
+    fun searchPublic(query: String) {
+        val currentSession = session ?: return
+        val normalized = query.trim()
+        if (normalized.length < 2 || normalized == lastPublicSearchQuery) return
+        lastPublicSearchQuery = normalized
+        scope.launch {
+            runCatching {
+                val foundChats = withContext(Dispatchers.IO) { api.searchPublic(currentSession, normalized) }
+                if (foundChats.isNotEmpty()) {
+                    val currentHome = _state.value.home
+                    val mergedChats = (currentHome.chats + foundChats).distinctBy { it.id }
+                    _state.value = _state.value.copy(home = currentHome.copy(chats = mergedChats, error = null))
+                }
+            }.onFailure { error ->
+                _state.value = _state.value.copy(home = _state.value.home.copy(error = error.message ?: "Public search failed"))
             }
         }
     }
