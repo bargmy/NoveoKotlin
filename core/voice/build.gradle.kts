@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "ir.hienob.noveo.core.voice"
     compileSdk = 35
-    defaultConfig { minSdk = 26 }
+    defaultConfig { minSdk = 23 }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

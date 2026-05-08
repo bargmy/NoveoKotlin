@@ -15,7 +15,7 @@ android {
 
     defaultConfig {
         applicationId = "ir.hienob.noveo"
-        minSdk = 26
+        minSdk = 23
         targetSdk = 35
         versionCode = appVersionCode
         versionName = appVersionName
