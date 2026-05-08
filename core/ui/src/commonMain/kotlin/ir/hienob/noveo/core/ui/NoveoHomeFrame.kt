@@ -4,11 +4,13 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -72,6 +74,7 @@ import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -1750,31 +1753,128 @@ private fun AndroidAttachmentChip(message: NoveoHomeMessage, ownMessage: Boolean
     val isImage = message.attachmentType?.startsWith("image/", ignoreCase = true) == true
     val isVideo = message.attachmentType?.startsWith("video/", ignoreCase = true) == true
     val isAudio = message.attachmentType?.startsWith("audio/", ignoreCase = true) == true
+    val accent = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink
+    val primaryText = if (ownMessage) tgColors.outgoingText else tgColors.incomingText
+    val secondaryText = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
+
+    if (isImage || isVideo) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 3.dp),
+            shape = RoundedCornerShape(14.dp),
+            color = accent.copy(alpha = 0.10f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 154.dp)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                accent.copy(alpha = 0.20f),
+                                accent.copy(alpha = 0.07f)
+                            )
+                        )
+                    )
+            ) {
+                Icon(
+                    imageVector = if (isVideo) Icons.Outlined.PlayArrow else Icons.Outlined.Collections,
+                    contentDescription = null,
+                    tint = accent.copy(alpha = 0.70f),
+                    modifier = Modifier.align(Alignment.Center).size(if (isVideo) 54.dp else 46.dp)
+                )
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth(),
+                    color = Color.Black.copy(alpha = if (tgColors.isDark) 0.28f else 0.16f)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            attachmentName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (tgColors.isDark) Color.White else primaryText,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        message.attachmentSizeLabel?.let { size ->
+                            Text(size, color = if (tgColors.isDark) Color.White.copy(alpha = 0.78f) else secondaryText, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    if (isAudio) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+            shape = RoundedCornerShape(13.dp),
+            color = accent.copy(alpha = 0.10f)
+        ) {
+            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(42.dp).clip(CircleShape).background(accent.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.PlayArrow, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(22.dp)) {
+                        repeat(22) { index ->
+                            val height = when (index % 6) {
+                                0 -> 8.dp
+                                1 -> 14.dp
+                                2 -> 18.dp
+                                3 -> 12.dp
+                                4 -> 20.dp
+                                else -> 10.dp
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 2.dp)
+                                    .width(2.dp)
+                                    .height(height)
+                                    .clip(RoundedCornerShape(1.dp))
+                                    .background(accent.copy(alpha = 0.42f))
+                            )
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(attachmentName, maxLines = 1, overflow = TextOverflow.Ellipsis, color = primaryText, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Text(message.attachmentSizeLabel ?: stringsFileLabel(message.attachmentType), color = secondaryText, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+        return
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
-        shape = RoundedCornerShape(if (isImage || isVideo) 14.dp else 12.dp),
-        color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = if (isImage || isVideo) 0.13f else 0.10f)
+        shape = RoundedCornerShape(12.dp),
+        color = accent.copy(alpha = 0.10f)
     ) {
         Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(9.dp)).background((if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.16f)),
+                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(9.dp)).background(accent.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = when {
-                        isAudio -> Icons.Outlined.Mic
-                        isImage || isVideo -> Icons.Outlined.Star
-                        else -> Icons.Outlined.Description
-                    },
+                    imageVector = Icons.Outlined.Description,
                     contentDescription = null,
-                    tint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
+                    tint = accent,
                     modifier = Modifier.size(22.dp)
                 )
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(attachmentName, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(message.attachmentSizeLabel ?: message.attachmentType ?: stringsFileLabel(message.attachmentType), maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime, fontSize = 12.sp)
+                Text(attachmentName, maxLines = 1, overflow = TextOverflow.Ellipsis, color = primaryText, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(message.attachmentSizeLabel ?: message.attachmentType ?: stringsFileLabel(message.attachmentType), maxLines = 1, overflow = TextOverflow.Ellipsis, color = secondaryText, fontSize = 12.sp)
             }
         }
     }
@@ -1934,8 +2034,10 @@ private fun AndroidStyleComposer(
                         targetState = !showSendButton,
                         transitionSpec = {
                             if (!targetState) {
-                                (fadeIn(tween(200)) + slideInHorizontally(tween(250, easing = FastOutSlowInEasing)) { -it })
-                                    .togetherWith(fadeOut(tween(150)))
+                                (fadeIn(tween(200)) + slideIn(
+                                    animationSpec = tween(250, easing = LinearOutSlowInEasing),
+                                    initialOffset = { IntOffset(-50, 50) }
+                                )).togetherWith(fadeOut(tween(150)))
                             } else {
                                 fadeIn(tween(150)).togetherWith(fadeOut(tween(150)))
                             }
@@ -2035,7 +2137,7 @@ private fun MessageContextMenuOverlay(
         val density = androidx.compose.ui.platform.LocalDensity.current
         val menuWidthPx = with(density) { 320.dp.toPx() }
         val reactionHeight = if (expanded) 320.dp else 52.dp
-        val actionRows = 4 + if (message.isOutgoing && message.text.isNotBlank()) 1 else 0
+        val actionRows = androidMessageActionCount(message)
         val actionHeightPx = with(density) { reactionHeight.toPx() + 6.dp.toPx() + (8.dp + (actionRows * 40).dp).toPx() }
         val safePx = with(density) { 8.dp.toPx() }
         val safeBottomPx = with(density) { 16.dp.toPx() }
@@ -2140,6 +2242,16 @@ private fun ReactionButton(emoji: String, expanded: Boolean, tgColors: TelegramH
     }
 }
 
+private fun androidMessageActionCount(message: NoveoHomeMessage): Int {
+    var count = 4 // reply, pin/unpin, forward, delete
+    if (message.isOutgoing && message.text.isNotBlank()) count += 1
+    if (message.text.isNotBlank()) count += 1
+    if (message.seen && message.isOutgoing) count += 1
+    if (!message.attachmentName.isNullOrBlank()) count += 1
+    if (message.attachmentType?.startsWith("image/", ignoreCase = true) == true) count += 1
+    return count
+}
+
 @Composable
 private fun AndroidMessageActionMenu(
     message: NoveoHomeMessage,
@@ -2159,8 +2271,20 @@ private fun AndroidMessageActionMenu(
             if (message.isOutgoing && message.text.isNotBlank()) {
                 MenuItem(strings.edit, Icons.Outlined.Edit, tgColors.headerIcon, tgColors.incomingText, onEdit)
             }
-            MenuItem(if (message.text.isNotBlank()) strings.copyText else strings.download, Icons.Outlined.Description, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+            MenuItem(if (message.isPinned) strings.unpin else strings.pin, Icons.Outlined.Bookmark, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+            if (message.text.isNotBlank()) {
+                MenuItem(strings.copyText, Icons.Outlined.Description, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+            }
             MenuItem(strings.forward, Icons.AutoMirrored.Outlined.ArrowForward, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+            if (message.seen && message.isOutgoing) {
+                MenuItem(strings.seenBy, Icons.Outlined.Check, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+            }
+            if (message.attachmentType?.startsWith("image/", ignoreCase = true) == true) {
+                MenuItem(strings.addAsSticker, Icons.Outlined.Star, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+            }
+            if (!message.attachmentName.isNullOrBlank()) {
+                MenuItem(strings.download, Icons.Outlined.KeyboardArrowDown, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+            }
             MenuItem(strings.delete, Icons.Outlined.Delete, Color(0xFFE53935), Color(0xFFE53935), onDismiss)
         }
     }
