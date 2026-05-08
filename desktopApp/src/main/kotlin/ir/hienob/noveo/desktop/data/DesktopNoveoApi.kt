@@ -9,8 +9,10 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -143,6 +145,23 @@ internal class DesktopNoveoApi(
         socket.cancel()
         if (!finished) error("Join timeout")
         failure.get()?.let { error(it) }
+    }
+
+    fun leaveChat(session: DesktopSession, chatId: String) {
+        val body = JSONObject()
+            .put("action", "leave_chat")
+            .put("chatId", chatId)
+            .toString()
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url("https://noveo.ir:8443/chat/settings")
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .post(body)
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Leave failed (${response.code})")
+        }
     }
 
     private fun auth(payload: JSONObject): DesktopSession {

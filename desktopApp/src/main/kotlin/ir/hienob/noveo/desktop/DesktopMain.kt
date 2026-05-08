@@ -61,6 +61,7 @@ fun main() = application {
                     onSend = desktopState::sendMessage,
                     onTyping = desktopState::sendTyping,
                     onJoinChat = desktopState::joinChat,
+                    onLeaveChat = desktopState::leaveChat,
                     onRefresh = desktopState::refreshHome,
                     onLogout = desktopState::logout
                 )
@@ -199,9 +200,46 @@ private class DesktopStateHolder {
         }
     }
 
+    fun leaveChat(chatId: String) {
+        val currentSession = session ?: return
+        val currentHome = _state.value.home
+        val optimisticChats = currentHome.chats.map { chat ->
+            if (chat.id == chatId) chat.copy(memberIds = chat.memberIds.filterNot { it == currentSession.userId })
+            else chat
+        }
+        _state.value = _state.value.copy(
+            home = currentHome.copy(
+                chats = optimisticChats,
+                selectedChatId = if (currentHome.selectedChatId == chatId) null else currentHome.selectedChatId,
+                messages = if (currentHome.selectedChatId == chatId) emptyList() else currentHome.messages,
+                loading = true,
+                error = null
+            )
+        )
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.leaveChat(currentSession, chatId) }
+                val snapshot = withContext(Dispatchers.IO) { api.loadHome(currentSession) }
+                applyHomeSnapshot(snapshot, selectedChatId = null)
+            }.onFailure { error ->
+                _state.value = _state.value.copy(
+                    home = _state.value.home.copy(
+                        loading = false,
+                        error = error.message ?: "Unable to leave chat"
+                    )
+                )
+            }
+        }
+    }
+
     fun sendMessage(text: String) {
         val currentSession = session ?: return
         val chatId = _state.value.home.selectedChatId ?: return
+        val selectedChat = _state.value.home.chats.firstOrNull { it.id == chatId } ?: return
+        val isMember = selectedChat.memberIds.contains(currentSession.userId)
+        val canWrite = _state.value.home.canSendMessage && selectedChat.canChat &&
+            (selectedChat.chatType == "private" || isMember)
+        if (!canWrite) return
         val pendingMessage = NoveoHomeMessage(
             id = "pending-${System.currentTimeMillis()}",
             senderId = currentSession.userId,

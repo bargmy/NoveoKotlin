@@ -406,6 +406,7 @@ fun NoveoHomeFrame(
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
     onJoinChat: (String) -> Unit = {},
+    onLeaveChat: (String) -> Unit = {},
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onOpenSettings: () -> Unit = {},
@@ -458,6 +459,7 @@ fun NoveoHomeFrame(
                             onSend = onSend,
                             onTyping = onTyping,
                             onJoinChat = onJoinChat,
+                            onLeaveChat = onLeaveChat,
                             onOpenAttachments = { activeModal = AndroidHomeModal.ATTACHMENTS },
                             onOpenStickers = { activeModal = AndroidHomeModal.STICKERS },
                             onOpenChatInfo = { activeModal = AndroidHomeModal.CHAT_INFO },
@@ -523,6 +525,7 @@ fun NoveoHomeFrame(
                                 onSend = onSend,
                                 onTyping = onTyping,
                                 onJoinChat = onJoinChat,
+                                onLeaveChat = onLeaveChat,
                                 onOpenAttachments = { activeModal = AndroidHomeModal.ATTACHMENTS },
                                 onOpenStickers = { activeModal = AndroidHomeModal.STICKERS },
                                 onOpenChatInfo = { activeModal = AndroidHomeModal.CHAT_INFO },
@@ -578,6 +581,7 @@ fun NoveoHomeFrame(
                     onStartNewChat = onStartNewChat,
                     onOpenSettings = onOpenSettings,
                     onRefresh = onRefresh,
+                    onLeaveChat = onLeaveChat,
                     onLogout = onLogout
                 )
             }
@@ -596,6 +600,7 @@ private fun AndroidHomeModalOverlay(
     onStartNewChat: () -> Unit,
     onOpenSettings: () -> Unit,
     onRefresh: () -> Unit,
+    onLeaveChat: (String) -> Unit,
     onLogout: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -637,7 +642,15 @@ private fun AndroidHomeModalOverlay(
                         AndroidHomeModal.NEW_CHAT -> AndroidNewChatSurface(strings = strings, onStartNewChat = onStartNewChat)
                         AndroidHomeModal.SETTINGS -> AndroidSettingsSurface(strings = strings, onOpenSettings = onOpenSettings, onLogout = onLogout)
                         AndroidHomeModal.PROFILE -> AndroidProfileSurface(strings = strings, state = state)
-                        AndroidHomeModal.CHAT_INFO -> AndroidChatInfoSurface(strings = strings, chat = selectedChat)
+                        AndroidHomeModal.CHAT_INFO -> AndroidChatInfoSurface(
+                            strings = strings,
+                            chat = selectedChat,
+                            currentUserId = state.currentUserId,
+                            onLeaveChat = { chatId ->
+                                onDismiss()
+                                onLeaveChat(chatId)
+                            }
+                        )
                         else -> Unit
                     }
                 }
@@ -868,20 +881,60 @@ private fun AndroidStickerSurface(strings: NoveoStrings) {
 }
 
 @Composable
-private fun AndroidChatInfoSurface(strings: NoveoStrings, chat: NoveoHomeChat?) {
+private fun AndroidChatInfoSurface(
+    strings: NoveoStrings,
+    chat: NoveoHomeChat?,
+    currentUserId: String?,
+    onLeaveChat: (String) -> Unit
+) {
+    val isMember = currentUserId != null && chat?.memberIds?.contains(currentUserId) == true
+    val canLeave = chat != null && chat.chatType != "private" && isMember
+    val chatTypeLabel = when (chat?.chatType) {
+        "channel" -> strings.channel
+        "group" -> strings.group
+        else -> strings.privateChatType
+    }
     AndroidModalHeader(strings.chatInfo, chat?.subtitle ?: strings.members, Icons.Outlined.Info)
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         ProfileCircle(name = chat?.title ?: strings.chatInfo, isSavedMessages = chat?.title == strings.savedMessages || chat?.title == "Saved Messages", size = 68.dp)
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(chat?.title ?: strings.chatInfo, fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(if (chat?.isOnline == true) strings.online else chat?.subtitle ?: strings.membersCount, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(if (chat?.isOnline == true) strings.online else chat?.subtitle ?: chatTypeLabel, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
     Spacer(Modifier.height(10.dp))
-    AndroidSettingsRow(strings.members, strings.membersCount, Icons.Outlined.AccountCircle, onClick = {})
+    AndroidSettingsRow(strings.members, chat?.memberIds?.size?.let { "$it ${strings.membersCount}" } ?: strings.membersCount, Icons.Outlined.AccountCircle, onClick = {})
     AndroidSettingsRow(strings.searchMessages, strings.searchPlaceholder, Icons.Outlined.Search, onClick = {})
     AndroidSettingsRow(strings.notificationSettings, strings.enableNotifications, Icons.Outlined.Info, onClick = {})
+    if (canLeave && chat != null) {
+        AndroidDangerSettingsRow(
+            title = strings.leave,
+            subtitle = chatTypeLabel,
+            icon = Icons.Outlined.Close,
+            onClick = { onLeaveChat(chat.id) }
+        )
+    }
+}
+
+@Composable
+private fun AndroidDangerSettingsRow(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable(onClick = onClick)
+    ) {
+        Row(modifier = Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.82f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
 }
 
 @Composable
@@ -1219,6 +1272,7 @@ private fun AndroidStyleConversationPane(
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
     onJoinChat: (String) -> Unit,
+    onLeaveChat: (String) -> Unit,
     onOpenAttachments: () -> Unit,
     onOpenStickers: () -> Unit,
     onOpenChatInfo: () -> Unit,
@@ -1360,6 +1414,15 @@ private fun AndroidStyleConversationPane(
                     DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
                         DropdownMenuItem(text = { Text(strings.chatInfo) }, onClick = { showMoreMenu = false; onOpenChatInfo() })
                         DropdownMenuItem(text = { Text(strings.searchMessages) }, onClick = { showMoreMenu = false })
+                        if (chat.chatType != "private" && isMember) {
+                            DropdownMenuItem(
+                                text = { Text(strings.leave, color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    showMoreMenu = false
+                                    onLeaveChat(chat.id)
+                                }
+                            )
+                        }
                         DropdownMenuItem(text = { Text(strings.refresh) }, onClick = { showMoreMenu = false })
                     }
                 }
