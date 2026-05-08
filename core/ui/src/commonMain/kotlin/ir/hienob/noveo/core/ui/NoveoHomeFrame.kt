@@ -231,7 +231,8 @@ data class NoveoHomeChat(
     val isOnline: Boolean = false,
     val isVerified: Boolean = false,
     val canChat: Boolean = true,
-    val chatType: String = "private"
+    val chatType: String = "private",
+    val memberIds: List<String> = emptyList()
 )
 
 data class NoveoHomeMessage(
@@ -1227,6 +1228,16 @@ private fun AndroidStyleConversationPane(
     var replyingToMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
     var editingMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
     val pinnedMessage = remember(state.messages) { state.messages.lastOrNull { it.isPinned } }
+    val canWriteToChat = state.canSendMessage && chat.canChat &&
+        (chat.chatType == "private" || state.currentUserId?.let { chat.memberIds.contains(it) } == true)
+
+    LaunchedEffect(canWriteToChat, chat.id) {
+        if (!canWriteToChat) {
+            draft = ""
+            replyingToMessage = null
+            editingMessage = null
+        }
+    }
 
     LaunchedEffect(editingMessage?.id) {
         editingMessage?.let { draft = it.text }
@@ -1277,15 +1288,17 @@ private fun AndroidStyleConversationPane(
             }
         }
 
-        Box(
-            modifier = Modifier.fillMaxWidth().height(150.dp).align(Alignment.BottomCenter).offset(y = 42.dp).background(
-                Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, tgColors.chatSurface),
-                    startY = 0f,
-                    endY = 110f
+        if (canWriteToChat) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(150.dp).align(Alignment.BottomCenter).offset(y = 42.dp).background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, tgColors.chatSurface),
+                        startY = 0f,
+                        endY = 110f
+                    )
                 )
             )
-        )
+        }
 
         Surface(
             modifier = Modifier.fillMaxWidth().height(56.dp).align(Alignment.TopCenter),
@@ -1390,34 +1403,36 @@ private fun AndroidStyleConversationPane(
             }
         }
 
-        Box(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 8.dp),
-            contentAlignment = Alignment.BottomCenter
-        ) {
-            AndroidStyleComposer(
-                modifier = Modifier.widthIn(max = 780.dp).fillMaxWidth(),
-                draft = draft,
-                onDraftChange = { draft = it; onTyping() },
-                placeholder = if (chat.canChat && state.canSendMessage) strings.messagePlaceholder else strings.cannotSendMessage,
-                enabled = chat.canChat && state.canSendMessage,
-                sending = state.isSendingMessage,
-                tgColors = tgColors,
-                replyingTo = replyingToMessage,
-                editingMessage = editingMessage,
-                onCancelReply = { replyingToMessage = null },
-                onCancelEdit = { editingMessage = null; draft = "" },
-                onOpenAttachments = onOpenAttachments,
-                onOpenStickers = onOpenStickers,
-                onSend = {
-                    val text = draft.trim()
-                    if (text.isNotBlank()) {
-                        draft = ""
-                        replyingToMessage = null
-                        editingMessage = null
-                        onSend(text)
+        if (canWriteToChat) {
+            Box(
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 8.dp),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                AndroidStyleComposer(
+                    modifier = Modifier.widthIn(max = 780.dp).fillMaxWidth(),
+                    draft = draft,
+                    onDraftChange = { draft = it; onTyping() },
+                    placeholder = strings.messagePlaceholder,
+                    enabled = true,
+                    sending = state.isSendingMessage,
+                    tgColors = tgColors,
+                    replyingTo = replyingToMessage,
+                    editingMessage = editingMessage,
+                    onCancelReply = { replyingToMessage = null },
+                    onCancelEdit = { editingMessage = null; draft = "" },
+                    onOpenAttachments = onOpenAttachments,
+                    onOpenStickers = onOpenStickers,
+                    onSend = {
+                        val text = draft.trim()
+                        if (text.isNotBlank() && canWriteToChat) {
+                            draft = ""
+                            replyingToMessage = null
+                            editingMessage = null
+                            onSend(text)
+                        }
                     }
-                }
-            )
+                )
+            }
         }
 
         contextMenuState?.let { menuState ->

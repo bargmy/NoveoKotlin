@@ -302,7 +302,8 @@ private fun parseChats(payload: JSONObject, usersById: Map<String, DesktopUser>,
                     isOnline = memberIds.any { usersById[it]?.isOnline == true && it != selfUserId },
                     isVerified = item.optBoolean("isVerified", false),
                     canChat = canChat,
-                    chatType = chatType.ifBlank { "private" }
+                    chatType = chatType.ifBlank { "private" },
+                    memberIds = memberIds
                 )
             )
         }
