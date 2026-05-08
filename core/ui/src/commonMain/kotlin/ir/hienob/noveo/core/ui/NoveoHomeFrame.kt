@@ -231,7 +231,10 @@ data class NoveoHomeFrameState(
 data class NoveoHomeChat(
     val id: String,
     val title: String,
+    /** Chat-list preview text. Do not use this in the open-chat header. */
     val subtitle: String = "",
+    /** Presence/member status for the open-chat header, matching Android behavior. */
+    val headerSubtitle: String = "",
     val time: String = "",
     val unreadCount: Int = 0,
     val avatarInitial: String = title.take(1).ifBlank { "N" },
@@ -249,6 +252,13 @@ data class NoveoPendingAttachment(
     val isUploading: Boolean = false,
     val progress: Float = 0f
 )
+
+private fun NoveoHomeChat.openHeaderSubtitle(strings: NoveoStrings): String = when {
+    isOnline -> strings.online
+    headerSubtitle.isNotBlank() -> headerSubtitle
+    chatType != "private" && memberIds.isNotEmpty() -> "${memberIds.size} ${strings.membersCount}"
+    else -> strings.lastSeenRecently
+}
 
 data class NoveoHomeMessage(
     val id: String,
@@ -875,7 +885,7 @@ private fun AndroidContactRow(chat: NoveoHomeChat, strings: NoveoStrings) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(chat.title.ifBlank { strings.unknown }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(if (chat.isOnline) strings.online else chat.subtitle.ifBlank { strings.lastSeenRecently }, style = MaterialTheme.typography.bodySmall, color = if (chat.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(chat.openHeaderSubtitle(strings), style = MaterialTheme.typography.bodySmall, color = if (chat.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1240,13 +1250,13 @@ private fun AndroidChatInfoSurface(
         "group" -> strings.group
         else -> strings.privateChatType
     }
-    AndroidModalHeader(strings.chatInfo, chat?.subtitle ?: strings.members, Icons.Outlined.Info)
+    AndroidModalHeader(strings.chatInfo, chat?.openHeaderSubtitle(strings) ?: strings.members, Icons.Outlined.Info)
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         ProfileCircle(name = chat?.title ?: strings.chatInfo, isSavedMessages = chat?.title == strings.savedMessages || chat?.title == "Saved Messages", size = 68.dp)
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(chat?.title ?: strings.chatInfo, fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(if (chat?.isOnline == true) strings.online else chat?.subtitle ?: chatTypeLabel, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(chat?.openHeaderSubtitle(strings) ?: chatTypeLabel, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
     Spacer(Modifier.height(10.dp))
@@ -1778,7 +1788,7 @@ private fun AndroidStyleConversationPane(
                         }
                         Spacer(Modifier.height(3.dp))
                         Text(
-                            if (chat.isOnline) strings.online else chat.subtitle.ifBlank { strings.offline },
+                            chat.openHeaderSubtitle(strings),
                             color = tgColors.headerSubtitle,
                             fontSize = 12.sp,
                             lineHeight = 14.sp,
@@ -2028,7 +2038,7 @@ private fun AndroidForwardPickerOverlay(
                                             Text(chat.title.ifBlank { strings.unknown }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                             if (chat.unreadCount > 0) AndroidUnreadBadge(chat.unreadCount)
                                         }
-                                        Text(chat.subtitle.ifBlank { if (chat.isOnline) strings.online else strings.offline }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(chat.openHeaderSubtitle(strings), style = MaterialTheme.typography.bodySmall, color = if (chat.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
                             }
@@ -2321,7 +2331,7 @@ private fun AndroidStyleMessageRow(
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = { onOpenMenu(bubbleBounds) },
+                onClick = { /* Android parity: normal tap/click does not open message actions. */ },
                 onLongClick = { onOpenMenu(bubbleBounds) }
             )
             .graphicsLayer {
@@ -2831,7 +2841,7 @@ private fun AndroidStyleComposer(
                         Icon(
                             imageVector = if (targetIsMic) Icons.Outlined.Mic else NoveoAndroidSendPlaneIcon,
                             contentDescription = null,
-                            modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = if (targetIsMic) 0f else -25f },
+                            modifier = Modifier.size(24.dp),
                             tint = iconColor
                         )
                     }
@@ -3211,7 +3221,12 @@ private fun ProfileCircle(
 @Composable
 private fun VerifiedIcon(modifier: Modifier = Modifier.size(14.dp)) {
     Box(modifier = modifier.background(Color(0xFF2EA6FF), CircleShape), contentAlignment = Alignment.Center) {
-        Icon(Icons.Outlined.Close, contentDescription = null, tint = Color.White, modifier = Modifier.fillMaxSize().padding(3.dp).graphicsLayer { rotationZ = -45f })
+        Icon(
+            imageVector = Icons.Outlined.Check,
+            contentDescription = "Verified",
+            tint = Color.White,
+            modifier = Modifier.fillMaxSize().padding(2.dp)
+        )
     }
 }
 

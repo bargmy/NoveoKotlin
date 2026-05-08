@@ -423,15 +423,26 @@ internal class DesktopNoveoApi(
                     val subtitle = handle.takeIf { it.isNotBlank() }?.let { "@$it" }
                         ?: bio.takeIf { it.isNotBlank() }
                         ?: item.optString("lastMessagePreview").sanitizeServerString()
+                    val isOnline = item.optBoolean("online", false) || item.optBoolean("isOnline", false)
+                    val lastSeen = item.optLongNullable("lastSeen", "last_seen", "lastSeenAt", "lastActive", "lastOnline")
+                    val headerSubtitle = when {
+                        isOnline -> "online"
+                        resolvedChatType == "private" -> formatDesktopLastSeen(lastSeen)
+                        memberIds.isNotEmpty() -> "${memberIds.size} members"
+                        handle.isNotBlank() -> "@$handle"
+                        bio.isNotBlank() -> bio
+                        else -> resolvedChatType
+                    }
                     add(
                         NoveoHomeChat(
                             id = resolvedChatId,
                             title = title,
                             subtitle = subtitle,
+                            headerSubtitle = headerSubtitle,
                             time = "",
                             unreadCount = 0,
                             avatarInitial = title.take(1).ifBlank { "N" },
-                            isOnline = item.optBoolean("online", false) || item.optBoolean("isOnline", false),
+                            isOnline = isOnline,
                             isVerified = item.optBoolean("isVerified", false),
                             canChat = item.optBoolean("canChat", true),
                             chatType = resolvedChatType,
@@ -613,8 +624,54 @@ private data class DesktopUser(
     val handle: String? = null,
     val isOnline: Boolean = false,
     val isVerified: Boolean = false,
-    val bio: String = ""
+    val bio: String = "",
+    val lastSeen: Long? = null
 )
+
+private fun JSONObject.optLongNullable(vararg keys: String): Long? {
+    for (key in keys) {
+        if (!has(key) || isNull(key)) continue
+        val raw = opt(key)
+        val value = when (raw) {
+            is Number -> raw.toLong()
+            is String -> raw.trim().toLongOrNull() ?: continue
+            else -> continue
+        }
+        if (value > 0L) return value
+    }
+    return null
+}
+
+private fun formatDesktopLastSeen(lastSeen: Long?): String {
+    if (lastSeen == null || lastSeen <= 0L) return "last seen recently"
+    val nowSeconds = System.currentTimeMillis() / 1000L
+    val diff = (nowSeconds - lastSeen).coerceAtLeast(0L)
+    return when {
+        diff < 60L -> "just now"
+        diff < 3600L -> "${diff / 60L} minutes ago"
+        diff < 86400L -> {
+            val date = java.time.Instant.ofEpochSecond(lastSeen).atZone(java.time.ZoneId.systemDefault())
+            "last seen at ${date.toLocalTime().toString().take(5)}"
+        }
+        diff < 172800L -> "last seen yesterday"
+        diff < 604800L -> "last seen ${diff / 86400L} days ago"
+        diff < 2592000L -> "last seen ${diff / 604800L} weeks ago"
+        diff < 31536000L -> "last seen ${diff / 2592000L} months ago"
+        else -> "last seen a long time ago"
+    }
+}
+
+private fun headerSubtitleForChat(chatType: String, memberIds: List<String>, usersById: Map<String, DesktopUser>, selfUserId: String): String {
+    return if (chatType == "private") {
+        val peer = memberIds.firstOrNull { it != selfUserId }?.let(usersById::get)
+        when {
+            peer?.isOnline == true -> "online"
+            else -> formatDesktopLastSeen(peer?.lastSeen)
+        }
+    } else {
+        "${memberIds.size} members"
+    }
+}
 
 private fun parseUsers(payload: JSONObject): Pair<Map<String, DesktopUser>, Set<String>> {
     val onlineIds = mutableSetOf<String>()
@@ -636,7 +693,8 @@ private fun parseUsers(payload: JSONObject): Pair<Map<String, DesktopUser>, Set<
             handle = item.optString("handle").sanitizeServerString().takeIf { it.isNotBlank() },
             isOnline = onlineIds.contains(userId) || item.optBoolean("online", false),
             isVerified = item.optBoolean("isVerified", false),
-            bio = item.optString("bio").sanitizeServerString()
+            bio = item.optString("bio").sanitizeServerString(),
+            lastSeen = item.optLongNullable("lastSeen", "last_seen", "lastSeenAt", "lastActive", "lastOnline")
         )
     }
     return users to onlineIds
@@ -669,11 +727,13 @@ private fun parseChats(payload: JSONObject, usersById: Map<String, DesktopUser>,
                 "group" -> item.optJSONObject("permissions")?.optBoolean("canSendMessages", true) ?: true
                 else -> true
             }
+            val headerSubtitle = headerSubtitleForChat(chatType.ifBlank { "private" }, memberIds, usersById, selfUserId)
             add(
                 NoveoHomeChat(
                     id = chatId,
                     title = resolveChatTitle(item, usersById, memberIds, selfUserId),
                     subtitle = preview,
+                    headerSubtitle = headerSubtitle,
                     time = formatTime(timestamp),
                     unreadCount = unreadCount,
                     isOnline = memberIds.any { usersById[it]?.isOnline == true && it != selfUserId },
