@@ -111,6 +111,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
+private val ANDROID_CONTEXT_MENU_REACTIONS = listOf(
+    "🙏", "👍", "😭", "😍", "🥰", "🙈", "❤️"
+)
+
 /**
  * Android-home-compatible state consumed by the shared desktop home surface.
  * Keep this state factual: desktop fills it from the server, not from mock/demo data.
