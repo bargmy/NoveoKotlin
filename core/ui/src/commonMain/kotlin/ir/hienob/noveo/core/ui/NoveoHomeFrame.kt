@@ -1462,7 +1462,6 @@ private fun AndroidStyleConversationPane(
 }
 
 @Composable
-@Composable
 private fun AndroidJoinChatBar(
     strings: NoveoStrings,
     tgColors: TelegramHomeColors,
@@ -1516,6 +1515,7 @@ private fun AndroidJoinChatBar(
     }
 }
 
+@Composable
 private fun AndroidPinnedMessageBar(
     message: NoveoHomeMessage,
     strings: NoveoStrings,
