@@ -1,8 +1,8 @@
 package ir.hienob.noveo.core.ui
 
 /**
- * Platform-neutral strings used by the shared root frame.
- * Full screen-level localization can be moved here as additional UI is extracted.
+ * Platform-neutral strings used by the shared Noveo root and home surfaces.
+ * Keep this file Android-free so Android and desktop can render the same UI skeleton.
  */
 data class NoveoStrings(
     val languageCode: String = "en",
@@ -25,7 +25,42 @@ data class NoveoStrings(
     val passwordPlaceholder: String = "Password",
     val registerOnWebTitle: String = "Register on Noveo Web",
     val registerOnWebBody: String = "You have to register from Noveo Web for security reasons.",
-    val openNoveoWeb: String = "Open Noveo Web"
+    val openNoveoWeb: String = "Open Noveo Web",
+    val menu: String = "Menu",
+    val settings: String = "Settings",
+    val allContacts: String = "All Contacts",
+    val savedMessages: String = "Saved Messages",
+    val newChat: String = "New Chat",
+    val profile: String = "Profile",
+    val account: String = "Account",
+    val preferences: String = "Preferences",
+    val themes: String = "Themes",
+    val logout: String = "Logout",
+    val searchPlaceholder: String = "Search...",
+    val messagePlaceholder: String = "Message",
+    val messages: String = "Messages",
+    val noMessagesYet: String = "No messages yet",
+    val selectChatHint: String = "Select a chat to start messaging",
+    val online: String = "online",
+    val offline: String = "offline",
+    val typingPrivate: String = "typing...",
+    val sending: String = "Sending…",
+    val cannotSendMessage: String = "You cannot send messages in this chat.",
+    val retry: String = "Retry",
+    val refresh: String = "Refresh",
+    val open: String = "Open",
+    val close: String = "Close",
+    val cancel: String = "Cancel",
+    val reply: String = "Reply",
+    val edit: String = "Edit",
+    val delete: String = "Delete",
+    val forward: String = "Forward",
+    val download: String = "Download",
+    val copyText: String = "Copy Text",
+    val pinnedMessage: String = "Pinned Message",
+    val forwarded: String = "Forwarded",
+    val activeCall: String = "Active Call",
+    val voiceChat: String = "Voice Chat"
 )
 
 fun coreNoveoStrings(languageCode: String?): NoveoStrings = when (languageCode?.lowercase()) {
@@ -34,6 +69,11 @@ fun coreNoveoStrings(languageCode: String?): NoveoStrings = when (languageCode?.
         next = "بعدی",
         skip = "رد کردن",
         onboardingAction = "شروع",
+        onboardingPages = listOf(
+            "با مخاطبانت در یک جا گفتگو کن.",
+            "با پوسته موبایل Noveo سریع وارد گفتگوها شو.",
+            "همگام بمان و بعد از ورود پیام دادن را شروع کن."
+        ),
         loginTitle = "خوش برگشتی",
         signupTitle = "عضویت در Noveo",
         switchSignup = "تازه واردی؟ حساب بساز",
@@ -45,11 +85,41 @@ fun coreNoveoStrings(languageCode: String?): NoveoStrings = when (languageCode?.
         registerOnWebTitle = "ثبت نام در وب Noveo",
         registerOnWebBody = "برای امنیت، ثبت نام باید از Noveo Web انجام شود.",
         openNoveoWeb = "باز کردن Noveo Web",
-        onboardingPages = listOf(
-            "با مخاطبانت در یک جا گفتگو کن.",
-            "با پوسته موبایل Noveo سریع وارد گفتگوها شو.",
-            "همگام بمان و بعد از ورود پیام دادن را شروع کن."
-        )
+        menu = "منو",
+        settings = "تنظیمات",
+        allContacts = "مخاطبان",
+        savedMessages = "پیام‌های ذخیره‌شده",
+        newChat = "گفتگوی جدید",
+        profile = "پروفایل",
+        account = "حساب",
+        preferences = "ترجیحات",
+        themes = "پوسته‌ها",
+        logout = "خروج",
+        searchPlaceholder = "جستجو...",
+        messagePlaceholder = "پیام",
+        messages = "پیام‌ها",
+        noMessagesYet = "هنوز پیامی نیست",
+        selectChatHint = "یک گفتگو را برای شروع انتخاب کن",
+        online = "آنلاین",
+        offline = "آفلاین",
+        typingPrivate = "در حال نوشتن...",
+        sending = "در حال ارسال…",
+        cannotSendMessage = "نمی‌توانی در این گفتگو پیام بفرستی.",
+        retry = "تلاش دوباره",
+        refresh = "تازه‌سازی",
+        open = "باز کردن",
+        close = "بستن",
+        cancel = "لغو",
+        reply = "پاسخ",
+        edit = "ویرایش",
+        delete = "حذف",
+        forward = "بازفرستادن",
+        download = "دانلود",
+        copyText = "کپی متن",
+        pinnedMessage = "پیام سنجاق‌شده",
+        forwarded = "بازفرستاده‌شده",
+        activeCall = "تماس فعال",
+        voiceChat = "گفتگوی صوتی"
     )
     else -> NoveoStrings(languageCode = languageCode ?: "en")
 }
