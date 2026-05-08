@@ -58,6 +58,7 @@ import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.DoneAll
@@ -114,12 +115,23 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -141,6 +153,40 @@ private val ANDROID_CONTEXT_MENU_REACTIONS = listOf(
     "😎", "👾"
 )
 private val ANDROID_CONTEXT_MENU_QUICK_REACTIONS = ANDROID_CONTEXT_MENU_REACTIONS.take(7)
+
+private val NoveoAndroidSendPlaneIcon: ImageVector = ImageVector.Builder(
+    name = "NoveoAndroidSendPlane",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 72f,
+    viewportHeight = 72f
+).apply {
+    path(
+        fill = SolidColor(Color.White),
+        pathFillType = PathFillType.EvenOdd
+    ) {
+        moveTo(6.232f, 35.046f)
+        curveTo(22.115f, 28.147f, 32.706f, 23.599f, 38.006f, 21.401f)
+        curveTo(53.136f, 15.126f, 56.28f, 14.036f, 58.329f, 14f)
+        curveTo(58.78f, 13.992f, 59.788f, 14.104f, 60.441f, 14.632f)
+        curveTo(60.992f, 15.078f, 61.143f, 15.68f, 61.216f, 16.103f)
+        curveTo(61.289f, 16.526f, 61.379f, 17.489f, 61.307f, 18.241f)
+        curveTo(60.487f, 26.831f, 56.939f, 47.675f, 55.134f, 57.295f)
+        curveTo(54.371f, 61.366f, 52.867f, 62.731f, 51.411f, 62.865f)
+        curveTo(48.247f, 63.155f, 45.844f, 60.78f, 42.78f, 58.777f)
+        curveTo(37.985f, 55.643f, 35.276f, 53.692f, 30.621f, 50.634f)
+        curveTo(25.242f, 47.1f, 28.729f, 45.157f, 31.795f, 41.983f)
+        curveTo(32.597f, 41.152f, 46.537f, 28.51f, 46.807f, 27.363f)
+        curveTo(46.841f, 27.22f, 46.872f, 26.685f, 46.554f, 26.403f)
+        curveTo(46.235f, 26.12f, 45.765f, 26.217f, 45.426f, 26.294f)
+        curveTo(44.945f, 26.402f, 37.284f, 31.451f, 22.444f, 41.438f)
+        curveTo(20.27f, 42.927f, 18.3f, 43.652f, 16.536f, 43.614f)
+        curveTo(14.591f, 43.572f, 10.849f, 42.518f, 8.067f, 41.616f)
+        curveTo(4.655f, 40.51f, 2.448f, 39.938f, 2.684f, 38.06f)
+        curveTo(2.807f, 37.082f, 3.99f, 36.077f, 6.232f, 35.046f)
+        close()
+    }
+}.build()
 
 private enum class AndroidHomeModal {
     CONTACTS,
@@ -553,26 +599,75 @@ private fun AndroidHomeModalOverlay(
                 onClick = onDismiss
             )
         )
-        AnimatedContent(
-            targetState = modal,
-            label = "android_home_modal_switch",
-            transitionSpec = {
-                (fadeIn(tween(180)) + slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it / 5 })
-                    .togetherWith(fadeOut(tween(120)) + slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it / 6 })
-            },
-            modifier = Modifier.align(Alignment.Center)
-        ) { target ->
-            AndroidModalCard(onDismiss = onDismiss) {
-                when (target) {
-                    AndroidHomeModal.CONTACTS -> AndroidContactsSurface(state = state, strings = strings)
-                    AndroidHomeModal.NEW_CHAT -> AndroidNewChatSurface(strings = strings, onStartNewChat = onStartNewChat)
-                    AndroidHomeModal.SETTINGS -> AndroidSettingsSurface(strings = strings, onOpenSettings = onOpenSettings, onLogout = onLogout)
-                    AndroidHomeModal.PROFILE -> AndroidProfileSurface(strings = strings, state = state)
-                    AndroidHomeModal.ATTACHMENTS -> AndroidAttachmentSourceSurface(strings = strings)
-                    AndroidHomeModal.STICKERS -> AndroidStickerSurface(strings = strings)
-                    AndroidHomeModal.CHAT_INFO -> AndroidChatInfoSurface(strings = strings, chat = selectedChat)
+        if (modal == AndroidHomeModal.ATTACHMENTS || modal == AndroidHomeModal.STICKERS) {
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(tween(160)) + slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it },
+                exit = fadeOut(tween(120)) + slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                AndroidBottomSheetSurface {
+                    when (modal) {
+                        AndroidHomeModal.ATTACHMENTS -> AndroidAttachmentSourceSurface(strings = strings)
+                        AndroidHomeModal.STICKERS -> AndroidStickerSurface(strings = strings)
+                        else -> Unit
+                    }
                 }
             }
+        } else {
+            AnimatedContent(
+                targetState = modal,
+                label = "android_home_modal_switch",
+                transitionSpec = {
+                    (fadeIn(tween(180)) + slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it / 5 })
+                        .togetherWith(fadeOut(tween(120)) + slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it / 6 })
+                },
+                modifier = Modifier.align(Alignment.Center)
+            ) { target ->
+                AndroidModalCard(onDismiss = onDismiss) {
+                    when (target) {
+                        AndroidHomeModal.CONTACTS -> AndroidContactsSurface(state = state, strings = strings)
+                        AndroidHomeModal.NEW_CHAT -> AndroidNewChatSurface(strings = strings, onStartNewChat = onStartNewChat)
+                        AndroidHomeModal.SETTINGS -> AndroidSettingsSurface(strings = strings, onOpenSettings = onOpenSettings, onLogout = onLogout)
+                        AndroidHomeModal.PROFILE -> AndroidProfileSurface(strings = strings, state = state)
+                        AndroidHomeModal.CHAT_INFO -> AndroidChatInfoSurface(strings = strings, chat = selectedChat)
+                        else -> Unit
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidBottomSheetSurface(content: @Composable () -> Unit) {
+    val tgColors = telegramHomeColors()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = tgColors.incomingBubble,
+        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+        shadowElevation = 16.dp,
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 24.dp, start = 16.dp, end = 16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.width(44.dp).height(4.dp),
+                    color = tgColors.headerSubtitle.copy(alpha = 0.35f),
+                    shape = CircleShape
+                ) {}
+            }
+            content()
         }
     }
 }
@@ -688,39 +783,80 @@ private fun AndroidProfileSurface(strings: NoveoStrings, state: NoveoHomeFrameSt
 
 @Composable
 private fun AndroidAttachmentSourceSurface(strings: NoveoStrings) {
-    AndroidModalHeader(strings.selectSource, strings.dropToAttach, Icons.Outlined.AttachFile)
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        AndroidAttachmentChoice(strings.gallery, Icons.Outlined.Star, Modifier.weight(1f))
-        AndroidAttachmentChoice(strings.files, Icons.Outlined.Description, Modifier.weight(1f))
-        AndroidAttachmentChoice(strings.stickers, Icons.Outlined.InsertEmoticon, Modifier.weight(1f))
-    }
-    Spacer(Modifier.height(12.dp))
-    Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), modifier = Modifier.fillMaxWidth()) {
-        Text(strings.dropToAttach, modifier = Modifier.padding(16.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val tgColors = telegramHomeColors()
+    Text(
+        text = strings.selectSource,
+        style = MaterialTheme.typography.titleMedium,
+        color = tgColors.headerTitle,
+        modifier = Modifier.padding(bottom = 16.dp)
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        AndroidAttachmentChoice(
+            label = strings.gallery,
+            icon = Icons.Outlined.Collections,
+            color = Color(0xFF2EA6FF),
+            modifier = Modifier.weight(1f)
+        )
+        AndroidAttachmentChoice(
+            label = strings.files,
+            icon = Icons.Outlined.Description,
+            color = Color(0xFF34C759),
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
 @Composable
-private fun AndroidAttachmentChoice(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier) {
-    Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f), modifier = modifier.height(92.dp).clickable { }) {
-        Column(modifier = Modifier.fillMaxSize().padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
-            Spacer(Modifier.height(8.dp))
-            Text(label, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun AndroidAttachmentChoice(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { }
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .background(color, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(27.dp))
         }
+        Spacer(Modifier.height(8.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
 @Composable
 private fun AndroidStickerSurface(strings: NoveoStrings) {
-    AndroidModalHeader(strings.stickers, strings.noSavedStickers, Icons.Outlined.InsertEmoticon)
-    val demo = listOf("😀", "😂", "😍", "😭", "😎", "🔥", "❤️", "👍", "🎉", "🙏", "🤔", "💯")
-    LazyVerticalGrid(columns = GridCells.Fixed(4), modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(demo) { emoji ->
-            Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f), modifier = Modifier.size(62.dp).clickable { }) {
-                Box(contentAlignment = Alignment.Center) { Text(emoji, fontSize = 26.sp) }
-            }
-        }
+    val tgColors = telegramHomeColors()
+    Text(
+        text = strings.stickers,
+        color = tgColors.headerTitle,
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(vertical = 8.dp)
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(220.dp)
+            .padding(28.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = strings.noSavedStickers,
+            color = tgColors.headerSubtitle,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
@@ -1251,8 +1387,12 @@ private fun AndroidStyleConversationPane(
             }
         }
 
-        Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 6.dp).padding(bottom = 4.dp)) {
+        Box(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 8.dp),
+            contentAlignment = Alignment.BottomCenter
+        ) {
             AndroidStyleComposer(
+                modifier = Modifier.widthIn(max = 780.dp).fillMaxWidth(),
                 draft = draft,
                 onDraftChange = { draft = it; onTyping() },
                 placeholder = if (chat.canChat && state.canSendMessage) strings.messagePlaceholder else strings.cannotSendMessage,
@@ -1670,6 +1810,7 @@ private fun ReactionChipRow(message: NoveoHomeMessage, ownMessage: Boolean, tgCo
 
 @Composable
 private fun AndroidStyleComposer(
+    modifier: Modifier = Modifier,
     draft: String,
     onDraftChange: (String) -> Unit,
     placeholder: String,
@@ -1691,8 +1832,13 @@ private fun AndroidStyleComposer(
     )
     val iconColor = if (!showSendButton) tgColors.composerIcon else Color.White
     val micScale by animateFloatAsState(targetValue = if (showSendButton) 1f else 0.96f, animationSpec = tween(150), label = "micScale")
+    fun sendFromComposer() {
+        if (enabled && !sending && draft.trim().isNotBlank()) {
+            onSend()
+        }
+    }
 
-    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp).padding(bottom = 4.dp)) {
+    Box(modifier = modifier.fillMaxWidth().padding(horizontal = 6.dp).padding(bottom = 4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             Surface(
                 modifier = Modifier.weight(1f),
@@ -1737,7 +1883,21 @@ private fun AndroidStyleComposer(
                                 enabled = enabled && !sending,
                                 cursorBrush = SolidColor(tgColors.composerCursor),
                                 textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, color = tgColors.composerText, lineHeight = 22.sp),
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .onPreviewKeyEvent { event ->
+                                        val plainEnter = event.key == Key.Enter &&
+                                            event.type == KeyEventType.KeyDown &&
+                                            !event.isShiftPressed &&
+                                            !event.isCtrlPressed &&
+                                            !event.isAltPressed
+                                        if (plainEnter) {
+                                            sendFromComposer()
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    },
                                 maxLines = 6
                             )
                         }
@@ -1764,7 +1924,7 @@ private fun AndroidStyleComposer(
             shadowElevation = 1.dp
         ) {
             Box(
-                modifier = Modifier.fillMaxSize().clip(CircleShape).clickable(enabled = enabled && !sending && showSendButton, onClick = onSend),
+                modifier = Modifier.fillMaxSize().clip(CircleShape).clickable(enabled = enabled && !sending && showSendButton, onClick = ::sendFromComposer),
                 contentAlignment = Alignment.Center
             ) {
                 if (sending) {
@@ -1783,7 +1943,7 @@ private fun AndroidStyleComposer(
                         label = "send_icon"
                     ) { targetIsMic ->
                         Icon(
-                            imageVector = if (targetIsMic) Icons.Outlined.Mic else Icons.Outlined.Send,
+                            imageVector = if (targetIsMic) Icons.Outlined.Mic else NoveoAndroidSendPlaneIcon,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = if (targetIsMic) 0f else -25f },
                             tint = iconColor
