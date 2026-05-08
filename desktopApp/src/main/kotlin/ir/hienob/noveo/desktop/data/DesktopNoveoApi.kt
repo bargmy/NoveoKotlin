@@ -301,7 +301,8 @@ private fun parseChats(payload: JSONObject, usersById: Map<String, DesktopUser>,
                     unreadCount = unreadCount,
                     isOnline = memberIds.any { usersById[it]?.isOnline == true && it != selfUserId },
                     isVerified = item.optBoolean("isVerified", false),
-                    canChat = canChat
+                    canChat = canChat,
+                    chatType = chatType.ifBlank { "private" }
                 )
             )
         }
@@ -346,47 +347,162 @@ private fun parseMessagesByChat(payload: JSONObject, usersById: Map<String, Desk
 private fun parseMessage(message: JSONObject, chatId: String, usersById: Map<String, DesktopUser>, selfUserId: String): NoveoHomeMessage {
     val senderId = message.optString("senderId").sanitizeServerString().ifBlank { message.optString("sender").sanitizeServerString() }
     val messageId = message.optString("messageId").sanitizeServerString().ifBlank { message.optString("id").sanitizeServerString() }
+    val timestamp = message.optLong("timestamp", message.optLong("createdAt", 0L))
+    val content = parseMessageContent(message.opt("content"))
+    val seenBy = parseStringList(message.optJSONArray("seenBy"))
+    val replyToId = message.optString("replyToId").sanitizeServerString()
+    val replyObject = message.optJSONObject("replyTo") ?: message.optJSONObject("reply")
+    val forwardedObject = message.optJSONObject("forwardedInfo") ?: message.optJSONObject("forwarded")
     return NoveoHomeMessage(
-        id = messageId.ifBlank { "${chatId}-${message.optLong("timestamp", 0L)}" },
+        id = messageId.ifBlank { "${chatId}-$timestamp" },
         senderId = senderId,
         senderName = usersById[senderId]?.username ?: message.optString("senderName").sanitizeServerString().ifBlank { "Unknown" },
-        text = parseMessageText(message.opt("content")).ifBlank { " " },
-        time = formatTime(message.optLong("timestamp", message.optLong("createdAt", 0L))),
+        text = content.text.ifBlank { if (content.attachmentName == null) " " else "" },
+        time = formatTime(timestamp),
         isOutgoing = senderId == selfUserId,
         pending = message.optBoolean("pending", false),
         edited = message.optLong("editedAt", 0L) > 0,
-        forwarded = message.optJSONObject("forwardedInfo") != null
+        forwarded = forwardedObject != null,
+        seen = seenBy.any { it == selfUserId || it.isNotBlank() } && senderId == selfUserId,
+        replyAuthor = replyObject?.optString("senderName")?.sanitizeServerString(),
+        replyPreview = replyObject?.let { parseMessageContent(it.opt("content")).previewText },
+        attachmentName = content.attachmentName,
+        attachmentType = content.attachmentType,
+        attachmentSizeLabel = content.attachmentSizeLabel,
+        reactions = parseReactionCounts(message.opt("reactions")),
+        botButtons = parseInlineKeyboard(content.inlineKeyboard ?: message.opt("inlineKeyboard") ?: message.opt("keyboard")),
+        dateLabel = formatDateLabel(timestamp),
+        isPinned = message.optBoolean("isPinned", false) || message.optBoolean("pinned", false),
+        isSystem = senderId == "system" || message.optString("type") == "system"
     )
 }
 
-private fun parseMessageText(raw: Any?): String {
+private data class ParsedMessageContent(
+    val text: String = "",
+    val previewText: String = "",
+    val attachmentName: String? = null,
+    val attachmentType: String? = null,
+    val attachmentSizeLabel: String? = null,
+    val inlineKeyboard: Any? = null
+)
+
+private fun parseMessageContent(raw: Any?): ParsedMessageContent {
     val payload = when (raw) {
         is JSONObject -> raw
         is String -> {
             val text = raw.sanitizeServerString()
             if (text.startsWith("{") || text.startsWith("[")) {
-                runCatching { JSONObject(text) }.getOrNull() ?: return text
+                runCatching { JSONObject(text) }.getOrNull() ?: return ParsedMessageContent(text = text, previewText = text)
             } else {
-                return text
+                return ParsedMessageContent(text = text, previewText = text)
             }
         }
-        else -> return raw?.toString().sanitizeServerString()
+        else -> return ParsedMessageContent(text = raw?.toString().sanitizeServerString(), previewText = raw?.toString().sanitizeServerString())
     }
-    payload.optString("text").sanitizeServerString().takeIf { it.isNotBlank() }?.let { return it }
+    val text = payload.optString("text").sanitizeServerString()
+    val inlineKeyboard = payload.opt("inlineKeyboard") ?: payload.opt("keyboard") ?: payload.opt("buttons")
     payload.optJSONObject("file")?.let { file ->
-        val type = file.optString("type")
-        val name = file.optString("name").sanitizeServerString()
-        return when {
+        val type = file.optString("type").sanitizeServerString()
+        val name = file.optString("name").sanitizeServerString().ifBlank { file.optString("fileName").sanitizeServerString() }
+        val size = file.optLong("size", 0L).takeIf { it > 0 }?.let(::formatBytes)
+        val preview = when {
             type.startsWith("image/", true) -> "Photo"
             type.startsWith("video/", true) -> "Video"
             type.startsWith("audio/", true) -> "Audio"
             name.isNotBlank() -> name
             else -> "File"
         }
+        return ParsedMessageContent(
+            text = text,
+            previewText = text.ifBlank { preview },
+            attachmentName = name.ifBlank { preview },
+            attachmentType = type.ifBlank { preview },
+            attachmentSizeLabel = size,
+            inlineKeyboard = inlineKeyboard
+        )
     }
-    payload.optJSONObject("poll")?.let { return "Poll" }
-    payload.optJSONObject("callLog")?.let { return "Voice Call" }
-    return ""
+    payload.optJSONObject("poll")?.let { return ParsedMessageContent(text = text, previewText = text.ifBlank { "Poll" }, inlineKeyboard = inlineKeyboard) }
+    payload.optJSONObject("callLog")?.let { return ParsedMessageContent(text = text.ifBlank { "Voice Call" }, previewText = "Voice Call", inlineKeyboard = inlineKeyboard) }
+    return ParsedMessageContent(text = text, previewText = text, inlineKeyboard = inlineKeyboard)
+}
+
+private fun parseMessageText(raw: Any?): String = parseMessageContent(raw).previewText
+
+private fun parseReactionCounts(raw: Any?): Map<String, Int> {
+    val result = linkedMapOf<String, Int>()
+    when (raw) {
+        is JSONObject -> {
+            val keys = raw.keys()
+            while (keys.hasNext()) {
+                val emoji = keys.next()
+                val value = raw.opt(emoji)
+                val count = when (value) {
+                    is JSONArray -> value.length()
+                    is Number -> value.toInt()
+                    is JSONObject -> value.optJSONArray("users")?.length() ?: value.optInt("count", 0)
+                    else -> 0
+                }
+                if (emoji.isNotBlank() && count > 0) result[emoji] = count
+            }
+        }
+        is JSONArray -> {
+            for (index in 0 until raw.length()) {
+                val item = raw.optJSONObject(index) ?: continue
+                val emoji = item.optString("emoji").sanitizeServerString()
+                val count = item.optJSONArray("users")?.length() ?: item.optInt("count", 0)
+                if (emoji.isNotBlank() && count > 0) result[emoji] = count
+            }
+        }
+    }
+    return result
+}
+
+private fun parseInlineKeyboard(raw: Any?): List<List<String>> {
+    val rows = mutableListOf<List<String>>()
+    when (raw) {
+        is JSONArray -> {
+            for (rowIndex in 0 until raw.length()) {
+                val rowValue = raw.opt(rowIndex)
+                val row = when (rowValue) {
+                    is JSONArray -> buildList {
+                        for (buttonIndex in 0 until rowValue.length()) {
+                            val button = rowValue.opt(buttonIndex)
+                            when (button) {
+                                is JSONObject -> button.optString("text").sanitizeServerString()
+                                else -> button?.toString().sanitizeServerString()
+                            }.takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                    is JSONObject -> listOf(rowValue.optString("text").sanitizeServerString()).filter { it.isNotBlank() }
+                    else -> listOf(rowValue?.toString().sanitizeServerString()).filter { it.isNotBlank() }
+                }
+                if (row.isNotEmpty()) rows += row
+            }
+        }
+        is JSONObject -> {
+            raw.optJSONArray("rows")?.let { return parseInlineKeyboard(it) }
+            raw.optJSONArray("buttons")?.let { return parseInlineKeyboard(it) }
+            raw.optString("text").sanitizeServerString().takeIf { it.isNotBlank() }?.let { rows += listOf(it) }
+        }
+    }
+    return rows
+}
+
+private fun formatDateLabel(timestamp: Long): String {
+    if (timestamp <= 0L) return ""
+    val millis = if (timestamp < 10_000_000_000L) timestamp * 1000L else timestamp
+    return SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(millis))
+}
+
+private fun formatBytes(bytes: Long): String {
+    val units = listOf("B", "KB", "MB", "GB")
+    var value = bytes.toDouble()
+    var unit = 0
+    while (value >= 1024.0 && unit < units.lastIndex) {
+        value /= 1024.0
+        unit += 1
+    }
+    return if (unit == 0) "${bytes} B" else String.format(Locale.US, "%.1f %s", value, units[unit])
 }
 
 private fun resolveChatTitle(chat: JSONObject, usersById: Map<String, DesktopUser>, memberIds: List<String>, selfUserId: String): String {

@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -14,6 +15,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -38,7 +40,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -53,15 +59,25 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.DoneAll
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.InsertEmoticon
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Reply
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Send
@@ -83,11 +99,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -100,6 +118,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -109,11 +129,28 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 private val ANDROID_CONTEXT_MENU_REACTIONS = listOf(
-    "🙏", "👍", "😭", "😍", "🥰", "🙈", "❤️"
+    "🙏", "👍", "😭", "😍", "🥰", "🙈", "❤️", "🤔", "🤣", "😘", "😱", "💯", "👎", "🔥", "💩", "🤯",
+    "💔", "☃️", "😁", "🎉", "🤷", "😇", "🎃", "🗿", "🥴", "😐", "👏", "🤬", "😢", "🤩", "🤮", "👌",
+    "🕊️", "🤡", "🐳", "💘", "🌭", "⚡", "🍌", "🏆", "🤨", "🍓", "🍾", "🖕", "😈", "😴", "🤓", "👻",
+    "👨‍💻", "👀", "🙉", "😨", "🤝", "✍️", "🤗", "🫡", "🎅", "🎄", "💅", "🤪", "🆒", "🦄", "💊", "🙊",
+    "😎", "👾"
 )
+private val ANDROID_CONTEXT_MENU_QUICK_REACTIONS = ANDROID_CONTEXT_MENU_REACTIONS.take(7)
+
+private enum class AndroidHomeModal {
+    CONTACTS,
+    NEW_CHAT,
+    SETTINGS,
+    PROFILE,
+    ATTACHMENTS,
+    STICKERS,
+    CHAT_INFO
+}
 
 /**
  * Android-home-compatible state consumed by the shared desktop home surface.
@@ -144,7 +181,8 @@ data class NoveoHomeChat(
     val avatarInitial: String = title.take(1).ifBlank { "N" },
     val isOnline: Boolean = false,
     val isVerified: Boolean = false,
-    val canChat: Boolean = true
+    val canChat: Boolean = true,
+    val chatType: String = "private"
 )
 
 data class NoveoHomeMessage(
@@ -156,7 +194,18 @@ data class NoveoHomeMessage(
     val isOutgoing: Boolean = false,
     val pending: Boolean = false,
     val edited: Boolean = false,
-    val forwarded: Boolean = false
+    val forwarded: Boolean = false,
+    val seen: Boolean = false,
+    val replyAuthor: String? = null,
+    val replyPreview: String? = null,
+    val attachmentName: String? = null,
+    val attachmentType: String? = null,
+    val attachmentSizeLabel: String? = null,
+    val reactions: Map<String, Int> = emptyMap(),
+    val botButtons: List<List<String>> = emptyList(),
+    val dateLabel: String = "",
+    val isPinned: Boolean = false,
+    val isSystem: Boolean = false
 )
 
 private data class TelegramHomeColors(
@@ -313,6 +362,7 @@ fun NoveoHomeFrame(
     modifier: Modifier = Modifier
 ) {
     var showMenu by rememberSaveable { mutableStateOf(false) }
+    var activeModal by rememberSaveable { mutableStateOf<AndroidHomeModal?>(null) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     val filteredChats = remember(state.chats, searchQuery) {
@@ -321,10 +371,6 @@ fun NoveoHomeFrame(
     }
     val tgColors = telegramHomeColors()
 
-    // IMPORTANT: desktop intentionally stays on the Android compact/mobile route.
-    // The old desktop two-pane branch was the main visual mismatch. Android HomeUi.kt
-    // uses this full-screen list <-> chat transition on phones, so desktop follows it
-    // instead of inventing a desktop layout.
     Surface(
         modifier = modifier
             .fillMaxSize()
@@ -334,50 +380,387 @@ fun NoveoHomeFrame(
         color = MaterialTheme.colorScheme.background
     ) {
         val selectedChat = state.selectedChat
-        AnimatedContent(
-            targetState = selectedChat != null,
-            label = "android_compact_chat_switch",
-            transitionSpec = {
-                val transition = if (targetState) {
-                    (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it / 4 } + fadeOut())
-                } else {
-                    (slideInHorizontally { -it / 4 } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val compact = maxWidth < 760.dp
+
+            if (compact) {
+                AnimatedContent(
+                    targetState = selectedChat != null,
+                    label = "android_compact_chat_switch",
+                    transitionSpec = {
+                        val transition = if (targetState) {
+                            (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it / 4 } + fadeOut())
+                        } else {
+                            (slideInHorizontally { -it / 4 } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
+                        }
+                        transition.using(SizeTransform(clip = false))
+                    }
+                ) { showingChat ->
+                    if (showingChat && selectedChat != null) {
+                        AndroidStyleConversationPane(
+                            state = state,
+                            chat = selectedChat,
+                            strings = strings,
+                            compact = true,
+                            tgColors = tgColors,
+                            onBackToChats = onBackToChats,
+                            onSend = onSend,
+                            onTyping = onTyping,
+                            onOpenAttachments = { activeModal = AndroidHomeModal.ATTACHMENTS },
+                            onOpenStickers = { activeModal = AndroidHomeModal.STICKERS },
+                            onOpenChatInfo = { activeModal = AndroidHomeModal.CHAT_INFO },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        AndroidStyleSidebarPane(
+                            state = state,
+                            strings = strings,
+                            chats = filteredChats,
+                            showSearch = showSearch,
+                            searchQuery = searchQuery,
+                            showMenu = showMenu,
+                            onSearchQuery = { searchQuery = it },
+                            onMenuClick = { showMenu = !showMenu },
+                            onSearchToggle = { showSearch = !showSearch; if (showSearch) searchQuery = "" },
+                            onOpenChat = onOpenChat,
+                            onRefresh = onRefresh,
+                            onLogout = onLogout,
+                            onOpenSettings = onOpenSettings,
+                            onStartNewChat = onStartNewChat,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
-                transition.using(SizeTransform(clip = false))
-            }
-        ) { showingChat ->
-            if (showingChat && selectedChat != null) {
-                AndroidStyleConversationPane(
-                    state = state,
-                    chat = selectedChat,
-                    strings = strings,
-                    compact = true,
-                    tgColors = tgColors,
-                    onBackToChats = onBackToChats,
-                    onSend = onSend,
-                    onTyping = onTyping,
-                    modifier = Modifier.fillMaxSize()
-                )
             } else {
-                AndroidStyleSidebarPane(
+                Row(Modifier.fillMaxSize()) {
+                    AndroidStyleSidebarPane(
+                        state = state,
+                        strings = strings,
+                        chats = filteredChats,
+                        showSearch = showSearch,
+                        searchQuery = searchQuery,
+                        showMenu = showMenu,
+                        onSearchQuery = { searchQuery = it },
+                        onMenuClick = { showMenu = true },
+                        onSearchToggle = { showSearch = !showSearch; if (showSearch) searchQuery = "" },
+                        onOpenChat = onOpenChat,
+                        onRefresh = onRefresh,
+                        onLogout = onLogout,
+                        onOpenSettings = onOpenSettings,
+                        onStartNewChat = onStartNewChat,
+                        modifier = Modifier.width(360.dp).fillMaxHeight()
+                    )
+                    AnimatedContent(
+                        targetState = selectedChat?.id,
+                        label = "wide_shell_transition",
+                        transitionSpec = {
+                            (slideInHorizontally(initialOffsetX = { it / 5 }) + fadeIn())
+                                .togetherWith(slideOutHorizontally(targetOffsetX = { -it / 5 }) + fadeOut())
+                        },
+                        modifier = Modifier.weight(1f).fillMaxHeight()
+                    ) { selectedId ->
+                        val visibleChat = state.chats.firstOrNull { it.id == selectedId }
+                        if (visibleChat != null) {
+                            AndroidStyleConversationPane(
+                                state = state,
+                                chat = visibleChat,
+                                strings = strings,
+                                compact = false,
+                                tgColors = tgColors,
+                                onBackToChats = onBackToChats,
+                                onSend = onSend,
+                                onTyping = onTyping,
+                                onOpenAttachments = { activeModal = AndroidHomeModal.ATTACHMENTS },
+                                onOpenStickers = { activeModal = AndroidHomeModal.STICKERS },
+                                onOpenChatInfo = { activeModal = AndroidHomeModal.CHAT_INFO },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            AndroidWelcomePane(strings = strings, modifier = Modifier.fillMaxSize())
+                        }
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = showMenu,
+                enter = fadeIn(tween(160)),
+                exit = fadeOut(tween(160))
+            ) {
+                Box(Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.50f)).clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { showMenu = false }
+                        )
+                    )
+                    AnimatedVisibility(
+                        visible = showMenu,
+                        enter = slideInHorizontally(tween(250, easing = FastOutSlowInEasing)) { -it },
+                        exit = slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { -it },
+                        modifier = Modifier.align(Alignment.TopStart)
+                    ) {
+                        AndroidStyleSideMenu(
+                            strings = strings,
+                            onDismiss = { showMenu = false },
+                            onContacts = { activeModal = AndroidHomeModal.CONTACTS },
+                            onSettings = { activeModal = AndroidHomeModal.SETTINGS },
+                            onStartNewChat = { activeModal = AndroidHomeModal.NEW_CHAT },
+                            onProfile = { activeModal = AndroidHomeModal.PROFILE },
+                            onRefresh = onRefresh,
+                            onLogout = onLogout
+                        )
+                    }
+                }
+            }
+
+            activeModal?.let { modal ->
+                AndroidHomeModalOverlay(
+                    modal = modal,
                     state = state,
                     strings = strings,
-                    chats = filteredChats,
-                    showSearch = showSearch,
-                    searchQuery = searchQuery,
-                    showMenu = showMenu,
-                    onSearchQuery = { searchQuery = it },
-                    onMenuClick = { showMenu = !showMenu },
-                    onSearchToggle = { showSearch = !showSearch; if (showSearch) searchQuery = "" },
-                    onOpenChat = onOpenChat,
-                    onRefresh = onRefresh,
-                    onLogout = onLogout,
-                    onOpenSettings = onOpenSettings,
+                    selectedChat = selectedChat,
+                    onDismiss = { activeModal = null },
                     onStartNewChat = onStartNewChat,
-                    modifier = Modifier.fillMaxSize()
+                    onOpenSettings = onOpenSettings,
+                    onRefresh = onRefresh,
+                    onLogout = onLogout
                 )
             }
         }
+    }
+}
+
+
+@Composable
+private fun AndroidHomeModalOverlay(
+    modal: AndroidHomeModal,
+    state: NoveoHomeFrameState,
+    strings: NoveoStrings,
+    selectedChat: NoveoHomeChat?,
+    onDismiss: () -> Unit,
+    onStartNewChat: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onRefresh: () -> Unit,
+    onLogout: () -> Unit
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.42f)).clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss
+            )
+        )
+        AnimatedContent(
+            targetState = modal,
+            label = "android_home_modal_switch",
+            transitionSpec = {
+                (fadeIn(tween(180)) + slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it / 5 })
+                    .togetherWith(fadeOut(tween(120)) + slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it / 6 })
+            },
+            modifier = Modifier.align(Alignment.Center)
+        ) { target ->
+            AndroidModalCard(onDismiss = onDismiss) {
+                when (target) {
+                    AndroidHomeModal.CONTACTS -> AndroidContactsSurface(state = state, strings = strings)
+                    AndroidHomeModal.NEW_CHAT -> AndroidNewChatSurface(strings = strings, onStartNewChat = onStartNewChat)
+                    AndroidHomeModal.SETTINGS -> AndroidSettingsSurface(strings = strings, onOpenSettings = onOpenSettings, onLogout = onLogout)
+                    AndroidHomeModal.PROFILE -> AndroidProfileSurface(strings = strings, state = state)
+                    AndroidHomeModal.ATTACHMENTS -> AndroidAttachmentSourceSurface(strings = strings)
+                    AndroidHomeModal.STICKERS -> AndroidStickerSurface(strings = strings)
+                    AndroidHomeModal.CHAT_INFO -> AndroidChatInfoSurface(strings = strings, chat = selectedChat)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidModalCard(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    Surface(
+        modifier = Modifier.widthIn(min = 320.dp, max = 420.dp).padding(18.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 12.dp,
+        tonalElevation = 2.dp
+    ) {
+        Box(Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                content()
+            }
+            HeaderIconButton(
+                icon = Icons.Outlined.Close,
+                onClick = onDismiss,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AndroidModalHeader(title: String, subtitle: String? = null, icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Outlined.Info) {
+    Row(modifier = Modifier.fillMaxWidth().padding(end = 42.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier.size(46.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (!subtitle.isNullOrBlank()) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+    Spacer(Modifier.height(16.dp))
+}
+
+@Composable
+private fun AndroidContactsSurface(state: NoveoHomeFrameState, strings: NoveoStrings) {
+    AndroidModalHeader(strings.allContacts, strings.searchGlobal, Icons.Outlined.AccountCircle)
+    val privateChats = state.chats.filter { it.chatType == "private" }.take(12)
+    if (privateChats.isEmpty()) {
+        AndroidEmptyModalText(strings.noContacts)
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(privateChats, key = { it.id }) { chat ->
+                AndroidContactRow(chat = chat, strings = strings)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidContactRow(chat: NoveoHomeChat, strings: NoveoStrings) {
+    Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f), modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            ProfileCircle(name = chat.title, isSavedMessages = chat.title == "Saved Messages" || chat.title == strings.savedMessages, size = 42.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(chat.title.ifBlank { strings.unknown }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (chat.isOnline) strings.online else chat.subtitle.ifBlank { strings.lastSeenRecently }, style = MaterialTheme.typography.bodySmall, color = if (chat.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidNewChatSurface(strings: NoveoStrings, onStartNewChat: () -> Unit) {
+    AndroidModalHeader(strings.newChat, strings.handleOptional, Icons.Outlined.Add)
+    AndroidSettingsRow(strings.group, strings.bioOptional, Icons.Outlined.AccountCircle, onClick = onStartNewChat)
+    AndroidSettingsRow(strings.channel, strings.handleOptional, Icons.Outlined.Info, onClick = onStartNewChat)
+    AndroidSettingsRow(strings.privateChatType, strings.messageButton, Icons.Outlined.Person, onClick = onStartNewChat)
+}
+
+@Composable
+private fun AndroidSettingsSurface(strings: NoveoStrings, onOpenSettings: () -> Unit, onLogout: () -> Unit) {
+    AndroidModalHeader(strings.settings, strings.preferences, Icons.Outlined.Settings)
+    AndroidSettingsRow(strings.profile, strings.displayName, Icons.Outlined.AccountCircle, onClick = onOpenSettings)
+    AndroidSettingsRow(strings.account, strings.changePassword, Icons.Outlined.Lock, onClick = onOpenSettings)
+    AndroidSettingsRow(strings.themes, strings.themeLightDesc, Icons.Outlined.Star, onClick = onOpenSettings)
+    AndroidSettingsRow(strings.notificationSettings, strings.enableNotifications, Icons.Outlined.Info, onClick = onOpenSettings)
+    Spacer(Modifier.height(6.dp))
+    TextButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text(strings.logout, color = MaterialTheme.colorScheme.error) }
+}
+
+@Composable
+private fun AndroidProfileSurface(strings: NoveoStrings, state: NoveoHomeFrameState) {
+    AndroidModalHeader(strings.profile, strings.about, Icons.Outlined.AccountCircle)
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        ProfileCircle(name = strings.brandName, size = 70.dp)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(strings.brandName, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text(state.currentUserId ?: strings.userId, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(4.dp))
+            Text(strings.online, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+    AndroidSettingsRow(strings.savedMessages, strings.messages, Icons.Outlined.Bookmark, onClick = {})
+    AndroidSettingsRow(strings.language, strings.selectLanguage, Icons.Outlined.Info, onClick = {})
+}
+
+@Composable
+private fun AndroidAttachmentSourceSurface(strings: NoveoStrings) {
+    AndroidModalHeader(strings.selectSource, strings.dropToAttach, Icons.Outlined.AttachFile)
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        AndroidAttachmentChoice(strings.gallery, Icons.Outlined.Star, Modifier.weight(1f))
+        AndroidAttachmentChoice(strings.files, Icons.Outlined.Description, Modifier.weight(1f))
+        AndroidAttachmentChoice(strings.stickers, Icons.Outlined.InsertEmoticon, Modifier.weight(1f))
+    }
+    Spacer(Modifier.height(12.dp))
+    Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), modifier = Modifier.fillMaxWidth()) {
+        Text(strings.dropToAttach, modifier = Modifier.padding(16.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun AndroidAttachmentChoice(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier) {
+    Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f), modifier = modifier.height(92.dp).clickable { }) {
+        Column(modifier = Modifier.fillMaxSize().padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(label, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun AndroidStickerSurface(strings: NoveoStrings) {
+    AndroidModalHeader(strings.stickers, strings.noSavedStickers, Icons.Outlined.InsertEmoticon)
+    val demo = listOf("😀", "😂", "😍", "😭", "😎", "🔥", "❤️", "👍", "🎉", "🙏", "🤔", "💯")
+    LazyVerticalGrid(columns = GridCells.Fixed(4), modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(demo) { emoji ->
+            Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f), modifier = Modifier.size(62.dp).clickable { }) {
+                Box(contentAlignment = Alignment.Center) { Text(emoji, fontSize = 26.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidChatInfoSurface(strings: NoveoStrings, chat: NoveoHomeChat?) {
+    AndroidModalHeader(strings.chatInfo, chat?.subtitle ?: strings.members, Icons.Outlined.Info)
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        ProfileCircle(name = chat?.title ?: strings.chatInfo, isSavedMessages = chat?.title == strings.savedMessages || chat?.title == "Saved Messages", size = 68.dp)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(chat?.title ?: strings.chatInfo, fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (chat?.isOnline == true) strings.online else chat?.subtitle ?: strings.membersCount, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    AndroidSettingsRow(strings.members, strings.membersCount, Icons.Outlined.AccountCircle, onClick = {})
+    AndroidSettingsRow(strings.searchMessages, strings.searchPlaceholder, Icons.Outlined.Search, onClick = {})
+    AndroidSettingsRow(strings.notificationSettings, strings.enableNotifications, Icons.Outlined.Info, onClick = {})
+}
+
+@Composable
+private fun AndroidSettingsRow(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable(onClick = onClick)) {
+        Row(modifier = Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidEmptyModalText(text: String) {
+    Box(modifier = Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
     }
 }
 
@@ -423,30 +806,6 @@ private fun AndroidStyleSidebarPane(
                     AndroidStyleSearchResults(strings, chats, onOpenChat)
                 } else {
                     AndroidStyleChatListContent(state, strings, chats, onOpenChat)
-                }
-            }
-            AnimatedVisibility(
-                visible = showMenu,
-                enter = fadeIn(tween(160)) + slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { -it },
-                exit = fadeOut(tween(160)) + slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { -it }
-            ) {
-                Box(Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.30f)).clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onMenuClick
-                        )
-                    )
-                    AndroidStyleSideMenu(
-                        strings = strings,
-                        onDismiss = onMenuClick,
-                        onSettings = onOpenSettings,
-                        onStartNewChat = onStartNewChat,
-                        onRefresh = onRefresh,
-                        onLogout = onLogout,
-                        modifier = Modifier.align(Alignment.TopStart)
-                    )
                 }
             }
         }
@@ -586,17 +945,22 @@ private fun AndroidStyleSearchResults(strings: NoveoStrings, chats: List<NoveoHo
 
 @Composable
 private fun AndroidStyleChatRow(chat: NoveoHomeChat, strings: NoveoStrings, selected: Boolean, onClick: () -> Unit) {
+    val chatTitle = remember(chat, strings) {
+        if (chat.title == "Saved Messages") strings.savedMessages else chat.title.ifBlank { strings.chatInfo }
+    }
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
+        )
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ProfileCircle(name = chat.title, isSavedMessages = chat.title == strings.savedMessages || chat.title == "Saved Messages")
+            ProfileCircle(name = chatTitle, isSavedMessages = chatTitle == strings.savedMessages || chat.title == "Saved Messages")
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(chat.title.ifBlank { strings.messages }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(chatTitle, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (chat.isVerified) {
                         Spacer(Modifier.width(4.dp))
                         VerifiedIcon()
@@ -611,10 +975,6 @@ private fun AndroidStyleChatRow(chat: NoveoHomeChat, strings: NoveoStrings, sele
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (chat.time.isNotBlank()) {
-                Spacer(Modifier.width(8.dp))
-                Text(chat.time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
             if (chat.unreadCount > 0) {
                 Spacer(Modifier.width(8.dp))
                 UnreadBadge(chat.unreadCount)
@@ -627,44 +987,82 @@ private fun AndroidStyleChatRow(chat: NoveoHomeChat, strings: NoveoStrings, sele
 private fun AndroidStyleSideMenu(
     strings: NoveoStrings,
     onDismiss: () -> Unit,
+    onContacts: () -> Unit,
     onSettings: () -> Unit,
     onStartNewChat: () -> Unit,
+    onProfile: () -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(modifier = modifier.width(296.dp).fillMaxHeight(), color = MaterialTheme.colorScheme.surface, shadowElevation = 12.dp) {
-        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ProfileCircle(name = strings.brandName, size = 56.dp)
+    Column(
+        modifier = modifier
+            .width(296.dp)
+            .fillMaxHeight()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(16.dp)
+    ) {
+        Text(strings.menu, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(14.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable { onProfile(); onDismiss() },
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f))
+        ) {
+            Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                ProfileCircle(name = strings.brandName, size = 48.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(strings.brandName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(strings.online, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text(strings.profile, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(strings.online, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
-                HeaderIconButton(icon = Icons.Outlined.Close, onClick = onDismiss)
             }
-            HorizontalDivider()
-            DrawerAction(strings.settings, Icons.Outlined.Settings) { onSettings(); onDismiss() }
-            DrawerAction(strings.allContacts, Icons.Outlined.AccountCircle) { onDismiss() }
-            DrawerAction(strings.newChat, Icons.Outlined.Add) { onStartNewChat(); onDismiss() }
-            DrawerAction(strings.refresh, Icons.Outlined.Refresh) { onRefresh(); onDismiss() }
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = { onLogout(); onDismiss() }, modifier = Modifier.fillMaxWidth()) { Text(strings.logout) }
+        }
+        Spacer(Modifier.height(12.dp))
+        AndroidMenuRow(strings.allContacts, Icons.Outlined.Info) { onContacts(); onDismiss() }
+        AndroidMenuRow(strings.newChat, Icons.Outlined.Menu) { onStartNewChat(); onDismiss() }
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable { onDismiss() },
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Star, contentDescription = null, tint = Color(0xFFFFD700))
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(strings.stars, fontWeight = FontWeight.SemiBold)
+                    Text("0.00 ${strings.stars}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        AndroidMenuRow(strings.settings, Icons.Outlined.Settings) { onSettings(); onDismiss() }
+        AndroidMenuRow(strings.refresh, Icons.Outlined.Refresh) { onRefresh(); onDismiss() }
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = { onLogout(); onDismiss() }, modifier = Modifier.fillMaxWidth()) { Text(strings.logout) }
+        Spacer(Modifier.height(8.dp))
+        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(strings.brandName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            Text("vDesktop Kotlin", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun DrawerAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+private fun AndroidMenuRow(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(label, style = MaterialTheme.typography.bodyLarge)
+        Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(12.dp))
+            Text(text, fontWeight = FontWeight.SemiBold)
+        }
     }
+    Spacer(Modifier.height(8.dp))
 }
 
 @Composable
@@ -677,15 +1075,35 @@ private fun AndroidStyleConversationPane(
     onBackToChats: () -> Unit,
     onSend: (String) -> Unit,
     onTyping: () -> Unit,
+    onOpenAttachments: () -> Unit,
+    onOpenStickers: () -> Unit,
+    onOpenChatInfo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var draft by rememberSaveable(chat.id) { mutableStateOf("") }
     val listState = rememberLazyListState()
-    var contextMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
+    val scope = rememberCoroutineScope()
+    var contextMenuState by remember { mutableStateOf<AndroidContextMenuState?>(null) }
     var showMoreMenu by remember { mutableStateOf(false) }
+    var replyingToMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
+    var editingMessage by remember { mutableStateOf<NoveoHomeMessage?>(null) }
+    val pinnedMessage = remember(state.messages) { state.messages.lastOrNull { it.isPinned } }
+
+    LaunchedEffect(editingMessage?.id) {
+        editingMessage?.let { draft = it.text }
+    }
 
     LaunchedEffect(chat.id, state.messages.size) {
-        if (state.messages.isNotEmpty()) listState.scrollToItem(state.messages.lastIndex)
+        if (state.messages.isNotEmpty()) {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: state.messages.lastIndex
+            val nearBottom = state.messages.lastIndex - lastVisible <= 2
+            if (nearBottom) listState.animateScrollToItem(state.messages.lastIndex)
+            else if (listState.layoutInfo.totalItemsCount == 0) listState.scrollToItem(state.messages.lastIndex)
+        }
+    }
+
+    val showScrollToBottom = remember(state.messages.size, listState.firstVisibleItemIndex) {
+        state.messages.isNotEmpty() && listState.firstVisibleItemIndex < state.messages.lastIndex - 8
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(tgColors.chatSurface)) {
@@ -693,23 +1111,29 @@ private fun AndroidStyleConversationPane(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 8.dp, top = 64.dp, end = 8.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(start = 8.dp, top = if (pinnedMessage != null) 104.dp else 64.dp, end = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             if (state.messages.isEmpty()) item { EmptyMessagesSurface(strings, tgColors) }
             itemsIndexed(state.messages, key = { _, message -> message.id }) { index, message ->
                 val prev = state.messages.getOrNull(index - 1)
                 val next = state.messages.getOrNull(index + 1)
-                val showSenderInfo = !message.isOutgoing && (prev == null || prev.senderId != message.senderId)
-                val hasTail = next == null || next.senderId != message.senderId
+                if (message.dateLabel.isNotBlank() && prev?.dateLabel != message.dateLabel) {
+                    AndroidDateSeparator(message.dateLabel, tgColors)
+                }
+                val sameAuthorAsPrevious = prev != null && prev.senderId == message.senderId && prev.dateLabel == message.dateLabel
+                val sameAuthorAsNext = next != null && next.senderId == message.senderId && next.dateLabel == message.dateLabel
+                val showSenderInfo = !message.isOutgoing && !sameAuthorAsPrevious
+                val hasTail = !sameAuthorAsNext
                 AndroidStyleMessageRow(
                     message = message,
                     strings = strings,
                     showSenderInfo = showSenderInfo,
                     hasTail = hasTail,
+                    isGroupChat = chat.chatType != "private",
                     maxBubbleWidth = maxBubbleWidth,
                     tgColors = tgColors,
-                    onOpenMenu = { contextMessage = message }
+                    onOpenMenu = { bounds -> contextMenuState = AndroidContextMenuState(message = message, bubbleBounds = bounds) }
                 )
             }
         }
@@ -737,7 +1161,10 @@ private fun AndroidStyleConversationPane(
                     tint = tgColors.headerIcon,
                     modifier = Modifier.padding(start = 4.dp).alpha(if (compact) 1f else 0f)
                 )
-                Row(modifier = Modifier.weight(1f).padding(vertical = 4.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f).padding(vertical = 4.dp, horizontal = 4.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onOpenChatInfo),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     ProfileCircle(name = chat.title, isSavedMessages = chat.title == strings.savedMessages || chat.title == "Saved Messages", size = 40.dp)
                     Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
@@ -771,10 +1198,49 @@ private fun AndroidStyleConversationPane(
                 }
                 HeaderIconButton(icon = Icons.Outlined.Call, onClick = {}, tint = tgColors.headerIcon)
                 Box {
-                    HeaderIconButton(icon = Icons.Outlined.Search, onClick = { showMoreMenu = true }, tint = tgColors.headerIcon, modifier = Modifier.padding(end = 4.dp))
+                    HeaderIconButton(icon = Icons.Outlined.MoreVert, onClick = { showMoreMenu = true }, tint = tgColors.headerIcon, modifier = Modifier.padding(end = 4.dp))
                     DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
+                        DropdownMenuItem(text = { Text(strings.chatInfo) }, onClick = { showMoreMenu = false; onOpenChatInfo() })
+                        DropdownMenuItem(text = { Text(strings.searchMessages) }, onClick = { showMoreMenu = false })
                         DropdownMenuItem(text = { Text(strings.refresh) }, onClick = { showMoreMenu = false })
                     }
+                }
+            }
+        }
+
+
+        pinnedMessage?.let { pinned ->
+            AndroidPinnedMessageBar(
+                message = pinned,
+                strings = strings,
+                tgColors = tgColors,
+                modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).offset(y = 56.dp)
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showScrollToBottom,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 76.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(42.dp).clickable {
+                    scope.launch {
+                        val target = state.messages.lastIndex
+                        if (target >= 0) {
+                            if (listState.firstVisibleItemIndex < target - 20) listState.scrollToItem((target - 10).coerceAtLeast(0))
+                            listState.animateScrollToItem(target)
+                        }
+                    }
+                },
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 4.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
                 }
             }
         }
@@ -793,22 +1259,82 @@ private fun AndroidStyleConversationPane(
                 enabled = chat.canChat && state.canSendMessage,
                 sending = state.isSendingMessage,
                 tgColors = tgColors,
+                replyingTo = replyingToMessage,
+                editingMessage = editingMessage,
+                onCancelReply = { replyingToMessage = null },
+                onCancelEdit = { editingMessage = null; draft = "" },
+                onOpenAttachments = onOpenAttachments,
+                onOpenStickers = onOpenStickers,
                 onSend = {
                     val text = draft.trim()
                     if (text.isNotBlank()) {
                         draft = ""
+                        replyingToMessage = null
+                        editingMessage = null
                         onSend(text)
                     }
                 }
             )
         }
 
-        contextMessage?.let { message ->
+        contextMenuState?.let { menuState ->
             MessageContextMenuOverlay(
-                message = message,
+                state = menuState,
                 strings = strings,
                 tgColors = tgColors,
-                onDismiss = { contextMessage = null }
+                onReply = { replyingToMessage = menuState.message; editingMessage = null; contextMenuState = null },
+                onEdit = { editingMessage = menuState.message; replyingToMessage = null; contextMenuState = null },
+                onDismiss = { contextMenuState = null }
+            )
+        }
+    }
+}
+
+@Composable
+private fun AndroidPinnedMessageBar(
+    message: NoveoHomeMessage,
+    strings: NoveoStrings,
+    tgColors: TelegramHomeColors,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        color = tgColors.incomingBubble.copy(alpha = 0.98f),
+        tonalElevation = 1.dp,
+        shadowElevation = 1.dp
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.width(3.dp).height(34.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(strings.pinnedMessage, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(
+                    text = message.text.ifBlank { message.attachmentName ?: strings.messagePlaceholder },
+                    color = tgColors.headerSubtitle,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = tgColors.headerIcon, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun AndroidDateSeparator(label: String, tgColors: TelegramHomeColors) {
+    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+        Surface(
+            color = tgColors.incomingBubble.copy(alpha = if (tgColors.isDark) 0.55f else 0.80f),
+            shape = RoundedCornerShape(14.dp),
+            shadowElevation = 0.5.dp
+        ) {
+            Text(
+                label,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                color = tgColors.headerSubtitle,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
             )
         }
     }
@@ -841,48 +1367,301 @@ private fun AndroidStyleMessageRow(
     strings: NoveoStrings,
     showSenderInfo: Boolean,
     hasTail: Boolean,
+    isGroupChat: Boolean,
     maxBubbleWidth: androidx.compose.ui.unit.Dp,
     tgColors: TelegramHomeColors,
-    onOpenMenu: () -> Unit
+    onOpenMenu: (Rect) -> Unit
 ) {
-    val ownMessage = message.isOutgoing
-    Row(
-        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = onOpenMenu),
-        horizontalArrangement = if (ownMessage) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Bottom
-    ) {
-        if (!ownMessage && hasTail) {
-            ProfileCircle(name = message.senderName, size = 28.dp)
-            Spacer(Modifier.width(4.dp))
-        } else if (!ownMessage) {
-            Spacer(Modifier.width(32.dp))
+    if (message.isSystem) {
+        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+            Surface(color = tgColors.chatSurface.copy(alpha = 0.45f), shape = CircleShape) {
+                Text(
+                    text = message.text.ifBlank { strings.noMessagesYet },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
-        Surface(
-            modifier = Modifier.widthIn(max = maxBubbleWidth),
-            shape = TelegramBubbleShape(isOutgoing = ownMessage, hasTail = hasTail),
-            color = if (ownMessage) tgColors.outgoingBubble else tgColors.incomingBubble,
-            shadowElevation = 0.dp
-        ) {
-            Column(Modifier.padding(start = if (ownMessage) 12.dp else 14.dp, end = 12.dp, top = 7.dp, bottom = 6.dp)) {
-                if (showSenderInfo) {
-                    Text(message.senderName, color = tgColors.incomingLink, fontWeight = FontWeight.Bold, fontSize = 13.sp, lineHeight = 16.sp)
-                    Spacer(Modifier.height(2.dp))
+        return
+    }
+
+    val ownMessage = message.isOutgoing
+    var bubbleBounds by remember(message.id) { mutableStateOf(Rect.Zero) }
+    var pendingIntroStarted by remember(message.id) { mutableStateOf(false) }
+    LaunchedEffect(message.id) { pendingIntroStarted = true }
+    val pendingIntroFraction by animateFloatAsState(
+        targetValue = if (pendingIntroStarted) 1f else 0f,
+        animationSpec = tween(140, easing = FastOutSlowInEasing),
+        label = "message_pending_intro"
+    )
+
+    Column(
+        horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = if (showSenderInfo) 10.dp else 0.dp)
+            .padding(bottom = if (hasTail) 6.dp else 0.dp)
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { onOpenMenu(bubbleBounds) },
+                onLongClick = { onOpenMenu(bubbleBounds) }
+            )
+            .graphicsLayer {
+                if (message.pending) {
+                    translationY = (1f - pendingIntroFraction) * 18f
+                    translationX = (1f - pendingIntroFraction) * if (ownMessage) 26f else -26f
+                    alpha = 0.35f + (0.65f * pendingIntroFraction)
+                    scaleX = 0.92f + (0.08f * pendingIntroFraction)
+                    scaleY = 0.92f + (0.08f * pendingIntroFraction)
+                    transformOrigin = TransformOrigin(if (ownMessage) 1f else 0f, 1f)
                 }
-                if (message.forwarded) {
-                    Text(strings.forwarded, color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(2.dp))
+            }
+    ) {
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+            if (!ownMessage && isGroupChat) {
+                if (hasTail) {
+                    ProfileCircle(name = message.senderName, size = 36.dp)
+                } else {
+                    Spacer(Modifier.width(36.dp))
                 }
-                Text(message.text, color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText, fontSize = 15.sp, lineHeight = 20.sp)
-                Row(modifier = Modifier.align(Alignment.End).padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = buildString {
-                            append(message.time)
-                            if (message.edited) append(" · ${strings.edit.lowercase()}")
-                            if (message.pending) append(" · ${strings.sending}")
-                        },
-                        fontSize = 11.sp,
-                        color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
-                    )
+                Spacer(Modifier.width(8.dp))
+            } else if (ownMessage) {
+                Spacer(Modifier.weight(1f))
+            }
+
+            Column(
+                horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
+                modifier = if (ownMessage) Modifier else Modifier.weight(1f, false)
+            ) {
+                Surface(
+                    modifier = Modifier.widthIn(max = maxBubbleWidth).onGloballyPositioned { bubbleBounds = it.boundsInRoot() },
+                    shape = TelegramBubbleShape(
+                        isOutgoing = ownMessage,
+                        hasTail = hasTail,
+                        cornerRadius = with(androidx.compose.ui.platform.LocalDensity.current) { 16.dp.toPx() }
+                    ),
+                    color = if (ownMessage) tgColors.outgoingBubble else tgColors.incomingBubble,
+                    shadowElevation = 0.5.dp
+                ) {
+                    Column(modifier = Modifier.padding(6.dp).padding(horizontal = 4.dp)) {
+                        if (!ownMessage && isGroupChat && showSenderInfo) {
+                            Text(
+                                text = message.senderName,
+                                color = tgColors.incomingLink,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                lineHeight = 16.sp,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                            )
+                        }
+
+                        if (message.forwarded) {
+                            Row(modifier = Modifier.padding(start = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                                    contentDescription = null,
+                                    tint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
+                                    modifier = Modifier.size(14.dp).scale(-1f, 1f)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = strings.forwarded,
+                                    fontSize = 12.sp,
+                                    color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.78f),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        if (!message.replyAuthor.isNullOrBlank() || !message.replyPreview.isNullOrBlank()) {
+                            Surface(
+                                modifier = Modifier.padding(bottom = 4.dp),
+                                color = if (ownMessage) tgColors.replyOutgoing else tgColors.replyIncoming,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(2.dp)
+                                            .height(28.dp)
+                                            .background(if (ownMessage) tgColors.outgoingText.copy(alpha = 0.6f) else tgColors.incomingLink, RoundedCornerShape(1.dp))
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = message.replyAuthor ?: strings.reply,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = message.replyPreview.orEmpty(),
+                                            fontSize = 13.sp,
+                                            color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!message.attachmentName.isNullOrBlank()) {
+                            AndroidAttachmentChip(
+                                message = message,
+                                ownMessage = ownMessage,
+                                tgColors = tgColors
+                            )
+                            if (message.text.isNotBlank()) Spacer(Modifier.height(4.dp))
+                        }
+
+                        if (message.text.isNotBlank()) {
+                            Text(
+                                text = message.text,
+                                color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText,
+                                fontSize = 16.sp,
+                                lineHeight = 20.sp,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            )
+                        }
+
+                        if (message.reactions.isNotEmpty()) {
+                            Spacer(Modifier.height(4.dp))
+                            ReactionChipRow(message = message, ownMessage = ownMessage, tgColors = tgColors)
+                        }
+
+                        if (message.botButtons.isNotEmpty()) {
+                            Spacer(Modifier.height(6.dp))
+                            AndroidInlineKeyboard(buttonRows = message.botButtons, ownMessage = ownMessage, tgColors = tgColors)
+                        }
+
+                        Row(modifier = Modifier.align(Alignment.End).padding(top = 1.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (message.edited) {
+                                Text(
+                                    strings.edited,
+                                    fontSize = 11.sp,
+                                    color = (if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime).copy(alpha = 0.7f),
+                                    modifier = Modifier.padding(end = 4.dp)
+                                )
+                            }
+                            Text(
+                                message.time,
+                                fontSize = 11.sp,
+                                color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime
+                            )
+                            if (ownMessage) {
+                                Spacer(Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = when {
+                                        message.pending -> Icons.Outlined.Schedule
+                                        message.seen -> Icons.Outlined.DoneAll
+                                        else -> Icons.Outlined.Check
+                                    },
+                                    contentDescription = null,
+                                    modifier = Modifier.size(if (message.seen) 15.dp else 13.dp),
+                                    tint = tgColors.outgoingTime
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidInlineKeyboard(buttonRows: List<List<String>>, ownMessage: Boolean, tgColors: TelegramHomeColors) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+        buttonRows.take(4).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                row.take(3).forEach { label ->
+                    Surface(
+                        modifier = Modifier.weight(1f).height(34.dp).clickable { },
+                        shape = RoundedCornerShape(9.dp),
+                        color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.10f),
+                        border = BorderStroke(1.dp, (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.14f))
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp)) {
+                            Text(
+                                label,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidAttachmentChip(message: NoveoHomeMessage, ownMessage: Boolean, tgColors: TelegramHomeColors) {
+    val attachmentName = message.attachmentName ?: return
+    val isImage = message.attachmentType?.startsWith("image/", ignoreCase = true) == true
+    val isVideo = message.attachmentType?.startsWith("video/", ignoreCase = true) == true
+    val isAudio = message.attachmentType?.startsWith("audio/", ignoreCase = true) == true
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+        shape = RoundedCornerShape(if (isImage || isVideo) 14.dp else 12.dp),
+        color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = if (isImage || isVideo) 0.13f else 0.10f)
+    ) {
+        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(9.dp)).background((if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = when {
+                        isAudio -> Icons.Outlined.Mic
+                        isImage || isVideo -> Icons.Outlined.Star
+                        else -> Icons.Outlined.Description
+                    },
+                    contentDescription = null,
+                    tint = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(attachmentName, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(message.attachmentSizeLabel ?: message.attachmentType ?: stringsFileLabel(message.attachmentType), maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (ownMessage) tgColors.outgoingTime else tgColors.incomingTime, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+private fun stringsFileLabel(type: String?): String = when {
+    type == null -> "File"
+    type.startsWith("image/", ignoreCase = true) -> "Photo"
+    type.startsWith("video/", ignoreCase = true) -> "Video"
+    type.startsWith("audio/", ignoreCase = true) -> "Audio"
+    else -> "File"
+}
+
+@Composable
+private fun ReactionChipRow(message: NoveoHomeMessage, ownMessage: Boolean, tgColors: TelegramHomeColors) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(horizontal = 4.dp).wrapContentHeight()) {
+        message.reactions.entries.take(4).forEach { (emoji, count) ->
+            if (count > 0) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = (if (ownMessage) tgColors.outgoingText else tgColors.incomingLink).copy(alpha = 0.10f)
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(emoji, fontSize = 12.sp)
+                        Spacer(Modifier.width(2.dp))
+                        Text(count.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink)
+                    }
                 }
             }
         }
@@ -897,11 +1676,21 @@ private fun AndroidStyleComposer(
     enabled: Boolean,
     sending: Boolean,
     tgColors: TelegramHomeColors,
+    replyingTo: NoveoHomeMessage? = null,
+    editingMessage: NoveoHomeMessage? = null,
+    onCancelReply: () -> Unit = {},
+    onCancelEdit: () -> Unit = {},
+    onOpenAttachments: () -> Unit = {},
+    onOpenStickers: () -> Unit = {},
     onSend: () -> Unit
 ) {
     val showSendButton = draft.isNotBlank() || sending
-    val targetButtonColor = if (!showSendButton) tgColors.composerField else tgColors.composerBlue
-    val targetScale by animateFloatAsState(targetValue = if (showSendButton) 1f else 0.95f, animationSpec = tween(150), label = "androidMicSendScale")
+    val buttonColor by animateColorAsState(
+        targetValue = if (sending) Color.Red else if (!showSendButton) tgColors.composerField else tgColors.composerBlue,
+        label = "buttonColor"
+    )
+    val iconColor = if (!showSendButton) tgColors.composerIcon else Color.White
+    val micScale by animateFloatAsState(targetValue = if (showSendButton) 1f else 0.96f, animationSpec = tween(150), label = "micScale")
 
     Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp).padding(bottom = 4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
@@ -911,57 +1700,93 @@ private fun AndroidStyleComposer(
                 color = tgColors.composerField,
                 shadowElevation = 1.dp
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                ) {
-                    HeaderIconButton(
-                        icon = Icons.Outlined.InsertEmoticon,
-                        onClick = {},
-                        tint = tgColors.composerIcon,
-                        modifier = Modifier.padding(start = 4.dp).size(40.dp)
-                    )
-                    Box(modifier = Modifier.weight(1f).padding(vertical = 10.dp, horizontal = 4.dp), contentAlignment = Alignment.CenterStart) {
-                        if (draft.isBlank()) {
-                            Text(placeholder, color = tgColors.composerHint, fontSize = 17.sp)
+                Box(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = Alignment.CenterStart) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        if (replyingTo != null) {
+                            AndroidComposerContextBar(
+                                title = replyingTo.senderName,
+                                preview = replyingTo.text.ifBlank { replyingTo.attachmentName ?: stringsFileLabel(replyingTo.attachmentType) },
+                                tgColors = tgColors,
+                                onCancel = onCancelReply
+                            )
                         }
-                        BasicTextField(
-                            value = draft,
-                            onValueChange = onDraftChange,
-                            enabled = enabled && !sending,
-                            cursorBrush = SolidColor(tgColors.composerCursor),
-                            textStyle = TextStyle(color = tgColors.composerText, fontSize = 17.sp, lineHeight = 22.sp),
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 6
+                        if (editingMessage != null) {
+                            AndroidComposerContextBar(
+                                title = "Edit Message",
+                                preview = editingMessage.text,
+                                tgColors = tgColors,
+                                onCancel = onCancelEdit
+                            )
+                        }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        ComposerGlassIconButton(
+                            icon = Icons.Outlined.InsertEmoticon,
+                            contentDescription = "Emoji",
+                            tint = tgColors.composerIcon,
+                            onClick = onOpenStickers,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+
+                        Box(modifier = Modifier.weight(1f).padding(vertical = 10.dp, horizontal = 4.dp), contentAlignment = Alignment.CenterStart) {
+                            if (draft.isBlank()) {
+                                Text(placeholder, color = tgColors.composerHint, fontSize = 17.sp)
+                            }
+                            BasicTextField(
+                                value = draft,
+                                onValueChange = onDraftChange,
+                                enabled = enabled && !sending,
+                                cursorBrush = SolidColor(tgColors.composerCursor),
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, color = tgColors.composerText, lineHeight = 22.sp),
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 6
+                            )
+                        }
+
+                        ComposerGlassIconButton(
+                            icon = Icons.Outlined.AttachFile,
+                            contentDescription = "Attach",
+                            tint = tgColors.composerIcon,
+                            onClick = onOpenAttachments,
+                            modifier = Modifier.padding(end = 4.dp)
                         )
                     }
-                    HeaderIconButton(
-                        icon = Icons.Outlined.AttachFile,
-                        onClick = {},
-                        tint = tgColors.composerIcon,
-                        modifier = Modifier.padding(end = 4.dp).size(40.dp)
-                    )
+                    }
                 }
             }
-            Spacer(Modifier.width(6.dp))
-            Surface(
-                modifier = Modifier.size(48.dp).graphicsLayer { scaleX = targetScale; scaleY = targetScale },
-                shape = CircleShape,
-                color = targetButtonColor,
-                shadowElevation = 1.dp
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.size(48.dp))
+        }
+
+        Surface(
+            modifier = Modifier.align(Alignment.BottomEnd).size(48.dp).scale(micScale),
+            shape = CircleShape,
+            color = buttonColor,
+            shadowElevation = 1.dp
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize().clip(CircleShape).clickable(enabled = enabled && !sending && showSendButton, onClick = onSend),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize().clickable(enabled = enabled && !sending && draft.isNotBlank(), onClick = onSend),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (sending) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
-                    } else {
+                if (sending) {
+                    Icon(Icons.Outlined.Close, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))
+                } else {
+                    AnimatedContent(
+                        targetState = !showSendButton,
+                        transitionSpec = {
+                            if (!targetState) {
+                                (fadeIn(tween(200)) + slideInHorizontally(tween(250, easing = FastOutSlowInEasing)) { -it })
+                                    .togetherWith(fadeOut(tween(150)))
+                            } else {
+                                fadeIn(tween(150)).togetherWith(fadeOut(tween(150)))
+                            }
+                        },
+                        label = "send_icon"
+                    ) { targetIsMic ->
                         Icon(
-                            imageVector = if (showSendButton) Icons.Outlined.Send else Icons.Outlined.Mic,
+                            imageVector = if (targetIsMic) Icons.Outlined.Mic else Icons.Outlined.Send,
                             contentDescription = null,
-                            tint = if (showSendButton) Color.White else tgColors.composerIcon,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = if (targetIsMic) 0f else -25f },
+                            tint = iconColor
                         )
                     }
                 }
@@ -971,8 +1796,74 @@ private fun AndroidStyleComposer(
 }
 
 @Composable
-private fun MessageContextMenuOverlay(message: NoveoHomeMessage, strings: NoveoStrings, tgColors: TelegramHomeColors, onDismiss: () -> Unit) {
-    Box(Modifier.fillMaxSize()) {
+private fun AndroidComposerContextBar(
+    title: String,
+    preview: String,
+    tgColors: TelegramHomeColors,
+    onCancel: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.width(2.dp).height(30.dp).background(tgColors.composerBlue, RoundedCornerShape(1.dp)))
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp), color = tgColors.composerBlue, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(preview, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = tgColors.composerHint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
+            Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(17.dp), tint = tgColors.composerHint)
+        }
+    }
+}
+
+@Composable
+private fun ComposerGlassIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    tint: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.size(38.dp).clip(CircleShape).background(Color.Transparent, CircleShape).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(22.dp), tint = tint)
+    }
+}
+
+private data class AndroidContextMenuState(
+    val message: NoveoHomeMessage,
+    val bubbleBounds: Rect
+)
+
+@Composable
+private fun MessageContextMenuOverlay(
+    state: AndroidContextMenuState,
+    strings: NoveoStrings,
+    tgColors: TelegramHomeColors,
+    onReply: () -> Unit,
+    onEdit: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val message = state.message
+    var expanded by remember { mutableStateOf(false) }
+    var animateIn by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { animateIn = true }
+    val wrapperScale by animateFloatAsState(
+        targetValue = if (animateIn) 1f else 0.85f,
+        animationSpec = tween(250, easing = FastOutSlowInEasing),
+        label = "contextMenuScale"
+    )
+    val wrapperAlpha by animateFloatAsState(
+        targetValue = if (animateIn) 1f else 0f,
+        animationSpec = tween(200),
+        label = "contextMenuAlpha"
+    )
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.42f)).clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -980,51 +1871,137 @@ private fun MessageContextMenuOverlay(message: NoveoHomeMessage, strings: NoveoS
                 onClick = onDismiss
             )
         )
+
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val menuWidthPx = with(density) { 320.dp.toPx() }
+        val reactionHeight = if (expanded) 320.dp else 52.dp
+        val actionRows = 4 + if (message.isOutgoing && message.text.isNotBlank()) 1 else 0
+        val actionHeightPx = with(density) { reactionHeight.toPx() + 6.dp.toPx() + (8.dp + (actionRows * 40).dp).toPx() }
+        val safePx = with(density) { 8.dp.toPx() }
+        val safeBottomPx = with(density) { 16.dp.toPx() }
+        val gapPx = with(density) { 10.dp.toPx() }
+        val screenWidthPx = with(density) { maxWidth.toPx() }
+        val screenHeightPx = with(density) { maxHeight.toPx() }
+        val preferredLeft = if (message.isOutgoing) {
+            state.bubbleBounds.right - menuWidthPx + with(density) { 32.dp.toPx() }
+        } else {
+            state.bubbleBounds.left - with(density) { 32.dp.toPx() }
+        }
+        val left = preferredLeft.coerceIn(safePx, (screenWidthPx - menuWidthPx - safePx).coerceAtLeast(safePx))
+        val spaceAbove = state.bubbleBounds.top - safePx - gapPx
+        val spaceBelow = screenHeightPx - state.bubbleBounds.bottom - safeBottomPx - gapPx
+        val renderBelow = spaceAbove < actionHeightPx && spaceBelow > with(density) { 64.dp.toPx() }
+        val preferredTop = if (renderBelow) state.bubbleBounds.bottom + gapPx else state.bubbleBounds.top - actionHeightPx - gapPx
+        val top = preferredTop.coerceIn(safePx, (screenHeightPx - actionHeightPx - safeBottomPx).coerceAtLeast(safePx))
+
         Column(
             modifier = Modifier
-                .align(if (message.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart)
-                .padding(18.dp),
+                .offset { IntOffset(left.roundToInt(), top.roundToInt()) }
+                .graphicsLayer {
+                    alpha = wrapperAlpha
+                    scaleX = wrapperScale
+                    scaleY = wrapperScale
+                    transformOrigin = TransformOrigin(0.5f, if (renderBelow) 0f else 1f)
+                },
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            if (renderBelow && !expanded) {
+                AndroidMessageActionMenu(message, strings, tgColors, onReply, onEdit, onDismiss)
+            }
+
             Surface(
                 color = tgColors.incomingBubble,
-                shape = RoundedCornerShape(26.dp),
+                shape = RoundedCornerShape(if (expanded) 18.dp else 26.dp),
                 shadowElevation = 8.dp
             ) {
-                Row(
-                    modifier = Modifier.width(320.dp).height(52.dp).padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    ANDROID_CONTEXT_MENU_REACTIONS.forEach { emoji ->
-                        Box(
-                            modifier = Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onDismiss),
-                            contentAlignment = Alignment.Center
+                if (expanded) {
+                    Column(modifier = Modifier.width(320.dp).height(320.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(emoji, fontSize = 20.sp)
+                            Text(strings.reactions, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = tgColors.incomingTime)
+                            Box(
+                                modifier = Modifier.size(28.dp).clip(CircleShape).background(if (tgColors.isDark) Color(0xFF2C353F) else Color(0xFFF0F2F5)).clickable { expanded = false },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = tgColors.incomingTime, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(6),
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(ANDROID_CONTEXT_MENU_REACTIONS) { emoji ->
+                                ReactionButton(emoji = emoji, expanded = true, tgColors = tgColors, onClick = onDismiss)
+                            }
                         }
                     }
-                    Box(
-                        modifier = Modifier.size(32.dp).clip(CircleShape).background(if (tgColors.isDark) Color(0xFF2C353F) else Color(0xFFF0F2F5)),
-                        contentAlignment = Alignment.Center
+                } else {
+                    Row(
+                        modifier = Modifier.width(320.dp).height(52.dp).padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = tgColors.incomingTime, modifier = Modifier.size(18.dp))
+                        ANDROID_CONTEXT_MENU_QUICK_REACTIONS.forEach { emoji ->
+                            ReactionButton(emoji = emoji, expanded = false, tgColors = tgColors, onClick = onDismiss)
+                        }
+                        Box(
+                            modifier = Modifier.size(32.dp).clip(CircleShape).background(if (tgColors.isDark) Color(0xFF2C353F) else Color(0xFFF0F2F5)).clickable { expanded = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = tgColors.incomingTime, modifier = Modifier.size(18.dp))
+                        }
                     }
                 }
             }
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = tgColors.incomingBubble,
-                shadowElevation = 8.dp
-            ) {
-                Column(Modifier.width(220.dp).padding(vertical = 4.dp)) {
-                    MenuItem(strings.reply, Icons.Outlined.Reply, tgColors.headerIcon, tgColors.incomingText, onDismiss)
-                    MenuItem(strings.copyText, Icons.Outlined.ContentCopy, tgColors.headerIcon, tgColors.incomingText, onDismiss)
-                    if (message.isOutgoing) MenuItem(strings.edit, Icons.Outlined.Edit, tgColors.headerIcon, tgColors.incomingText, onDismiss)
-                    MenuItem(strings.forward, Icons.AutoMirrored.Outlined.ArrowForward, tgColors.headerIcon, tgColors.incomingText, onDismiss)
-                    MenuItem(strings.delete, Icons.Outlined.Delete, Color(0xFFE53935), Color(0xFFE53935), onDismiss)
-                }
+
+            if (!renderBelow && !expanded) {
+                AndroidMessageActionMenu(message, strings, tgColors, onReply, onEdit, onDismiss)
             }
+        }
+    }
+}
+
+@Composable
+private fun ReactionButton(emoji: String, expanded: Boolean, tgColors: TelegramHomeColors, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(if (expanded) (if (tgColors.isDark) Color(0xFF2C353F) else Color(0xFFF0F2F5)) else Color.Transparent)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = emoji, fontSize = 20.sp)
+    }
+}
+
+@Composable
+private fun AndroidMessageActionMenu(
+    message: NoveoHomeMessage,
+    strings: NoveoStrings,
+    tgColors: TelegramHomeColors,
+    onReply: () -> Unit,
+    onEdit: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = tgColors.incomingBubble,
+        shadowElevation = 8.dp
+    ) {
+        Column(Modifier.width(220.dp).padding(vertical = 4.dp)) {
+            MenuItem(strings.reply, Icons.AutoMirrored.Outlined.ArrowBack, tgColors.headerIcon, tgColors.incomingText, onReply)
+            if (message.isOutgoing && message.text.isNotBlank()) {
+                MenuItem(strings.edit, Icons.Outlined.Edit, tgColors.headerIcon, tgColors.incomingText, onEdit)
+            }
+            MenuItem(if (message.text.isNotBlank()) strings.copyText else strings.download, Icons.Outlined.Description, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+            MenuItem(strings.forward, Icons.AutoMirrored.Outlined.ArrowForward, tgColors.headerIcon, tgColors.incomingText, onDismiss)
+            MenuItem(strings.delete, Icons.Outlined.Delete, Color(0xFFE53935), Color(0xFFE53935), onDismiss)
         }
     }
 }
@@ -1045,26 +2022,59 @@ private fun MenuItem(label: String, icon: androidx.compose.ui.graphics.vector.Im
 private fun HeaderIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
-    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
     modifier: Modifier = Modifier
 ) {
-    IconButton(onClick = onClick, modifier = modifier.size(44.dp)) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+    Box(
+        modifier = modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = tint)
     }
 }
 
 @Composable
-private fun ProfileCircle(name: String, isSavedMessages: Boolean = false, size: androidx.compose.ui.unit.Dp = 48.dp, modifier: Modifier = Modifier) {
-    val colors = if (isSavedMessages) listOf(Color(0xFF60A5FA), Color(0xFF2563EB)) else listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.92f), MaterialTheme.colorScheme.secondary.copy(alpha = 0.82f))
+private fun ProfileCircle(
+    name: String,
+    isSavedMessages: Boolean = false,
+    size: androidx.compose.ui.unit.Dp = 40.dp,
+    modifier: Modifier = Modifier
+) {
+    if (isSavedMessages) {
+        Box(
+            modifier = modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Outlined.Bookmark, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.6f))
+        }
+        return
+    }
+
     Box(
-        modifier = modifier.size(size).clip(CircleShape).background(Brush.linearGradient(colors)),
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
+                    )
+                )
+            ),
         contentAlignment = Alignment.Center
     ) {
-        if (isSavedMessages) {
-            Icon(Icons.Outlined.AccountCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.58f))
-        } else {
-            Text(name.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = (size.value * 0.38f).sp)
-        }
+        Text(name.firstOrNull()?.uppercase() ?: "N", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
     }
 }
 

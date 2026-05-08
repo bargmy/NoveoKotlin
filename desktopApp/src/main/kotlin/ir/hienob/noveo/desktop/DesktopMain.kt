@@ -38,7 +38,7 @@ fun main() = application {
             exitApplication()
         },
         title = "Noveo",
-        state = rememberWindowState(size = DpSize(430.dp, 900.dp)),
+        state = rememberWindowState(size = DpSize(1180.dp, 760.dp)),
         resizable = true
     ) {
         val state by desktopState.state.collectAsState()
