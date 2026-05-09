@@ -5257,7 +5257,6 @@ private fun GlobalAudioMiniPlayer(
 }
 
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VoiceCallOverlay(
     state: ir.hienob.noveo.data.VoiceChatState,
@@ -5271,146 +5270,240 @@ fun VoiceCallOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f))
+            .background(Color.Black.copy(alpha = 0.45f))
             .clickable(enabled = false) {},
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.BottomCenter
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(24.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            shadowElevation = 12.dp
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                IconButton(onClick = onMinimize) {
-                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = strings.minimize)
-                }
-                
-                Text(
-                    text = strings.voiceChat,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                Box(
+                    modifier = Modifier
+                        .width(38.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f))
                 )
-                
-                Spacer(Modifier.width(48.dp)) // To balance the minimize button
-            }
-            
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = when(state.connectionState) {
-                    ir.hienob.noveo.data.VoiceConnectionState.CONNECTING -> strings.connecting
-                    ir.hienob.noveo.data.VoiceConnectionState.RECONNECTING -> strings.connecting
-                    ir.hienob.noveo.data.VoiceConnectionState.CONNECTED -> strings.online
-                    else -> "Idle"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-            
-            Spacer(Modifier.height(24.dp))
-            
-            // Participants
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                state.participantIds.forEach { id ->
-                    val user = usersById[id]
-                    val isSpeaking = state.activeSpeakers.contains(id)
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(contentAlignment = Alignment.Center) {
-                            if (isSpeaking) {
-                                Surface(
-                                    modifier = Modifier.size(52.dp),
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                                ) {}
-                            }
-                            ProfileCircle(name = user?.username ?: "User", imageUrl = user?.avatarUrl, size = 44.dp)
-                        }
-                        Text(
-                            text = user?.username?.split(" ")?.firstOrNull() ?: "User",
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 60.dp)
-                        )
-                    }
-                }
-            }
 
-            Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(18.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
                     IconButton(
-                        onClick = onToggleMute,
-                        modifier = Modifier
-                            .size(56.dp)
-                            .background(
-                                if (state.isMuted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
-                                CircleShape
-                            )
+                        onClick = onMinimize,
+                        modifier = Modifier.align(Alignment.CenterStart)
                     ) {
                         Icon(
-                            imageVector = if (state.isMuted) Icons.Outlined.MicOff else Icons.Outlined.Mic,
-                            contentDescription = if (state.isMuted) strings.micOn else strings.muted,
-                            tint = if (state.isMuted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(28.dp)
+                            Icons.Outlined.KeyboardArrowDown,
+                            contentDescription = strings.minimize,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+
                     Text(
-                        text = if (state.isMuted) strings.muted else strings.micOn,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top = 4.dp)
+                        text = strings.voiceChat,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.align(Alignment.Center)
                     )
                 }
 
-                Button(
-                    onClick = onLeave,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    shape = CircleShape,
-                    modifier = Modifier.size(64.dp)
+                Text(
+                    text = when(state.connectionState) {
+                        ir.hienob.noveo.data.VoiceConnectionState.CONNECTING -> strings.connecting
+                        ir.hienob.noveo.data.VoiceConnectionState.RECONNECTING -> strings.connecting
+                        ir.hienob.noveo.data.VoiceConnectionState.CONNECTED -> strings.online
+                        else -> "Idle"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(Icons.Outlined.Close, contentDescription = strings.leave, tint = Color.White, modifier = Modifier.size(32.dp))
+                    if (state.participantIds.isEmpty()) {
+                        VoiceParticipantListItem(
+                            user = null,
+                            isSpeaking = false,
+                            statusLabel = strings.connecting
+                        )
+                    } else {
+                        state.participantIds.forEach { id ->
+                            val user = usersById[id]
+                            val isSpeaking = state.activeSpeakers.contains(id)
+                            VoiceParticipantListItem(
+                                user = user,
+                                isSpeaking = isSpeaking,
+                                statusLabel = if (isSpeaking) "Speaking" else strings.online
+                            )
+                        }
+                    }
                 }
 
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(
-                        onClick = onToggleDeafen,
-                        modifier = Modifier
-                            .size(56.dp)
-                            .background(
-                                if (state.isDeafened) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
-                                CircleShape
+                Spacer(Modifier.height(30.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = onToggleMute,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(
+                                    if (state.isMuted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                                    CircleShape
+                                )
+                        ) {
+                            Icon(
+                                imageVector = if (state.isMuted) Icons.Outlined.MicOff else Icons.Outlined.Mic,
+                                contentDescription = if (state.isMuted) strings.micOn else strings.muted,
+                                tint = if (state.isMuted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(28.dp)
                             )
-                    ) {
-                        Icon(
-                            imageVector = if (state.isDeafened) Icons.Outlined.HeadsetOff else Icons.Outlined.Headset,
-                            contentDescription = if (state.isDeafened) strings.audioOn else strings.deafened,
-                            tint = if (state.isDeafened) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.size(28.dp)
+                        }
+                        Text(
+                            text = if (state.isMuted) strings.muted else strings.micOn,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
+
+                    Button(
+                        onClick = onLeave,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        shape = CircleShape,
+                        modifier = Modifier.size(64.dp)
+                    ) {
+                        Icon(Icons.Outlined.Close, contentDescription = strings.leave, tint = Color.White, modifier = Modifier.size(32.dp))
+                    }
+
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = onToggleDeafen,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(
+                                    if (state.isDeafened) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                                    CircleShape
+                                )
+                        ) {
+                            Icon(
+                                imageVector = if (state.isDeafened) Icons.Outlined.HeadsetOff else Icons.Outlined.Headset,
+                                contentDescription = if (state.isDeafened) strings.audioOn else strings.deafened,
+                                tint = if (state.isDeafened) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        Text(
+                            text = if (state.isDeafened) strings.deafened else strings.audioOn,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VoiceParticipantListItem(
+    user: UserSummary?,
+    isSpeaking: Boolean,
+    statusLabel: String
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier.size(52.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSpeaking) {
+                    Surface(
+                        modifier = Modifier.size(52.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+                    ) {}
+                }
+
+                ProfileCircle(
+                    name = user?.username ?: "User",
+                    imageUrl = user?.avatarUrl,
+                    size = 44.dp
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = user?.username?.split(" ")?.firstOrNull() ?: "User",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = statusLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (isSpeaking) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    shape = CircleShape
+                ) {
                     Text(
-                        text = if (state.isDeafened) strings.deafened else strings.audioOn,
+                        text = "LIVE",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
                         style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top = 4.dp)
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
