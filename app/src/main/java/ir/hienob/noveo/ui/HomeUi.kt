@@ -27,6 +27,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
@@ -5267,6 +5268,11 @@ fun VoiceCallOverlay(
     onToggleDeafen: () -> Unit,
     onMinimize: () -> Unit
 ) {
+    var sheetDragOffsetY by remember { mutableStateOf(0f) }
+    val hideThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
+    val joinedCount = remember(state.participantIds) { state.participantIds.distinct().size }
+    val joinedCountLabel = remember(joinedCount, strings) { formatVoiceJoinedCount(joinedCount, strings) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -5275,7 +5281,25 @@ fun VoiceCallOverlay(
         contentAlignment = Alignment.BottomCenter
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(0, sheetDragOffsetY.roundToInt()) }
+                .pointerInput(onMinimize) {
+                    detectVerticalDragGestures(
+                        onVerticalDrag = { _, dragAmount ->
+                            sheetDragOffsetY = (sheetDragOffsetY + dragAmount).coerceAtLeast(0f)
+                        },
+                        onDragEnd = {
+                            if (sheetDragOffsetY > hideThresholdPx) {
+                                onMinimize()
+                            }
+                            sheetDragOffsetY = 0f
+                        },
+                        onDragCancel = {
+                            sheetDragOffsetY = 0f
+                        }
+                    )
+                },
             color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             shadowElevation = 12.dp
@@ -5323,11 +5347,11 @@ fun VoiceCallOverlay(
                 }
 
                 Text(
-                    text = when(state.connectionState) {
+                    text = when (state.connectionState) {
                         ir.hienob.noveo.data.VoiceConnectionState.CONNECTING -> strings.connecting
                         ir.hienob.noveo.data.VoiceConnectionState.RECONNECTING -> strings.connecting
-                        ir.hienob.noveo.data.VoiceConnectionState.CONNECTED -> strings.online
-                        else -> "Idle"
+                        ir.hienob.noveo.data.VoiceConnectionState.CONNECTED -> joinedCountLabel
+                        else -> joinedCountLabel
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
@@ -5432,6 +5456,23 @@ fun VoiceCallOverlay(
             }
         }
     }
+}
+
+
+private fun formatVoiceJoinedCount(count: Int, strings: NoveoStrings): String {
+    val localizedCount = localizeDigits(count.toString(), strings.languageCode)
+    val rawText = when (strings.languageCode) {
+        "fa" -> "$localizedCount نفر پیوسته‌اند"
+        "ar" -> "$localizedCount مشارك"
+        "tr" -> "$localizedCount katildi"
+        "de" -> if (count == 1) "$localizedCount Person beigetreten" else "$localizedCount Personen beigetreten"
+        "ru" -> "$localizedCount участников"
+        "zh" -> "$localizedCount 人已加入"
+        "es" -> if (count == 1) "$localizedCount usuario unido" else "$localizedCount usuarios unidos"
+        "fr" -> if (count == 1) "$localizedCount utilisateur a rejoint" else "$localizedCount utilisateurs ont rejoint"
+        else -> if (count == 1) "$localizedCount user joined" else "$localizedCount users joined"
+    }
+    return if (strings.languageCode == "fa" || strings.languageCode == "ar") "\u200F$rawText" else rawText
 }
 
 @Composable
