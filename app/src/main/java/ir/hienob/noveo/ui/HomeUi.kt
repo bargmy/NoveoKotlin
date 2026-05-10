@@ -314,7 +314,8 @@ private fun formatMessageDateSeparator(timestampSeconds: Long, strings: NoveoStr
     val messageCalendar = Calendar.getInstance().apply { time = date }
     val now = Calendar.getInstance()
     val pattern = if (messageCalendar.get(Calendar.YEAR) == now.get(Calendar.YEAR)) "MMMM d" else "MMMM d, yyyy"
-    return localizeDigits(SimpleDateFormat(pattern, Locale.getDefault()).format(date), strings.languageCode)
+    val locale = Locale.forLanguageTag(strings.languageCode.ifBlank { "en" })
+    return localizeDigits(SimpleDateFormat(pattern, locale).format(date), strings.languageCode)
 }
 
 private data class JalaliDate(val year: Int, val month: Int, val day: Int)
