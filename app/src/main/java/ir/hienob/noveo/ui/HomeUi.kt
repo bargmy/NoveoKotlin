@@ -301,6 +301,91 @@ private fun formatLastSeen(lastSeen: Long?, strings: NoveoStrings): String {
     }
 }
 
+private fun messageDayKey(timestampSeconds: Long): String {
+    return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(timestampSeconds * 1000L))
+}
+
+private fun formatMessageDateSeparator(timestampSeconds: Long, strings: NoveoStrings): String {
+    if (strings.languageCode == "fa") {
+        return formatPersianMessageDateSeparator(timestampSeconds)
+    }
+
+    val date = Date(timestampSeconds * 1000L)
+    val messageCalendar = Calendar.getInstance().apply { time = date }
+    val now = Calendar.getInstance()
+    val pattern = if (messageCalendar.get(Calendar.YEAR) == now.get(Calendar.YEAR)) "MMMM d" else "MMMM d, yyyy"
+    return localizeDigits(SimpleDateFormat(pattern, Locale.getDefault()).format(date), strings.languageCode)
+}
+
+private data class JalaliDate(val year: Int, val month: Int, val day: Int)
+
+private val jalaliMonthNames = listOf(
+    "فروردین",
+    "اردیبهشت",
+    "خرداد",
+    "تیر",
+    "مرداد",
+    "شهریور",
+    "مهر",
+    "آبان",
+    "آذر",
+    "دی",
+    "بهمن",
+    "اسفند"
+)
+
+private fun formatPersianMessageDateSeparator(timestampSeconds: Long): String {
+    val messageCalendar = Calendar.getInstance().apply { timeInMillis = timestampSeconds * 1000L }
+    val nowCalendar = Calendar.getInstance()
+    val messageDate = gregorianToJalali(
+        messageCalendar.get(Calendar.YEAR),
+        messageCalendar.get(Calendar.MONTH) + 1,
+        messageCalendar.get(Calendar.DAY_OF_MONTH)
+    )
+    val nowDate = gregorianToJalali(
+        nowCalendar.get(Calendar.YEAR),
+        nowCalendar.get(Calendar.MONTH) + 1,
+        nowCalendar.get(Calendar.DAY_OF_MONTH)
+    )
+    val monthName = jalaliMonthNames.getOrElse(messageDate.month - 1) { "" }
+    val label = if (messageDate.year == nowDate.year) {
+        "${messageDate.day} $monthName"
+    } else {
+        "${messageDate.day} $monthName ${messageDate.year}"
+    }
+    return localizeDigits(label, "fa")
+}
+
+private fun gregorianToJalali(gy: Int, gm: Int, gd: Int): JalaliDate {
+    val gregorianMonthDays = intArrayOf(0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334)
+    val adjustedYear = if (gm > 2) gy + 1 else gy
+    var days = 355666 + (365 * gy) + ((adjustedYear + 3) / 4) -
+        ((adjustedYear + 99) / 100) + ((adjustedYear + 399) / 400) +
+        gd + gregorianMonthDays[gm - 1]
+
+    var jy = -1595 + 33 * (days / 12053)
+    days %= 12053
+    jy += 4 * (days / 1461)
+    days %= 1461
+
+    if (days > 365) {
+        jy += (days - 1) / 365
+        days = (days - 1) % 365
+    }
+
+    val jm: Int
+    val jd: Int
+    if (days < 186) {
+        jm = 1 + (days / 31)
+        jd = 1 + (days % 31)
+    } else {
+        jm = 7 + ((days - 186) / 30)
+        jd = 1 + ((days - 186) % 30)
+    }
+
+    return JalaliDate(jy, jm, jd)
+}
+
 @Immutable
 class TelegramBubbleShape(
     val isOutgoing: Boolean,
@@ -1585,6 +1670,33 @@ fun VerifiedIcon(modifier: Modifier = Modifier.size(14.dp)) {
 }
 
 @Composable
+private fun MessageDateSeparator(
+    label: String,
+    tgColors: TelegramThemeColors
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            color = tgColors.incomingBubble.copy(alpha = if (tgColors.isDark) 0.56f else 0.82f),
+            shape = RoundedCornerShape(14.dp),
+            shadowElevation = 0.5.dp
+        ) {
+            Text(
+                text = label,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                color = tgColors.headerSubtitle,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
 private fun PinnedMessageBanner(
     pinnedMessage: ChatMessage,
     tgColors: TelegramThemeColors,
@@ -1881,6 +1993,12 @@ private fun ChatPane(
             ) { index, message ->
                 val prevMessage = messages.getOrNull(index - 1)
                 val nextMessage = messages.getOrNull(index + 1)
+                if (prevMessage == null || messageDayKey(prevMessage.timestamp) != messageDayKey(message.timestamp)) {
+                    MessageDateSeparator(
+                        label = formatMessageDateSeparator(message.timestamp, strings),
+                        tgColors = tgColors
+                    )
+                }
                 val ownMessage = message.senderId == sessionUserId
                 val showSenderInfo = prevMessage == null ||
                     prevMessage.senderId != message.senderId ||
