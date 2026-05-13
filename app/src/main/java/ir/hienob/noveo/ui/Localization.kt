@@ -172,6 +172,11 @@ data class NoveoStrings(
     val declinedCall: String = "Declined Call",
     val join: String = "Join",
     val voiceChat: String = "Voice Chat",
+    val e2eeActive: String = "E2EE active",
+    val e2eeConnecting: String = "E2EE connecting...",
+    val e2eeEmojiNotice: String = "Encryption emojis: %s",
+    val e2eeSecretAlert: String = "You cant do anything about it, its all secret.",
+    val e2eeOfflineAlert: String = "They are offline, maybe another time.",
     val accept: String = "Accept",
     val decline: String = "Decline",
     val micOn: String = "Mic On",
@@ -1516,6 +1521,68 @@ private fun applyExtendedOverrides(strings: NoveoStrings): NoveoStrings {
             doubleTapReactionBody = "Bir mesaja cift dokundugunuzda gonderilecek tepkiyi secin."
         )
         else -> strings
+    }.withE2EEOverrides()
+}
+
+private fun NoveoStrings.withE2EEOverrides(): NoveoStrings {
+    return when (languageCode) {
+        "de" -> copy(
+            e2eeActive = "E2EE aktiv",
+            e2eeConnecting = "E2EE verbindet...",
+            e2eeEmojiNotice = "Verschluesselungs-Emojis: %s",
+            e2eeSecretAlert = "Damit kannst du nichts machen, es ist alles geheim.",
+            e2eeOfflineAlert = "Sie sind offline, vielleicht spaeter."
+        )
+        "ru" -> copy(
+            e2eeActive = "E2EE active",
+            e2eeConnecting = "E2EE connecting...",
+            e2eeEmojiNotice = "Encryption emojis: %s",
+            e2eeSecretAlert = "You cant do anything about it, its all secret.",
+            e2eeOfflineAlert = "They are offline, maybe another time."
+        )
+        "zh" -> copy(
+            e2eeActive = "E2EE active",
+            e2eeConnecting = "E2EE connecting...",
+            e2eeEmojiNotice = "Encryption emojis: %s",
+            e2eeSecretAlert = "You cant do anything about it, its all secret.",
+            e2eeOfflineAlert = "They are offline, maybe another time."
+        )
+        "fa" -> copy(
+            e2eeActive = "E2EE active",
+            e2eeConnecting = "E2EE connecting...",
+            e2eeEmojiNotice = "Encryption emojis: %s",
+            e2eeSecretAlert = "You cant do anything about it, its all secret.",
+            e2eeOfflineAlert = "They are offline, maybe another time."
+        )
+        "es" -> copy(
+            e2eeActive = "E2EE activo",
+            e2eeConnecting = "E2EE conectando...",
+            e2eeEmojiNotice = "Emojis de cifrado: %s",
+            e2eeSecretAlert = "No puedes hacer nada con esto, todo es secreto.",
+            e2eeOfflineAlert = "Esta persona esta desconectada, quiza luego."
+        )
+        "fr" -> copy(
+            e2eeActive = "E2EE actif",
+            e2eeConnecting = "Connexion E2EE...",
+            e2eeEmojiNotice = "Emojis de chiffrement : %s",
+            e2eeSecretAlert = "Vous ne pouvez rien faire avec ca, tout est secret.",
+            e2eeOfflineAlert = "Cette personne est hors ligne, peut-etre plus tard."
+        )
+        "ar" -> copy(
+            e2eeActive = "E2EE active",
+            e2eeConnecting = "E2EE connecting...",
+            e2eeEmojiNotice = "Encryption emojis: %s",
+            e2eeSecretAlert = "You cant do anything about it, its all secret.",
+            e2eeOfflineAlert = "They are offline, maybe another time."
+        )
+        "tr" -> copy(
+            e2eeActive = "E2EE aktif",
+            e2eeConnecting = "E2EE baglaniyor...",
+            e2eeEmojiNotice = "Sifreleme emojileri: %s",
+            e2eeSecretAlert = "Bununla bir sey yapamazsin, hepsi gizli.",
+            e2eeOfflineAlert = "Cevrimdisilar, belki sonra."
+        )
+        else -> this
     }
 }
 

@@ -1888,8 +1888,8 @@ private fun ChatPane(
 
     val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount, typingText, strings, messages.size, sessionUserId, e2eeActive, e2eePending) {
         if (selectedChat == null) return@remember ""
-        if (e2eeActive) return@remember "E2EE active"
-        if (e2eePending) return@remember "E2EE connecting..."
+        if (e2eeActive) return@remember strings.e2eeActive
+        if (e2eePending) return@remember strings.e2eeConnecting
         if (typingText != null) return@remember typingText
         val isSavedMessages = selectedChat.isSavedMessagesChat(sessionUserId)
         if (isSavedMessages) {
@@ -1908,10 +1908,12 @@ private fun ChatPane(
     var highlightedMessageId by remember { mutableStateOf<String?>(null) }
     var contextMenuState by remember { mutableStateOf<MessageContextMenuState?>(null) }
     var contextMenuExpanded by remember { mutableStateOf(false) }
+    var e2eeAlertMessage by remember { mutableStateOf<String?>(null) }
     var showSeenByMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var showAttachPopup by remember { mutableStateOf(false) }
     var showStickers by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+    val haptic = LocalHapticFeedback.current
     val imeVisible = WindowInsets.isImeVisible
 
 
@@ -2044,12 +2046,17 @@ private fun ChatPane(
                     onReply = { onReply(message) },
                     onToggleReaction = onToggleReaction,
                     onOpenContextMenu = { bubbleBounds ->
-                        contextMenuState = MessageContextMenuState(
-                            message = message,
-                            ownMessage = ownMessage,
-                            bubbleBounds = bubbleBounds
-                        )
-                        contextMenuExpanded = false
+                        if (message.e2ee) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            e2eeAlertMessage = strings.e2eeSecretAlert
+                        } else {
+                            contextMenuState = MessageContextMenuState(
+                                message = message,
+                                ownMessage = ownMessage,
+                                bubbleBounds = bubbleBounds
+                            )
+                            contextMenuExpanded = false
+                        }
                     },
                     onScrollToMessage = onScrollToMessage,
                     onPlayAudio = onPlayAudio,
@@ -2169,7 +2176,16 @@ private fun ChatPane(
                 if (selectedChat?.chatType == "private" && selectedChat?.isSavedMessagesChat(sessionUserId) != true) {
                     HeaderIconButton(
                         icon = Icons.Outlined.Lock,
-                        onClick = { if (e2eeActive || e2eePending) onEndE2EE() else onConnectE2EE() },
+                        onClick = {
+                            when {
+                                e2eeActive || e2eePending -> onEndE2EE()
+                                !isOnline -> {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    e2eeAlertMessage = strings.e2eeOfflineAlert
+                                }
+                                else -> onConnectE2EE()
+                            }
+                        },
                         tint = if (e2eeActive) Color(0xFF10B981) else tgColors.headerIcon
                     )
                 }
@@ -2548,6 +2564,19 @@ private fun ChatPane(
                     onOpenProfile = onOpenProfile
                 )
             }
+        }
+
+        e2eeAlertMessage?.let { message ->
+            AlertDialog(
+                onDismissRequest = { e2eeAlertMessage = null },
+                confirmButton = {
+                    TextButton(onClick = { e2eeAlertMessage = null }) {
+                        Text(strings.dismiss)
+                    }
+                },
+                title = { Text(strings.e2eeActive) },
+                text = { Text(message) }
+            )
         }
     }
 }

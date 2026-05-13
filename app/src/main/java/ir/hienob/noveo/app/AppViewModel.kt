@@ -1214,6 +1214,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun endE2EE(chatId: String? = _uiState.value.selectedChatId) {
         val targetChatId = chatId ?: return
         NoveoNotificationService.endE2EE(targetChatId)
+        removeE2EEMessages(targetChatId)
         _uiState.value = _uiState.value.copy(e2eeSessions = NoveoNotificationService.e2eeSessions())
     }
 
@@ -1259,6 +1260,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value.messages
             },
             replyingToMessage = if (isStillViewingTargetChat) null else _uiState.value.replyingToMessage,
+            messagesByChat = messageCacheByChat.toMap()
+        )
+        persistCachedHomeState()
+    }
+
+    private fun addE2EEFingerprintMessage(chatId: String, sessionId: String, fingerprint: String) {
+        val strings = getStrings(_uiState.value.languageCode)
+        val notice = ChatMessage(
+            id = "e2ee-fingerprint-$sessionId",
+            chatId = chatId,
+            senderId = "system",
+            senderName = "System",
+            content = MessageContent(text = strings.e2eeEmojiNotice.replace("%s", fingerprint)),
+            timestamp = System.currentTimeMillis() / 1000,
+            e2ee = true
+        )
+        messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(notice))
+        _uiState.value = _uiState.value.copy(
+            messages = if (_uiState.value.selectedChatId == chatId) {
+                mergeMessages(_uiState.value.messages, listOf(notice))
+            } else {
+                _uiState.value.messages
+            },
+            messagesByChat = messageCacheByChat.toMap()
+        )
+        persistCachedHomeState()
+    }
+
+    private fun removeE2EEMessages(chatId: String) {
+        val cached = messageCacheByChat[chatId].orEmpty()
+        val filtered = cached.filterNot { it.e2ee }
+        messageCacheByChat[chatId] = filtered
+        _uiState.value = _uiState.value.copy(
+            messages = if (_uiState.value.selectedChatId == chatId) {
+                _uiState.value.messages.filterNot { it.e2ee }
+            } else {
+                _uiState.value.messages
+            },
             messagesByChat = messageCacheByChat.toMap()
         )
         persistCachedHomeState()
@@ -1462,6 +1501,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     retryPendingMessages()
                     // Immediately request resync on connect to speed up UI updates
                     refreshHomeSilently()
+                } else {
+                    currentState.e2eeSessions.keys.forEach(::removeE2EEMessages)
                 }
             }
             is SocketEvent.NewMessage -> handleIncomingMessage(event.message)
@@ -1508,12 +1549,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             is SocketEvent.MessagePinUpdate -> handlePinUpdate(event.chatId, event.messageId, event.isPinned)
             is SocketEvent.MessagePinnedUpdate -> handleMessagePinnedUpdate(event.chatId, event.pinnedMessage)
             is SocketEvent.E2EESessionUpdate -> {
-                val nextSessions = if (event.session == null) {
-                    _uiState.value.e2eeSessions - event.chatId
-                } else {
-                    _uiState.value.e2eeSessions + (event.chatId to event.session)
-                }
+                val previousSessions = _uiState.value.e2eeSessions
+                val nextSessions = NoveoNotificationService.e2eeSessions()
                 _uiState.value = _uiState.value.copy(e2eeSessions = nextSessions)
+                if (event.session == null) {
+                    previousSessions
+                        .filter { (chatId, session) -> chatId == event.chatId || session.chatId == event.chatId }
+                        .keys
+                        .ifEmpty { setOf(event.chatId) }
+                        .forEach(::removeE2EEMessages)
+                } else if (
+                    event.session.status == E2EESessionStatus.ACTIVE &&
+                    !event.session.fingerprint.isNullOrBlank()
+                ) {
+                    nextSessions
+                        .filter { (chatId, session) ->
+                            session.sessionId == event.session.sessionId &&
+                                previousSessions[chatId]?.status != E2EESessionStatus.ACTIVE
+                        }
+                        .keys
+                        .forEach { chatId ->
+                            addE2EEFingerprintMessage(chatId, event.session.sessionId, event.session.fingerprint)
+                        }
+                }
             }
             is SocketEvent.E2EEError -> {
                 _uiState.value = _uiState.value.copy(
