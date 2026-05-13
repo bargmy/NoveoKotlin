@@ -174,6 +174,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -1908,12 +1909,12 @@ private fun ChatPane(
     var highlightedMessageId by remember { mutableStateOf<String?>(null) }
     var contextMenuState by remember { mutableStateOf<MessageContextMenuState?>(null) }
     var contextMenuExpanded by remember { mutableStateOf(false) }
-    var e2eeAlertMessage by remember { mutableStateOf<String?>(null) }
     var showSeenByMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var showAttachPopup by remember { mutableStateOf(false) }
     var showStickers by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
     val imeVisible = WindowInsets.isImeVisible
 
 
@@ -2048,7 +2049,7 @@ private fun ChatPane(
                     onOpenContextMenu = { bubbleBounds ->
                         if (message.e2ee) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            e2eeAlertMessage = strings.e2eeSecretAlert
+                            Toast.makeText(context, strings.e2eeSecretAlert, Toast.LENGTH_SHORT).show()
                         } else {
                             contextMenuState = MessageContextMenuState(
                                 message = message,
@@ -2181,7 +2182,7 @@ private fun ChatPane(
                                 e2eeActive || e2eePending -> onEndE2EE()
                                 !isOnline -> {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    e2eeAlertMessage = strings.e2eeOfflineAlert
+                                    Toast.makeText(context, strings.e2eeOfflineAlert, Toast.LENGTH_SHORT).show()
                                 }
                                 else -> onConnectE2EE()
                             }
@@ -2566,18 +2567,6 @@ private fun ChatPane(
             }
         }
 
-        e2eeAlertMessage?.let { message ->
-            AlertDialog(
-                onDismissRequest = { e2eeAlertMessage = null },
-                confirmButton = {
-                    TextButton(onClick = { e2eeAlertMessage = null }) {
-                        Text(strings.dismiss)
-                    }
-                },
-                title = { Text(strings.e2eeActive) },
-                text = { Text(message) }
-            )
-        }
     }
 }
 

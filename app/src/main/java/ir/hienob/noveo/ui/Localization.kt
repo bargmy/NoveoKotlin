@@ -1534,25 +1534,25 @@ private fun NoveoStrings.withE2EEOverrides(): NoveoStrings {
             e2eeOfflineAlert = "Sie sind offline, vielleicht spaeter."
         )
         "ru" -> copy(
-            e2eeActive = "E2EE active",
-            e2eeConnecting = "E2EE connecting...",
-            e2eeEmojiNotice = "Encryption emojis: %s",
-            e2eeSecretAlert = "You cant do anything about it, its all secret.",
-            e2eeOfflineAlert = "They are offline, maybe another time."
+            e2eeActive = "E2EE \u0430\u043a\u0442\u0438\u0432\u043d\u043e",
+            e2eeConnecting = "E2EE \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0430\u0435\u0442\u0441\u044f...",
+            e2eeEmojiNotice = "\u042d\u043c\u043e\u0434\u0437\u0438 \u0448\u0438\u0444\u0440\u043e\u0432\u0430\u043d\u0438\u044f: %s",
+            e2eeSecretAlert = "\u0421 \u044d\u0442\u0438\u043c \u043d\u0438\u0447\u0435\u0433\u043e \u043d\u0435\u043b\u044c\u0437\u044f \u0441\u0434\u0435\u043b\u0430\u0442\u044c, \u0432\u0441\u0435 \u0441\u0435\u043a\u0440\u0435\u0442\u043d\u043e.",
+            e2eeOfflineAlert = "\u041e\u043d\u0438 \u043d\u0435 \u0432 \u0441\u0435\u0442\u0438, \u043c\u043e\u0436\u0435\u0442 \u0432 \u0434\u0440\u0443\u0433\u043e\u0439 \u0440\u0430\u0437."
         )
         "zh" -> copy(
-            e2eeActive = "E2EE active",
-            e2eeConnecting = "E2EE connecting...",
-            e2eeEmojiNotice = "Encryption emojis: %s",
-            e2eeSecretAlert = "You cant do anything about it, its all secret.",
-            e2eeOfflineAlert = "They are offline, maybe another time."
+            e2eeActive = "E2EE \u5df2\u542f\u7528",
+            e2eeConnecting = "E2EE \u6b63\u5728\u8fde\u63a5...",
+            e2eeEmojiNotice = "\u52a0\u5bc6\u8868\u60c5: %s",
+            e2eeSecretAlert = "\u4f60\u4e0d\u80fd\u5bf9\u5b83\u505a\u4efb\u4f55\u4e8b\uff0c\u8fd9\u90fd\u662f\u79d8\u5bc6\u3002",
+            e2eeOfflineAlert = "\u5bf9\u65b9\u79bb\u7ebf\u4e86\uff0c\u4e5f\u8bb8\u4e0b\u6b21\u5427\u3002"
         )
         "fa" -> copy(
-            e2eeActive = "E2EE active",
-            e2eeConnecting = "E2EE connecting...",
-            e2eeEmojiNotice = "Encryption emojis: %s",
-            e2eeSecretAlert = "You cant do anything about it, its all secret.",
-            e2eeOfflineAlert = "They are offline, maybe another time."
+            e2eeActive = "\u0631\u0645\u0632\u0646\u06af\u0627\u0631\u06cc \u0633\u0631\u0627\u0633\u0631\u06cc \u0641\u0639\u0627\u0644 \u0627\u0633\u062a",
+            e2eeConnecting = "\u062f\u0631 \u062d\u0627\u0644 \u0627\u062a\u0635\u0627\u0644 \u0631\u0645\u0632\u0646\u06af\u0627\u0631\u06cc \u0633\u0631\u0627\u0633\u0631\u06cc...",
+            e2eeEmojiNotice = "\u0627\u06cc\u0645\u0648\u062c\u06cc\u200c\u0647\u0627\u06cc \u0631\u0645\u0632\u0646\u06af\u0627\u0631\u06cc: %s",
+            e2eeSecretAlert = "\u0646\u0645\u06cc\u200c\u062a\u0648\u0646\u06cc \u06a9\u0627\u0631\u06cc\u0634 \u06a9\u0646\u06cc\u060c \u0647\u0645\u0647\u200c\u0686\u06cc \u0645\u062d\u0631\u0645\u0627\u0646\u0647 \u0627\u0633\u062a.",
+            e2eeOfflineAlert = "\u0622\u0641\u0644\u0627\u06cc\u0646 \u0647\u0633\u062a\u0646\u060c \u0634\u0627\u06cc\u062f \u06cc\u0647 \u0648\u0642\u062a \u062f\u06cc\u06af\u0647."
         )
         "es" -> copy(
             e2eeActive = "E2EE activo",
@@ -1569,11 +1569,11 @@ private fun NoveoStrings.withE2EEOverrides(): NoveoStrings {
             e2eeOfflineAlert = "Cette personne est hors ligne, peut-etre plus tard."
         )
         "ar" -> copy(
-            e2eeActive = "E2EE active",
-            e2eeConnecting = "E2EE connecting...",
-            e2eeEmojiNotice = "Encryption emojis: %s",
-            e2eeSecretAlert = "You cant do anything about it, its all secret.",
-            e2eeOfflineAlert = "They are offline, maybe another time."
+            e2eeActive = "\u0627\u0644\u062a\u0634\u0641\u064a\u0631 \u0627\u0644\u0637\u0631\u0641\u064a \u0645\u0641\u0639\u0644",
+            e2eeConnecting = "\u062c\u0627\u0631\u064a \u0627\u0644\u0627\u062a\u0635\u0627\u0644 \u0628\u0627\u0644\u062a\u0634\u0641\u064a\u0631 \u0627\u0644\u0637\u0631\u0641\u064a...",
+            e2eeEmojiNotice = "\u0631\u0645\u0648\u0632 \u0627\u0644\u062a\u0634\u0641\u064a\u0631: %s",
+            e2eeSecretAlert = "\u0644\u0627 \u064a\u0645\u0643\u0646\u0643 \u0641\u0639\u0644 \u0623\u064a \u0634\u064a\u0621 \u0628\u0647\u060c \u0643\u0644\u0647 \u0633\u0631\u064a.",
+            e2eeOfflineAlert = "\u0647\u0645 \u063a\u064a\u0631 \u0645\u062a\u0635\u0644\u064a\u0646\u060c \u0631\u0628\u0645\u0627 \u0641\u064a \u0648\u0642\u062a \u0622\u062e\u0631."
         )
         "tr" -> copy(
             e2eeActive = "E2EE aktif",
