@@ -333,7 +333,9 @@ fun NoveoRoot(
     onJoinChat: (String) -> Unit = {},
     onLeaveChat: (String) -> Unit = {},
     onClearNavigationSignal: () -> Unit = {},
-    onBotCallback: (String, String, String) -> Unit = { _, _, _ -> }
+    onBotCallback: (String, String, String) -> Unit = { _, _, _ -> },
+    onConnectE2EE: () -> Unit = {},
+    onEndE2EE: () -> Unit = {}
     ) {
     val context = LocalContext.current
     val prefs = remember(context) { context.getSharedPreferences("noveo_ui", Context.MODE_PRIVATE) }
@@ -450,6 +452,8 @@ fun NoveoRoot(
                 onLeaveChat = onLeaveChat,
                 onClearNavigationSignal = onClearNavigationSignal,
                 onBotCallback = onBotCallback,
+                onConnectE2EE = onConnectE2EE,
+                onEndE2EE = onEndE2EE,
                 currentTheme = currentTheme,
                 onThemeChange = { currentTheme = it }
             )
@@ -695,4 +699,3 @@ private fun CaptchaModal(
         }
     )
 }
-

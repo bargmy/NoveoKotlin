@@ -214,6 +214,7 @@ import ir.hienob.noveo.R
 import ir.hienob.noveo.app.AppUiState
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSummary
+import ir.hienob.noveo.data.E2EESessionStatus
 import ir.hienob.noveo.data.MessageFileAttachment
 import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.data.SavedSticker
@@ -511,6 +512,8 @@ internal fun HomeScreen(
     onLeaveChat: (String) -> Unit,
     onClearNavigationSignal: () -> Unit,
     onBotCallback: (String, String, String) -> Unit,
+    onConnectE2EE: () -> Unit,
+    onEndE2EE: () -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
     onForwardConfirm: (ChatMessage, String) -> Unit = { _, _ -> }
@@ -1009,6 +1012,8 @@ internal fun HomeScreen(
                                 onJoinChat = onJoinChat,
                                 onLeaveChat = onLeaveChat,
                                 onBotCallback = onBotCallback,
+                                onConnectE2EE = onConnectE2EE,
+                                onEndE2EE = onEndE2EE,
                                 onToggleMute = onToggleMute,
                                 onToggleMinimize = onToggleMinimize,
                                 onLeaveCall = onLeaveCall,
@@ -1116,6 +1121,8 @@ internal fun HomeScreen(
                                 onJoinChat = onJoinChat,
                                 onLeaveChat = onLeaveChat,
                                 onBotCallback = onBotCallback,
+                                onConnectE2EE = onConnectE2EE,
+                                onEndE2EE = onEndE2EE,
                                 onToggleMute = onToggleMute,
                                 onToggleMinimize = onToggleMinimize,
                                 onLeaveCall = onLeaveCall,
@@ -1795,6 +1802,8 @@ private fun ChatPane(
     onJoinChat: (String) -> Unit,
     onLeaveChat: (String) -> Unit,
     onBotCallback: (String, String, String) -> Unit,
+    onConnectE2EE: () -> Unit,
+    onEndE2EE: () -> Unit,
     onToggleMute: () -> Unit,
     onToggleMinimize: () -> Unit,
     onLeaveCall: () -> Unit,
@@ -1848,6 +1857,9 @@ private fun ChatPane(
     val currentAudioProgress = state.audioProgress
     val doubleTapEmoji = state.doubleTapReaction.ifBlank { "❤" }
 
+    val e2eeSession = selectedChat?.id?.let { state.e2eeSessions[it] }
+    val e2eeActive = e2eeSession?.status == E2EESessionStatus.ACTIVE
+    val e2eePending = e2eeSession?.status == E2EESessionStatus.PENDING
     val typingUsers = state.typingUsers[selectedChat?.id].orEmpty()
     
     val showScrollToBottom by remember {
@@ -1874,8 +1886,10 @@ private fun ChatPane(
         }
     }
 
-    val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount, typingText, strings, messages.size, sessionUserId) {
+    val subtitle = remember(selectedChat, profileUser, isOnline, onlineCount, typingText, strings, messages.size, sessionUserId, e2eeActive, e2eePending) {
         if (selectedChat == null) return@remember ""
+        if (e2eeActive) return@remember "E2EE active"
+        if (e2eePending) return@remember "E2EE connecting..."
         if (typingText != null) return@remember typingText
         val isSavedMessages = selectedChat.isSavedMessagesChat(sessionUserId)
         if (isSavedMessages) {
@@ -2152,6 +2166,13 @@ private fun ChatPane(
                     }
                 }
                 
+                if (selectedChat?.chatType == "private" && selectedChat?.isSavedMessagesChat(sessionUserId) != true) {
+                    HeaderIconButton(
+                        icon = Icons.Outlined.Lock,
+                        onClick = { if (e2eeActive || e2eePending) onEndE2EE() else onConnectE2EE() },
+                        tint = if (e2eeActive) Color(0xFF10B981) else tgColors.headerIcon
+                    )
+                }
                 HeaderIconButton(icon = Icons.Outlined.Call, onClick = onCall, tint = tgColors.headerIcon)
                 HeaderIconButton(icon = Icons.Outlined.Search, onClick = {}, tint = tgColors.headerIcon, modifier = Modifier.padding(end = 4.dp))
             }

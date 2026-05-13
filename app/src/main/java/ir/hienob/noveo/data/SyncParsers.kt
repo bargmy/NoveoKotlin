@@ -225,7 +225,8 @@ internal fun parseChatMessage(message: JSONObject, chatId: String, usersById: Ma
         pending = message.optBoolean("pending", false),
         clientTempId = message.optString("clientTempId").takeIf { it.isNotBlank() },
         replyToId = message.optString("replyToId").sanitizeServerString().takeIf { it.isNotBlank() },
-        editedAt = message.optLong("editedAt").takeIf { it > 0 }
+        editedAt = message.optLong("editedAt").takeIf { it > 0 },
+        e2ee = message.optBoolean("e2ee", false) || message.optString("type") == "e2ee_message"
     )
 }
 

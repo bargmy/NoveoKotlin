@@ -39,6 +39,8 @@ sealed class SocketEvent {
         val messages: List<ChatMessage>,
         val hasMoreHistory: Boolean
     ) : SocketEvent()
+    data class E2EESessionUpdate(val chatId: String, val session: E2EESessionSnapshot?) : SocketEvent()
+    data class E2EEError(val chatId: String?, val message: String) : SocketEvent()
 }
 
 class ChatSocket(
@@ -48,12 +50,37 @@ class ChatSocket(
     private val origin: String = "https://noveo.ir"
 ) {
     private var activeSocket: WebSocket? = null
+    private val e2ee = E2EEManager()
     val isConnected: Boolean get() = activeSocket != null
 
     fun send(payload: JSONObject): Boolean {
         val socket = activeSocket
         if (socket == null) return false
         return socket.send(payload.toString())
+    }
+
+    fun e2eeSessions(): Map<String, E2EESessionSnapshot> = e2ee.snapshot()
+
+    fun connectE2EE(selfUserId: String, chatId: String, recipientId: String): Boolean {
+        val payload = e2ee.connectE2EE(selfUserId, chatId, recipientId)
+        val sent = send(payload)
+        if (!sent) e2ee.endE2EE(chatId, notifyPeer = false)
+        return sent
+    }
+
+    fun endE2EE(chatId: String): Boolean {
+        val payload = e2ee.endE2EE(chatId) ?: return true
+        return send(payload)
+    }
+
+    fun sendE2EEText(selfUserId: String, selfName: String, chatId: String, text: String): E2EEOutgoingMessage? {
+        val outgoing = e2ee.sendE2EE(selfUserId, selfName, chatId, text)
+        return if (send(outgoing.payload)) outgoing else null
+    }
+
+    fun sendE2EEContent(selfUserId: String, selfName: String, chatId: String, content: JSONObject): E2EEOutgoingMessage? {
+        val outgoing = e2ee.sendE2EE(selfUserId, selfName, chatId, content.toString(), includeSessionId = true)
+        return if (send(outgoing.payload)) outgoing else null
     }
 
     fun connect(
@@ -92,6 +119,54 @@ class ChatSocket(
                         }
                         "message", "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
                         "message_sent" -> trySend(SocketEvent.MessageSent(parseRealtimeMessage(json, knownUsers)))
+                        "e2ee_session_request" -> {
+                            val result = e2ee.acceptSessionRequest(session.userId, payload)
+                            if (result != null) {
+                                result.outbound.forEach { webSocket.send(it.toString()) }
+                                trySend(SocketEvent.E2EESessionUpdate(result.chatId, e2ee.snapshot()[result.chatId]))
+                            }
+                        }
+                        "e2ee_session_accept" -> {
+                            val result = e2ee.finishSessionAccept(payload)
+                            if (result != null) {
+                                result.outbound.forEach { webSocket.send(it.toString()) }
+                                trySend(SocketEvent.E2EESessionUpdate(result.chatId, e2ee.snapshot()[result.chatId]))
+                            }
+                        }
+                        "e2ee_session_end" -> {
+                            e2ee.handleSessionEnd(payload)?.let { chatId ->
+                                trySend(SocketEvent.E2EESessionUpdate(chatId, null))
+                            }
+                        }
+                        "e2ee_verification_signature" -> {
+                            val result = e2ee.handleVerificationSignature(payload)
+                            if (result != null) {
+                                if (result.shouldEndSession) {
+                                    e2ee.endE2EE(result.chatId)?.let { webSocket.send(it.toString()) }
+                                    trySend(SocketEvent.E2EEError(result.chatId, "E2EE verification failed. Session ended."))
+                                    trySend(SocketEvent.E2EESessionUpdate(result.chatId, null))
+                                } else {
+                                    trySend(SocketEvent.E2EESessionUpdate(result.chatId, e2ee.snapshot()[result.chatId]))
+                                }
+                            }
+                        }
+                        "e2ee_message" -> {
+                            var decryptFailed = false
+                            val message = runCatching {
+                                e2ee.decryptIncomingMessage(payload, session.userId, knownUsers)
+                            }.getOrElse {
+                                decryptFailed = true
+                                val chatId = payload.optString("chatId").takeIf { it.isNotBlank() }
+                                trySend(SocketEvent.E2EEError(chatId, "Failed to decrypt a secure message."))
+                                null
+                            }
+                            if (message != null) {
+                                trySend(SocketEvent.NewMessage(message))
+                            } else if (!decryptFailed) {
+                                val chatId = payload.optString("chatId").takeIf { it.isNotBlank() }
+                                trySend(SocketEvent.E2EEError(chatId, "Received a secure message, but no active secure session is available."))
+                            }
+                        }
                         "typing" -> {
                             val chatId = payload.optString("chatId").sanitizeRealtimeField()
                                 ?: json.optString("chatId").sanitizeRealtimeField()
@@ -225,6 +300,7 @@ class ChatSocket(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 activeSocket = null
+                e2ee.clear()
                 val code = response?.code
                 val message = when (code) {
                     404 -> "Noveo realtime server was not found (HTTP 404)."
@@ -237,6 +313,7 @@ class ChatSocket(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 activeSocket = null
+                e2ee.clear()
                 trySend(SocketEvent.ConnectionState(connected = false, detail = reason.takeIf { it.isNotBlank() }))
                 channel.close()
             }
@@ -244,6 +321,7 @@ class ChatSocket(
 
         awaitClose { 
             activeSocket = null
+            e2ee.clear()
             socket.cancel() 
         }
     }

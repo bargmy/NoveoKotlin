@@ -11,6 +11,8 @@ import ir.hienob.noveo.data.CachedHomeState
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSocket
 import ir.hienob.noveo.data.ChatSummary
+import ir.hienob.noveo.data.E2EESessionSnapshot
+import ir.hienob.noveo.data.E2EESessionStatus
 import ir.hienob.noveo.data.MessageContent
 import ir.hienob.noveo.data.MessageFileAttachment
 import ir.hienob.noveo.data.NoveoApi
@@ -99,7 +101,8 @@ data class AppUiState(
     val doubleTapReaction: String = "❤",
     val animatedEmojiTgsEnabled: Boolean = true,
     val isSendingMessage: Boolean = false,
-    val messagesByChat: Map<String, List<ChatMessage>> = emptyMap()
+    val messagesByChat: Map<String, List<ChatMessage>> = emptyMap(),
+    val e2eeSessions: Map<String, E2EESessionSnapshot> = emptyMap()
 )
 
 data class AttachmentDownloadState(
@@ -1027,11 +1030,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val session = _uiState.value.session ?: return
         val chatId = _uiState.value.selectedChatId ?: return
         val directRecipientId = _uiState.value.directRecipientId
+        val file = sticker.toMessageAttachment()
+        if (_uiState.value.e2eeSessions[chatId]?.status == E2EESessionStatus.ACTIVE) {
+            sendE2EEContent(session, chatId, org.json.JSONObject()
+                .put("text", org.json.JSONObject.NULL)
+                .put("file", org.json.JSONObject()
+                    .put("url", file.url)
+                    .put("name", file.name)
+                    .put("type", file.type))
+                .put("theme", org.json.JSONObject.NULL))
+            return
+        }
         sendPreparedMessage(
             session = session,
             chatId = chatId,
             text = "",
-            file = sticker.toMessageAttachment(),
+            file = file,
             replyToId = _uiState.value.replyingToMessage?.id,
             directRecipientId = directRecipientId
         )
@@ -1073,6 +1087,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (editingMessage != null) {
             editMessage(editingMessage.id, text)
             setEditingMessage(null)
+            return
+        }
+
+        if (_uiState.value.e2eeSessions[chatId]?.status == E2EESessionStatus.ACTIVE) {
+            sendE2EEMessage(session, chatId, text, attachment != null)
             return
         }
 
@@ -1169,6 +1188,80 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 activeUploadJob = null
             }
         }
+    }
+
+    fun connectE2EE() {
+        val session = _uiState.value.session ?: return
+        val chat = _uiState.value.chats.firstOrNull { it.id == _uiState.value.selectedChatId } ?: return
+        if (chat.chatType != "private") {
+            _uiState.value = _uiState.value.copy(error = "E2EE is only available in private chats.")
+            return
+        }
+        val peerId = chat.memberIds.firstOrNull { it != session.userId } ?: _uiState.value.directRecipientId
+        if (peerId.isNullOrBlank()) return
+        if (!_uiState.value.onlineUserIds.contains(peerId)) {
+            _uiState.value = _uiState.value.copy(error = "The other user must be online to start E2EE Chat.")
+            return
+        }
+        val sent = NoveoNotificationService.connectE2EE(session.userId, chat.id, peerId)
+        if (sent) {
+            _uiState.value = _uiState.value.copy(e2eeSessions = NoveoNotificationService.e2eeSessions())
+        } else {
+            _uiState.value = _uiState.value.copy(error = "E2EE connection failed: realtime socket is offline.")
+        }
+    }
+
+    fun endE2EE(chatId: String? = _uiState.value.selectedChatId) {
+        val targetChatId = chatId ?: return
+        NoveoNotificationService.endE2EE(targetChatId)
+        _uiState.value = _uiState.value.copy(e2eeSessions = NoveoNotificationService.e2eeSessions())
+    }
+
+    private fun sendE2EEMessage(session: Session, chatId: String, text: String, hasAttachment: Boolean) {
+        if (hasAttachment) {
+            _uiState.value = _uiState.value.copy(error = "E2EE Chat currently supports text messages only.")
+            return
+        }
+        if (text.isBlank()) return
+        val senderName = _uiState.value.usersById[session.userId]?.username ?: "Me"
+        val outgoing = NoveoNotificationService.sendE2EEText(session.userId, senderName, chatId, text)
+        if (outgoing == null) {
+            _uiState.value = _uiState.value.copy(error = "Failed to encrypt the message.")
+            return
+        }
+        messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(outgoing.localMessage))
+        val isStillViewingTargetChat = _uiState.value.selectedChatId == chatId
+        _uiState.value = _uiState.value.copy(
+            messages = if (isStillViewingTargetChat) {
+                mergeMessages(_uiState.value.messages, listOf(outgoing.localMessage))
+            } else {
+                _uiState.value.messages
+            },
+            replyingToMessage = if (isStillViewingTargetChat) null else _uiState.value.replyingToMessage,
+            messagesByChat = messageCacheByChat.toMap()
+        )
+        persistCachedHomeState()
+    }
+
+    private fun sendE2EEContent(session: Session, chatId: String, content: org.json.JSONObject) {
+        val senderName = _uiState.value.usersById[session.userId]?.username ?: "Me"
+        val outgoing = NoveoNotificationService.sendE2EEContent(session.userId, senderName, chatId, content)
+        if (outgoing == null) {
+            _uiState.value = _uiState.value.copy(error = "Failed to encrypt the message.")
+            return
+        }
+        messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(outgoing.localMessage))
+        val isStillViewingTargetChat = _uiState.value.selectedChatId == chatId
+        _uiState.value = _uiState.value.copy(
+            messages = if (isStillViewingTargetChat) {
+                mergeMessages(_uiState.value.messages, listOf(outgoing.localMessage))
+            } else {
+                _uiState.value.messages
+            },
+            replyingToMessage = if (isStillViewingTargetChat) null else _uiState.value.replyingToMessage,
+            messagesByChat = messageCacheByChat.toMap()
+        )
+        persistCachedHomeState()
     }
 
     private fun loadSavedStickers(session: Session) {
@@ -1362,7 +1455,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = _uiState.value.copy(
                     loading = currentState.chats.isEmpty() && event.connected,
                     connectionTitle = if (event.connected) strings.updating else strings.connecting,
-                    connectionDetail = event.detail
+                    connectionDetail = event.detail,
+                    e2eeSessions = if (event.connected) NoveoNotificationService.e2eeSessions() else emptyMap()
                 )
                 if (event.connected) {
                     retryPendingMessages()
@@ -1413,6 +1507,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             is SocketEvent.MessageDeleteUpdate -> handleMessageDelete(event.chatId, event.messageId)
             is SocketEvent.MessagePinUpdate -> handlePinUpdate(event.chatId, event.messageId, event.isPinned)
             is SocketEvent.MessagePinnedUpdate -> handleMessagePinnedUpdate(event.chatId, event.pinnedMessage)
+            is SocketEvent.E2EESessionUpdate -> {
+                val nextSessions = if (event.session == null) {
+                    _uiState.value.e2eeSessions - event.chatId
+                } else {
+                    _uiState.value.e2eeSessions + (event.chatId to event.session)
+                }
+                _uiState.value = _uiState.value.copy(e2eeSessions = nextSessions)
+            }
+            is SocketEvent.E2EEError -> {
+                _uiState.value = _uiState.value.copy(
+                    error = event.message,
+                    e2eeSessions = NoveoNotificationService.e2eeSessions()
+                )
+            }
             is SocketEvent.UserListUpdate -> {
                 _uiState.value = _uiState.value.copy(
                     usersById = _uiState.value.usersById + event.usersById,

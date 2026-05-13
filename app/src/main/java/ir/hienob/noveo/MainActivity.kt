@@ -139,7 +139,9 @@ class MainActivity : ComponentActivity() {
                 onJoinChat = viewModel::joinChat,
                 onLeaveChat = viewModel::leaveChat,
                 onClearNavigationSignal = viewModel::clearNavigationSignal,
-                onBotCallback = viewModel::sendBotCallback
+                onBotCallback = viewModel::sendBotCallback,
+                onConnectE2EE = viewModel::connectE2EE,
+                onEndE2EE = { viewModel.endE2EE() }
             )
         }
     }

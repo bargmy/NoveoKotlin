@@ -72,6 +72,36 @@ class NoveoNotificationService : LifecycleService() {
             return instance?.socket?.send(payload) ?: false
         }
 
+        fun e2eeSessions(): Map<String, ir.hienob.noveo.data.E2EESessionSnapshot> {
+            return instance?.socket?.e2eeSessions().orEmpty()
+        }
+
+        fun connectE2EE(selfUserId: String, chatId: String, recipientId: String): Boolean {
+            return instance?.socket?.connectE2EE(selfUserId, chatId, recipientId) ?: false
+        }
+
+        fun endE2EE(chatId: String): Boolean {
+            return instance?.socket?.endE2EE(chatId) ?: false
+        }
+
+        fun sendE2EEText(
+            selfUserId: String,
+            selfName: String,
+            chatId: String,
+            text: String
+        ): ir.hienob.noveo.data.E2EEOutgoingMessage? {
+            return instance?.socket?.sendE2EEText(selfUserId, selfName, chatId, text)
+        }
+
+        fun sendE2EEContent(
+            selfUserId: String,
+            selfName: String,
+            chatId: String,
+            content: JSONObject
+        ): ir.hienob.noveo.data.E2EEOutgoingMessage? {
+            return instance?.socket?.sendE2EEContent(selfUserId, selfName, chatId, content)
+        }
+
         fun start(context: Context) {
             val intent = Intent(context, NoveoNotificationService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

@@ -225,7 +225,8 @@ data class ChatMessage(
     val pending: Boolean = false,
     val clientTempId: String? = null,
     val replyToId: String? = null,
-    val editedAt: Long? = null
+    val editedAt: Long? = null,
+    val e2ee: Boolean = false
 )
 
 data class HomeData(
