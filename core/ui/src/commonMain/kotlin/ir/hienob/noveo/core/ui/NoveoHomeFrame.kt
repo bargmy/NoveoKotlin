@@ -1400,7 +1400,7 @@ private fun AndroidStyleSidebarHeader(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
                         placeholder = strings.searchPlaceholder,
-                        modifier = Modifier.fillMaxWidth(0.88f).padding(vertical = 2.dp)
+                        modifier = Modifier.fillMaxWidth(0.88f).height(38.dp)
                     )
                 } else {
                     AnimatedContent(

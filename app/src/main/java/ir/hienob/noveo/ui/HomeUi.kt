@@ -1542,15 +1542,31 @@ private fun SidebarHeader(
                 }
             ) { searching ->
                 if (searching) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = onSearchQueryChange,
-                        modifier = Modifier.fillMaxWidth(0.88f).padding(vertical = 2.dp),
-                        placeholder = { Text(strings.searchPlaceholder, style = MaterialTheme.typography.bodyMedium) },
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        singleLine = true,
-                        shape = RoundedCornerShape(23.dp)
-                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(0.88f).height(38.dp),
+                        shape = RoundedCornerShape(19.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    ) {
+                        Row(
+                            Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Outlined.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            BasicTextField(
+                                value = searchQuery,
+                                onValueChange = onSearchQueryChange,
+                                singleLine = true,
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                                modifier = Modifier.weight(1f),
+                                decorationBox = { inner ->
+                                    if (searchQuery.isBlank()) Text(strings.searchPlaceholder, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.68f), style = MaterialTheme.typography.bodyMedium)
+                                    inner()
+                                }
+                            )
+                        }
+                    }
                 } else {
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                         AnimatedContent(
@@ -2607,6 +2623,7 @@ private fun MessageRow(
 ) {
     val haptic = LocalHapticFeedback.current
     val isSystem = message.senderId == "system"
+    val isAnonymous = message.senderId == "anonymous"
     val isCallLog = !message.content.callLog.isNullOrBlank()
     if (isSystem && !isCallLog) {
         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 16.dp), contentAlignment = Alignment.Center) {
@@ -2710,7 +2727,7 @@ private fun MessageRow(
         ) {
             if (!ownMessage) {
                 // Telegram only shows avatar in group chats, and only for the last message in a group
-                if (isGroupChat) {
+                if (isGroupChat && !isAnonymous) {
                     if (hasTail) {
                         ProfileCircle(
                             name = message.senderName,
@@ -2882,7 +2899,7 @@ private fun MessageRow(
                     ) {
                         val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
                         Column(modifier = Modifier.padding(if (hasVisualMedia) 3.dp else 6.dp).padding(horizontal = 4.dp)) {
-                            if (!ownMessage && isGroupChat && showSenderInfo) {
+                            if (!ownMessage && isGroupChat && showSenderInfo && !isAnonymous) {
                                 Text(
                                     message.senderName,
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
