@@ -368,12 +368,14 @@ private fun MessageContextMenuActions(
             shadowElevation = 8.dp
         ) {
             Column(modifier = Modifier.width(220.dp).padding(vertical = 4.dp)) {
-                ContextMenuActionItem(
-                    label = strings.reply,
-                    icon = { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
-                    textColor = menuText,
-                    onClick = onReply
-                )
+                if (state.message.chatType != "channel") {
+                    ContextMenuActionItem(
+                        label = strings.reply,
+                        icon = { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
+                        textColor = menuText,
+                        onClick = onReply
+                    )
+                }
                 if (state.ownMessage && state.message.content.text != null) {
                     ContextMenuActionItem(
                         label = strings.edit,
@@ -403,7 +405,7 @@ private fun MessageContextMenuActions(
                     onClick = onForward
                 )
 
-                if (state.message.seenBy.isNotEmpty()) {
+                if (state.message.seenBy.isNotEmpty() && state.ownMessage && state.message.chatType != "channel") {
                     ContextMenuActionItem(
                         label = strings.seenBy,
                         icon = { Icon(Icons.Outlined.Check, contentDescription = null, tint = menuIcon, modifier = Modifier.size(18.dp)) },
@@ -430,12 +432,14 @@ private fun MessageContextMenuActions(
                         onClick = onDownload
                     )
                 }
-                ContextMenuActionItem(
-                    label = strings.delete,
-                    icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = deleteColor, modifier = Modifier.size(18.dp)) },
-                    textColor = deleteColor,
-                    onClick = onDelete
-                )
+                if (state.message.chatType != "channel") {
+                    ContextMenuActionItem(
+                        label = strings.delete,
+                        icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = deleteColor, modifier = Modifier.size(18.dp)) },
+                        textColor = deleteColor,
+                        onClick = onDelete
+                    )
+                }
             }
         }
     }

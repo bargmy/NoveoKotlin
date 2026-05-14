@@ -1434,8 +1434,8 @@ private fun SearchResultsList(
                 ChatRow(
                     chat = chat, 
                     strings = strings, 
-                    usersById = emptyMap(),
-                    currentUserId = null,
+                    usersById = state.usersById,
+                    currentUserId = state.session?.userId,
                     selected = false, 
                     onClick = { 
                         if (chat.chatType == "private") {
@@ -1545,7 +1545,7 @@ private fun SidebarHeader(
                     Surface(
                         modifier = Modifier.fillMaxWidth(0.88f).height(38.dp),
                         shape = RoundedCornerShape(19.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
                     ) {
                         Row(
                             Modifier.fillMaxSize().padding(horizontal = 14.dp),
@@ -1561,7 +1561,7 @@ private fun SidebarHeader(
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
                                 modifier = Modifier.weight(1f),
                                 decorationBox = { inner ->
-                                    if (searchQuery.isBlank()) Text(strings.searchPlaceholder, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.68f), style = MaterialTheme.typography.bodyMedium)
+                                    if (searchQuery.isBlank()) Text(strings.searchPlaceholder, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium)
                                     inner()
                                 }
                             )
@@ -2623,7 +2623,7 @@ private fun MessageRow(
 ) {
     val haptic = LocalHapticFeedback.current
     val isSystem = message.senderId == "system"
-    val isAnonymous = message.senderId == "anonymous"
+    val isAnonymous = message.senderId == "anonymous" || message.chatType == "channel"
     val isCallLog = !message.content.callLog.isNullOrBlank()
     if (isSystem && !isCallLog) {
         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 16.dp), contentAlignment = Alignment.Center) {
