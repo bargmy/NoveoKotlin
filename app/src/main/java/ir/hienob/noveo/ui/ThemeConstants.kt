@@ -36,7 +36,9 @@ fun telegramColors(): TelegramThemeColors {
             outgoingText = colorScheme.onPrimaryContainer,
             outgoingTime = colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
             replyIncoming = colorScheme.secondaryContainer.copy(alpha = 0.5f),
-            replyOutgoing = colorScheme.onPrimaryContainer.copy(alpha = 0.15f)
+            replyOutgoing = colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
+            chatServiceBackground = colorScheme.onBackground.copy(alpha = 0.12f),
+            chatServiceText = colorScheme.onBackground.copy(alpha = 0.85f)
         )
     } else {
         // Dark Theme - Dynamic colors based on colorScheme
@@ -64,7 +66,9 @@ fun telegramColors(): TelegramThemeColors {
             outgoingText = colorScheme.onPrimaryContainer,
             outgoingTime = colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
             replyIncoming = colorScheme.secondaryContainer.copy(alpha = 0.4f),
-            replyOutgoing = colorScheme.onPrimaryContainer.copy(alpha = 0.15f)
+            replyOutgoing = colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
+            chatServiceBackground = Color.Black.copy(alpha = 0.4f),
+            chatServiceText = Color.White
         )
     }
 }
@@ -93,7 +97,9 @@ data class TelegramThemeColors(
     val outgoingText: Color,
     val outgoingTime: Color,
     val replyIncoming: Color,
-    val replyOutgoing: Color
+    val replyOutgoing: Color,
+    val chatServiceBackground: Color,
+    val chatServiceText: Color
 )
 
 // Legacy constants for backward compatibility if needed during refactoring

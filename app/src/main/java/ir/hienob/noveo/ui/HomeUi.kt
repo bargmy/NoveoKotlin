@@ -2610,16 +2610,18 @@ private fun MessageRow(
     val isSystem = message.senderId == "system"
     val isCallLog = !message.content.callLog.isNullOrBlank()
     if (isSystem && !isCallLog) {
-        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 16.dp), contentAlignment = Alignment.Center) {
             Surface(
-                color = tgColors.chatSurface.copy(alpha = 0.45f),
+                color = tgColors.chatServiceBackground,
                 shape = CircleShape
             ) {
                 Text(
                     message.content.text ?: strings.noMessagesYet,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White
+                    color = tgColors.chatServiceText,
+                    textAlign = TextAlign.Center,
+                    softWrap = false
                 )
             }
         }

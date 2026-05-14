@@ -309,7 +309,9 @@ private data class TelegramHomeColors(
     val outgoingText: Color,
     val outgoingTime: Color,
     val replyIncoming: Color,
-    val replyOutgoing: Color
+    val replyOutgoing: Color,
+    val chatServiceBackground: Color,
+    val chatServiceText: Color
 )
 
 @Composable
@@ -341,7 +343,9 @@ private fun telegramHomeColors(): TelegramHomeColors {
             outgoingText = scheme.onPrimaryContainer,
             outgoingTime = scheme.onPrimaryContainer.copy(alpha = 0.7f),
             replyIncoming = scheme.secondaryContainer.copy(alpha = 0.5f),
-            replyOutgoing = scheme.onPrimaryContainer.copy(alpha = 0.15f)
+            replyOutgoing = scheme.onPrimaryContainer.copy(alpha = 0.15f),
+            chatServiceBackground = scheme.onBackground.copy(alpha = 0.12f),
+            chatServiceText = scheme.onBackground.copy(alpha = 0.85f)
         )
     } else {
         TelegramHomeColors(
@@ -368,7 +372,9 @@ private fun telegramHomeColors(): TelegramHomeColors {
             outgoingText = scheme.onPrimaryContainer,
             outgoingTime = scheme.onPrimaryContainer.copy(alpha = 0.7f),
             replyIncoming = scheme.secondaryContainer.copy(alpha = 0.4f),
-            replyOutgoing = scheme.onPrimaryContainer.copy(alpha = 0.15f)
+            replyOutgoing = scheme.onPrimaryContainer.copy(alpha = 0.15f),
+            chatServiceBackground = Color.Black.copy(alpha = 0.4f),
+            chatServiceText = Color.White
         )
     }
 }
@@ -2298,14 +2304,16 @@ private fun AndroidStyleMessageRow(
     onOpenMenu: (Rect) -> Unit
 ) {
     if (message.isSystem) {
-        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-            Surface(color = tgColors.chatSurface.copy(alpha = 0.45f), shape = CircleShape) {
+        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 16.dp), contentAlignment = Alignment.Center) {
+            Surface(color = tgColors.chatServiceBackground, shape = CircleShape) {
                 Text(
                     text = message.text.ifBlank { strings.noMessagesYet },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    color = Color.White,
+                    color = tgColors.chatServiceText,
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    softWrap = false
                 )
             }
         }
