@@ -873,7 +873,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             selectedChatId = chatId,
             chats = updatedChats
         )
-        refreshHomeSilently()
     }
 
     fun leaveChat(chatId: String) {
@@ -891,7 +890,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         messages = if (current.selectedChatId == chatId) emptyList() else current.messages
                     )
                 }
-                refreshHomeSilently()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -960,7 +958,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             pendingChatId = chatId
             return
         }
-        startSelectedChatRefresh(session, chatId)
         viewModelScope.launch {
             val cachedMessages = messageCacheByChat[chatId].orEmpty().sortedBy { it.timestamp }
             val updatedChats = _uiState.value.chats.map {
@@ -982,8 +979,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             cachedMessages.lastOrNull { it.senderId != session.userId }?.let { lastMsg ->
                 markAsSeen(lastMsg.id)
             }
-            
-            refreshHomeSilently()
         }
     }
 
@@ -1586,7 +1581,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 persistCachedHomeState()
             }
-            is SocketEvent.ChatUpdated -> refreshHomeSilently()
+            is SocketEvent.ChatUpdated -> { /* Rely on HistoryUpdate or targeted events */ }
             is SocketEvent.HistoryUpdate -> {
                 event.messagesByChat.forEach { (chatId, incomingMessages) ->
                     messageCacheByChat[chatId] = mergeMessages(
@@ -1652,7 +1647,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     // Call ended on server
                     voiceChatManager.leaveCall()
                 }
-                refreshHomeSilently()
             }
             is SocketEvent.VoiceCallEnded -> {
                 if (event.chatId == _uiState.value.voiceChatState.currentChatId) {
@@ -1691,16 +1685,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun startSelectedChatRefresh(session: Session, chatId: String) {
-        selectedChatRefreshJob?.cancel()
-        selectedChatRefreshJob = viewModelScope.launch {
-            refreshHomeSilently()
-            while (_uiState.value.session?.userId == session.userId && _uiState.value.selectedChatId == chatId) {
-                delay(5000)
-                refreshHomeSilently()
-            }
-        }
-    }
+
 
 
     private suspend fun refreshSelectedChat(session: Session, chatId: String, reason: String) {
@@ -1782,7 +1767,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             currentChats.add(0, updatedChat)
         } else {
-            refreshHomeSilently()
+            // New chat found. The server should send NewChatInfo separately.
         }
 
         val isSelectedChat = msg.chatId == latestState.selectedChatId
@@ -2000,11 +1985,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .put("bio", bio)
         NoveoNotificationService.send(payload)
         // Optimistic update or wait for sync? The server should broadcast a user update.
-        // For now, refresh home silently after a short delay
-        viewModelScope.launch {
-            delay(500)
-            refreshHomeSilently()
-        }
     }
 
     fun changePassword(old: String, new: String) {
@@ -2089,10 +2069,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         NoveoNotificationService.send(payload)
         sessionStore.writeLanguageCode(code)
         _uiState.value = _uiState.value.copy(languageCode = code)
-        viewModelScope.launch {
-            delay(500)
-            refreshHomeSilently()
-        }
     }
 
     private fun restoreCachedHomeState(cachedHomeState: CachedHomeState?) {
