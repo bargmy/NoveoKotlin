@@ -336,11 +336,23 @@ private fun resolveChatAvatar(chat: JSONObject, usersById: Map<String, UserSumma
 
 private fun resolveSenderName(senderId: String, payload: JSONObject, usersById: Map<String, UserSummary>): String {
     if (senderId == "system") return "System"
-    if (senderId == "anonymous") return "Anonymous"
-    return usersById[senderId]?.username?.sanitizeServerString()?.takeIf { it.isNotBlank() }
-        ?: payload.optString("senderName").sanitizeServerString().takeIf { it.isNotBlank() }
+    
+    val username = usersById[senderId]?.username?.sanitizeServerString()
+    if (!username.isNullOrBlank()) return username
+    
+    val explicitName = payload.optString("senderName").sanitizeServerString().takeIf { it.isNotBlank() }
         ?: payload.optString("sender").sanitizeServerString().takeIf { it.isNotBlank() }
-        ?: "Unknown"
+    if (explicitName != null) return explicitName
+
+    // If it's a channel/group and we still have no name or it's 'anonymous', try to use chat info if available in payload
+    val chatType = payload.optString("chatType").sanitizeServerString()
+    if (chatType == "channel" || chatType == "group") {
+        val chatTitle = payload.optString("chatTitle").sanitizeServerString().takeIf { it.isNotBlank() }
+        if (chatTitle != null) return chatTitle
+    }
+
+    if (senderId == "anonymous") return "Anonymous"
+    return "Unknown"
 }
 
 private fun resolveAssetUrl(source: JSONObject, vararg keys: String): String? {

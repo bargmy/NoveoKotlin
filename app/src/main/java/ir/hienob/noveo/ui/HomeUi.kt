@@ -1430,7 +1430,6 @@ private fun SearchResultsList(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (chats.isNotEmpty()) {
-            item { Text(strings.newChat, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp), color = MaterialTheme.colorScheme.primary) }
             items(chats) { chat ->
                 ChatRow(
                     chat = chat, 
@@ -1546,7 +1545,7 @@ private fun SidebarHeader(
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
-                        modifier = Modifier.fillMaxWidth(0.88f).height(46.dp),
+                        modifier = Modifier.fillMaxWidth(0.88f).padding(vertical = 2.dp),
                         placeholder = { Text(strings.searchPlaceholder, style = MaterialTheme.typography.bodyMedium) },
                         textStyle = MaterialTheme.typography.bodyMedium,
                         singleLine = true,

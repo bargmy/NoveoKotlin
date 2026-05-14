@@ -1400,7 +1400,7 @@ private fun AndroidStyleSidebarHeader(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
                         placeholder = strings.searchPlaceholder,
-                        modifier = Modifier.fillMaxWidth(0.88f).height(46.dp)
+                        modifier = Modifier.fillMaxWidth(0.88f).padding(vertical = 2.dp)
                     )
                 } else {
                     AnimatedContent(
@@ -1493,7 +1493,6 @@ private fun AndroidStyleSearchResults(strings: NoveoStrings, chats: List<NoveoHo
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (chats.isNotEmpty()) {
-            item { Text(strings.newChat, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp), color = MaterialTheme.colorScheme.primary) }
             items(chats, key = { it.id }) { chat ->
                 AndroidStyleChatRow(chat = chat, strings = strings, selected = false, onClick = { onOpenChat(chat.id) })
             }
