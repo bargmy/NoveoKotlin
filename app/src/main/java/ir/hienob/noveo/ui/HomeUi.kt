@@ -5226,6 +5226,7 @@ private fun UpdateBubble(
     onInstall: () -> Unit
 ) {
     if (updateInfo.isDismissed || !updateInfo.isAvailable) return
+    val uriHandler = LocalUriHandler.current
 
     Surface(
         modifier = Modifier
@@ -5250,6 +5251,10 @@ private fun UpdateBubble(
                         Text(strings.install, color = Color(0xFF2E7D32), style = MaterialTheme.typography.labelLarge)
                     }
                 } else if (!updateInfo.isDownloading) {
+                    TextButton(onClick = { uriHandler.openUri(updateInfo.url) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text(strings.manualUpdate, color = Color(0xFF2E7D32), style = MaterialTheme.typography.labelLarge)
+                    }
+                    Spacer(Modifier.width(4.dp))
                     TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
                         Text(strings.dismiss, color = Color(0xFF757575), style = MaterialTheme.typography.labelLarge)
                     }
