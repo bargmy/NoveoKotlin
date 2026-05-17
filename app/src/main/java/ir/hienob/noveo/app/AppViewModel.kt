@@ -1243,7 +1243,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             chatId = chatId,
             senderId = session.userId,
             senderName = senderName,
-            content = MessageContent(text = text, isE2EE = true),
+            content = MessageContent(text = text),
             timestamp = System.currentTimeMillis() / 1000,
             pending = true,
             clientTempId = pendingId
