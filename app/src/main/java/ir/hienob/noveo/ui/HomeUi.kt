@@ -1545,7 +1545,7 @@ private fun SidebarHeader(
                     Surface(
                         modifier = Modifier.fillMaxWidth(0.88f).height(38.dp),
                         shape = RoundedCornerShape(19.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                     ) {
                         Row(
                             Modifier.fillMaxSize().padding(horizontal = 14.dp),
