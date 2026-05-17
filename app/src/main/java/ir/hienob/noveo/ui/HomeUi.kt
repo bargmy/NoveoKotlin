@@ -1293,10 +1293,11 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
             visible = showForwardPicker && state.forwardingMessage != null,
             onDismiss = { onForwardMessage(null) }
         ) {
-            state.forwardingMessage?.let { msg ->
+            val msg = state.forwardingMessage
+            if (msg != null) {
                 ForwardChatPicker(
                     strings = strings,
-                    chats = chats,
+                    chats = state.chats,
                     usersById = state.usersById,
                     currentUserId = state.session?.userId,
                     onClose = { onForwardMessage(null) },
@@ -2049,11 +2050,11 @@ private fun ChatPane(
                     nextMessage.senderId != message.senderId ||
                     (nextMessage.timestamp - message.timestamp) > 300 ||
                     nextMessage.senderId == "system"
-                val senderAvatarUrl = usersById[message.senderId]?.avatarUrl
+                val senderAvatarUrl = state.usersById[message.senderId]?.avatarUrl
                 val repliedMessage = message.replyToId?.let { replyId ->
-                    messages.firstOrNull { it.id == replyId }
+                    state.messages.firstOrNull { it.id == replyId }
                 }
-                val isSenderVerified = usersById[message.senderId]?.isVerified == true
+                val isSenderVerified = state.usersById[message.senderId]?.isVerified == true
 
                 MessageRow(
                     strings = strings,
