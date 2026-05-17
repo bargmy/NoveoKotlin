@@ -6,7 +6,7 @@ plugins {
 
 
 val appVersionCode = providers.gradleProperty("NOVEO_VERSION_CODE").orNull?.toIntOrNull() ?: 28
-val appVersionName = providers.gradleProperty("NOVEO_VERSION_NAME").orNull ?: "0.8.0"
+val appVersionName = providers.gradleProperty("NOVEO_VERSION_NAME").orNull ?: "0.8.1"
 
 android {
     namespace = "ir.hienob.noveo"
