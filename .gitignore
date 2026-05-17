@@ -1,10 +1,28 @@
 .gemini_attachments/
 
+# Android/Gradle Standard Ignores
+build/
+.gradle/
+local.properties
+*.jks
+*.keystore
+*.db
+*.sqlite
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE Ignores
+.idea/
+*.iml
+.vscode/
+
 # Reference files (Web/Server)
 app-core.js
 app-core.css
 app-dynamic.css
 server_no_captcha_creation.py
+server.py
 
 .gemini/
 gha-creds-*.json
