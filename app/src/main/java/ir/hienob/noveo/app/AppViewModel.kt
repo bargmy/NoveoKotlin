@@ -1091,9 +1091,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val tempId = "temp-${System.currentTimeMillis()}"
+        val senderName = _uiState.value.usersById[session.userId]?.username ?: "Me"
+        
+        // Add pending message immediately for smooth UI animation
+        val initialPendingMsg = ChatMessage(
+            id = tempId,
+            chatId = chatId,
+            senderId = session.userId,
+            senderName = senderName,
+            content = MessageContent(text = text.takeIf { it.isNotBlank() }, file = null, replyToId = replyingTo?.id),
+            timestamp = System.currentTimeMillis() / 1000,
+            pending = true,
+            clientTempId = tempId,
+            replyToId = replyingTo?.id
+        )
+
+        messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(initialPendingMsg))
+        val isStillViewingTargetChat = _uiState.value.selectedChatId == chatId
+        _uiState.value = _uiState.value.copy(
+            messages = if (isStillViewingTargetChat) {
+                mergeMessages(_uiState.value.messages, listOf(initialPendingMsg))
+            } else {
+                _uiState.value.messages
+            },
+            replyingToMessage = if (isStillViewingTargetChat) null else _uiState.value.replyingToMessage,
+            messagesByChat = messageCacheByChat.toMap()
+        )
+        persistCachedHomeState()
         
         // If we have an attachment, we need to upload it first
         activeUploadJob = viewModelScope.launch {
+            delay(160) // Wait for message bubble animation (140ms) + small buffer
             try {
                 var uploadedFile: MessageFileAttachment? = null
                 _uiState.value = _uiState.value.copy(isSendingMessage = true)
@@ -1113,32 +1141,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     ensureActive()
                     uploadedFile?.let { cacheUploadedAttachment(it, attachment) }
                     _uiState.value = _uiState.value.copy(pendingAttachment = null)
+                    
+                    // Update the pending message with the uploaded file info
+                    val updatedPendingMsg = initialPendingMsg.copy(
+                        content = initialPendingMsg.content.copy(file = uploadedFile)
+                    )
+                    messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(updatedPendingMsg))
+                    if (_uiState.value.selectedChatId == chatId) {
+                        _uiState.value = _uiState.value.copy(
+                            messages = mergeMessages(_uiState.value.messages, listOf(updatedPendingMsg)),
+                            messagesByChat = messageCacheByChat.toMap()
+                        )
+                    }
                 }
-
-                val pendingMsg = ChatMessage(
-                    id = tempId,
-                    chatId = chatId,
-                    senderId = session.userId,
-                    senderName = _uiState.value.usersById[session.userId]?.username ?: "Me",
-                    content = MessageContent(text = text.takeIf { it.isNotBlank() }, file = uploadedFile, replyToId = replyingTo?.id),
-                    timestamp = System.currentTimeMillis() / 1000,
-                    pending = true,
-                    clientTempId = tempId,
-                    replyToId = replyingTo?.id
-                )
-
-                messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(pendingMsg))
-                val isStillViewingTargetChat = _uiState.value.selectedChatId == chatId
-                _uiState.value = _uiState.value.copy(
-                    messages = if (isStillViewingTargetChat) {
-                        mergeMessages(_uiState.value.messages, listOf(pendingMsg))
-                    } else {
-                        _uiState.value.messages
-                    },
-                    replyingToMessage = if (isStillViewingTargetChat) null else _uiState.value.replyingToMessage,
-                    messagesByChat = messageCacheByChat.toMap()
-                )
-                persistCachedHomeState()
 
                 withContext(Dispatchers.IO) {
                     val contentObj = org.json.JSONObject().put("text", text.takeIf { it.isNotBlank() })
@@ -1220,16 +1235,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (text.isBlank()) return
         val senderName = _uiState.value.usersById[session.userId]?.username ?: "Me"
-        val outgoing = NoveoNotificationService.sendE2EEText(session.userId, senderName, chatId, text)
-        if (outgoing == null) {
-            _uiState.value = _uiState.value.copy(error = "Failed to encrypt the message.")
-            return
-        }
-        messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(outgoing.localMessage))
+
+        // Add pending message immediately for smooth UI animation
+        val pendingId = "e2ee-temp-${System.currentTimeMillis()}"
+        val initialPendingMsg = ChatMessage(
+            id = pendingId,
+            chatId = chatId,
+            senderId = session.userId,
+            senderName = senderName,
+            content = MessageContent(text = text, isE2EE = true),
+            timestamp = System.currentTimeMillis() / 1000,
+            pending = true,
+            clientTempId = pendingId
+        )
+
+        messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(initialPendingMsg))
         val isStillViewingTargetChat = _uiState.value.selectedChatId == chatId
         _uiState.value = _uiState.value.copy(
             messages = if (isStillViewingTargetChat) {
-                mergeMessages(_uiState.value.messages, listOf(outgoing.localMessage))
+                mergeMessages(_uiState.value.messages, listOf(initialPendingMsg))
             } else {
                 _uiState.value.messages
             },
@@ -1237,6 +1261,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             messagesByChat = messageCacheByChat.toMap()
         )
         persistCachedHomeState()
+
+        viewModelScope.launch {
+            delay(160) // Wait for bubble animation
+            val outgoing = NoveoNotificationService.sendE2EEText(session.userId, senderName, chatId, text)
+            if (outgoing == null) {
+                _uiState.value = _uiState.value.copy(error = "Failed to encrypt the message.")
+                // Remove the failed pending message
+                messageCacheByChat[chatId] = messageCacheByChat[chatId].orEmpty().filterNot { it.id == pendingId }
+                if (_uiState.value.selectedChatId == chatId) {
+                    _uiState.value = _uiState.value.copy(
+                        messages = _uiState.value.messages.filterNot { it.id == pendingId },
+                        messagesByChat = messageCacheByChat.toMap()
+                    )
+                }
+                return@launch
+            }
+            
+            // Replace the initial pending message with the real encrypted one
+            messageCacheByChat[chatId] = mergeMessages(messageCacheByChat[chatId].orEmpty(), listOf(outgoing.localMessage))
+            if (_uiState.value.selectedChatId == chatId) {
+                _uiState.value = _uiState.value.copy(
+                    messages = mergeMessages(_uiState.value.messages, listOf(outgoing.localMessage)),
+                    messagesByChat = messageCacheByChat.toMap()
+                )
+            }
+            persistCachedHomeState()
+        }
     }
 
     private fun sendE2EEContent(session: Session, chatId: String, content: org.json.JSONObject) {

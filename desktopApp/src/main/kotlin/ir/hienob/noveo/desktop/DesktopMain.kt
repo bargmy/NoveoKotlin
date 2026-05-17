@@ -30,6 +30,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -359,8 +360,10 @@ private class DesktopStateHolder {
                 error = null
             )
         )
+        
         activeSendJob?.cancel()
         activeSendJob = scope.launch {
+            delay(160)
             runCatching {
                 val uploadedFile = if (attachmentFile != null) {
                     withContext(Dispatchers.IO) {

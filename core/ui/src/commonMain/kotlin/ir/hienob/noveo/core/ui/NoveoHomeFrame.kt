@@ -127,7 +127,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.key
@@ -141,6 +141,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -3344,7 +3345,7 @@ private fun MarkdownText(
                             text = segment.content.trim(),
                             modifier = Modifier.padding(8.dp),
                             fontFamily = FontFamily.Monospace,
-                            fontSize = (fontSize.value - 2).androidx.compose.ui.unit.sp,
+                            fontSize = (fontSize.value - 2).sp,
                             color = color.copy(alpha = 0.9f)
                         )
                     }
