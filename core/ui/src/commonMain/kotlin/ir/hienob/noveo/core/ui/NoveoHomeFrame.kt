@@ -2040,8 +2040,15 @@ private fun AndroidForwardPickerOverlay(
                                     Spacer(Modifier.width(12.dp))
                                     Column(Modifier.weight(1f)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(chat.title.ifBlank { strings.unknown }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                            if (chat.unreadCount > 0) AndroidUnreadBadge(chat.unreadCount)
+                                            Text(chat.title.ifBlank { strings.unknown }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                            if (chat.isVerified) {
+                                                Spacer(Modifier.width(4.dp))
+                                                VerifiedIcon(modifier = Modifier.size(14.dp))
+                                            }
+                                            if (chat.unreadCount > 0) {
+                                                Spacer(Modifier.width(8.dp))
+                                                AndroidUnreadBadge(chat.unreadCount)
+                                            }
                                         }
                                         Text(chat.openHeaderSubtitle(strings), style = MaterialTheme.typography.bodySmall, color = if (chat.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
