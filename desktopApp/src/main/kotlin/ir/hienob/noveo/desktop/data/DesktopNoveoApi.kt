@@ -813,7 +813,8 @@ private fun parseMessage(message: JSONObject, chatId: String, usersById: Map<Str
         botButtons = parseInlineKeyboard(content.inlineKeyboard ?: message.opt("inlineKeyboard") ?: message.opt("keyboard")),
         dateLabel = formatDateLabel(timestamp),
         isPinned = message.optBoolean("isPinned", false) || message.optBoolean("pinned", false),
-        isSystem = senderId == "system" || message.optString("type") == "system"
+        isSystem = senderId == "system" || message.optString("type") == "system",
+        isVerified = usersById[senderId]?.isVerified ?: false
     )
 }
 

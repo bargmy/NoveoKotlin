@@ -289,7 +289,8 @@ data class NoveoHomeMessage(
     val botButtons: List<List<String>> = emptyList(),
     val dateLabel: String = "",
     val isPinned: Boolean = false,
-    val isSystem: Boolean = false
+    val isSystem: Boolean = false,
+    val isVerified: Boolean = false
 )
 
 @androidx.compose.runtime.Immutable
@@ -2410,14 +2411,20 @@ private fun AndroidStyleMessageRow(
                 ) {
                     Column(modifier = Modifier.padding(6.dp).padding(horizontal = 4.dp)) {
                         if (!ownMessage && isGroupChat && showSenderInfo) {
-                            Text(
-                                text = message.senderName,
-                                color = tgColors.incomingLink,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                lineHeight = 16.sp,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)) {
+                                Text(
+                                    text = message.senderName,
+                                    color = tgColors.incomingLink,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    lineHeight = 16.sp,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                if (message.isVerified) {
+                                    Spacer(Modifier.width(4.dp))
+                                    VerifiedIcon(modifier = Modifier.size(13.dp))
+                                }
+                            }
                         }
 
                         if (message.forwarded) {

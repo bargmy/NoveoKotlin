@@ -1296,7 +1296,9 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
             state.forwardingMessage?.let { msg ->
                 ForwardChatPicker(
                     strings = strings,
-                    chats = state.chats,
+                    chats = chats,
+                    usersById = state.usersById,
+                    currentUserId = state.session?.userId,
                     onClose = { onForwardMessage(null) },
                     onForward = { targetChatId ->
                         onForwardConfirm(msg, targetChatId)
@@ -2051,6 +2053,7 @@ private fun ChatPane(
                 val repliedMessage = message.replyToId?.let { replyId ->
                     messages.firstOrNull { it.id == replyId }
                 }
+                val isSenderVerified = usersById[message.senderId]?.isVerified == true
 
                 MessageRow(
                     strings = strings,
@@ -2064,6 +2067,7 @@ private fun ChatPane(
                     onMediaClick = onMediaClick,
                     onOpenProfile = onOpenProfile,
                     repliedMessage = repliedMessage,
+                    isSenderVerified = isSenderVerified,
                     maxBubbleWidth = maxBubbleWidth,
                     onReply = { onReply(message) },
                     onToggleReaction = onToggleReaction,
@@ -2605,6 +2609,7 @@ private fun MessageRow(
     onMediaClick: (ChatMessage, MessageFileAttachment) -> Unit,
     onOpenProfile: (String) -> Unit,
     repliedMessage: ChatMessage? = null,
+    isSenderVerified: Boolean = false,
     maxBubbleWidth: Dp,
     onReply: () -> Unit,
     onToggleReaction: (String, String) -> Unit,
@@ -2906,12 +2911,18 @@ private fun MessageRow(
                         val hasVisualMedia = message.content.file?.let { it.isImage() || it.isVideo() } == true
                         Column(modifier = Modifier.padding(if (hasVisualMedia) 3.dp else 6.dp).padding(horizontal = 4.dp)) {
                             if (!ownMessage && isGroupChat && showSenderInfo && !isAnonymous) {
-                                Text(
-                                    message.senderName,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                                    color = tgColors.incomingLink,
-                                    modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)) {
+                                    Text(
+                                        message.senderName,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                                        color = tgColors.incomingLink,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    if (isSenderVerified) {
+                                        Spacer(Modifier.width(4.dp))
+                                        VerifiedIcon(modifier = Modifier.size(13.dp))
+                                    }
+                                }
                             }
                             if (message.content.forwardedInfo != null) {
                                 Row(
@@ -4714,8 +4725,9 @@ private fun ChatRow(
     }
     val profileUserId = remember(chat, currentUserId) { resolveProfileUserId(chat, currentUserId) }
     val isVerified = chat.isVerified || (profileUserId?.let { usersById[it]?.isVerified } == true)
-    val containerColor = remember(selected, MaterialTheme.colorScheme) {
-        if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
+    val colors = MaterialTheme.colorScheme
+    val containerColor = remember(selected, colors) {
+        if (selected) colors.secondaryContainer else colors.surface
     }
     Card(
         modifier = Modifier
@@ -5308,6 +5320,8 @@ private fun UpdateBubble(
 private fun ForwardChatPicker(
     strings: NoveoStrings,
     chats: List<ChatSummary>,
+    usersById: Map<String, UserSummary>,
+    currentUserId: String?,
     onClose: () -> Unit,
     onForward: (String) -> Unit
 ) {
@@ -5327,8 +5341,8 @@ private fun ForwardChatPicker(
                     ChatRow(
                         chat = chat,
                         strings = strings,
-                        usersById = emptyMap(),
-                        currentUserId = null,
+                        usersById = usersById,
+                        currentUserId = currentUserId,
                         selected = false,
                         onClick = { onForward(chat.id) }
                     )
