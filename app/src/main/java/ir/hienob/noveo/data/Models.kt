@@ -183,7 +183,7 @@ data class MessageContent(
                     "Voice Call"
                 }
             }
-            !text.isNullOrBlank() -> text
+            !text.isNullOrBlank() -> stripMarkdown(text)
             file?.isSticker() == true -> "Sticker"
             file != null -> if (file.isImage()) "Photo" else if (file.isVideo()) "Video" else "File"
             !poll.isNullOrBlank() -> "Poll"
@@ -268,4 +268,16 @@ inline fun <T, R : Comparable<R>> Iterable<T>.sortedBy(crossinline selector: (T)
 
 inline fun <T, R : Comparable<R>> Sequence<T>.sortedBy(crossinline selector: (T) -> R?): Sequence<T> {
     return this.sortedWith(compareBy(selector))
+}
+
+fun stripMarkdown(text: String): String {
+    return text
+        // Remove code blocks: ```code```
+        .replace(Regex("```.*?```", RegexOption.DOT_MATCHES_ALL), " [Code] ")
+        // Remove links: [name](url) -> name
+        .replace(Regex("\\[(.*?)\\]\\(.*?\\)"), "$1")
+        // Remove bold/italic: **text**, *text*, __text__, _text_
+        .replace(Regex("\\*\\*|\\*|__||_"), "")
+        // Trim extra whitespace
+        .trim()
 }

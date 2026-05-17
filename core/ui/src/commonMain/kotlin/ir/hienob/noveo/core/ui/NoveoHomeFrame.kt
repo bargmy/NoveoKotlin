@@ -135,11 +135,16 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -2460,7 +2465,7 @@ private fun AndroidStyleMessageRow(
                         }
 
                         if (message.text.isNotBlank()) {
-                            Text(
+                            MarkdownText(
                                 text = message.text,
                                 color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText,
                                 fontSize = 16.sp,
@@ -3254,4 +3259,102 @@ private fun UnreadBadge(count: Int) {
 @Composable
 private fun AndroidUnreadBadge(count: Int) {
     UnreadBadge(count)
+}
+
+@Composable
+private fun MarkdownText(
+    text: String,
+    color: Color,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    lineHeight: androidx.compose.ui.unit.TextUnit,
+    modifier: Modifier = Modifier
+) {
+    val uriHandler = LocalUriHandler.current
+    
+    val segments = remember(text) {
+        val pattern = Regex("```(.*?)```", RegexOption.DOT_MATCHES_ALL)
+        val matches = pattern.findAll(text)
+        val result = mutableListOf<MarkdownSegment>()
+        var lastIndex = 0
+        for (match in matches) {
+            if (match.range.first > lastIndex) {
+                result.add(MarkdownSegment.Normal(text.substring(lastIndex, match.range.first)))
+            }
+            result.add(MarkdownSegment.Code(match.groupValues[1]))
+            lastIndex = match.range.last + 1
+        }
+        if (lastIndex < text.length) {
+            result.add(MarkdownSegment.Normal(text.substring(lastIndex)))
+        }
+        result
+    }
+
+    Column(modifier = modifier) {
+        segments.forEach { segment ->
+            when (segment) {
+                is MarkdownSegment.Normal -> {
+                    val annotatedString = remember(segment.content) {
+                        buildAnnotatedString {
+                            val linkPattern = Regex("\\[(.*?)\\]\\((.*?)\\)")
+                            var lastIdx = 0
+                            val linkMatches = linkPattern.findAll(segment.content)
+                            for (m in linkMatches) {
+                                if (m.range.first > lastIdx) {
+                                    append(segment.content.substring(lastIdx, m.range.first))
+                                }
+                                val name = m.groupValues[1]
+                                val url = m.groupValues[2]
+                                pushStringAnnotation(tag = "URL", annotation = url)
+                                withStyle(SpanStyle(color = Color(0xFF2EA6FF), textDecoration = TextDecoration.Underline)) {
+                                    append(name)
+                                }
+                                pop()
+                                lastIdx = m.range.last + 1
+                            }
+                            if (lastIdx < segment.content.length) {
+                                append(segment.content.substring(lastIdx))
+                            }
+                        }
+                    }
+                    if (annotatedString.isNotEmpty()) {
+                        androidx.compose.foundation.text.ClickableText(
+                            text = annotatedString,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = color,
+                                fontSize = fontSize,
+                                lineHeight = lineHeight
+                            ),
+                            onClick = { offset ->
+                                annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                    .firstOrNull()?.let { annotation ->
+                                        runCatching { uriHandler.openUri(annotation.item) }
+                                    }
+                            }
+                        )
+                    }
+                }
+                is MarkdownSegment.Code -> {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        color = color.copy(alpha = 0.05f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, color.copy(alpha = 0.1f))
+                    ) {
+                        Text(
+                            text = segment.content.trim(),
+                            modifier = Modifier.padding(8.dp),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = (fontSize.value - 2).androidx.compose.ui.unit.sp,
+                            color = color.copy(alpha = 0.9f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private sealed class MarkdownSegment {
+    data class Normal(val content: String) : MarkdownSegment()
+    data class Code(val content: String) : MarkdownSegment()
 }
