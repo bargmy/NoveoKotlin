@@ -1399,6 +1399,7 @@ private fun SidebarPane(
 
             if (showSearch) {
                 SearchResultsList(
+                    state = state,
                     strings = strings,
                     chats = chats,
                     users = users,
@@ -1416,6 +1417,7 @@ private fun SidebarPane(
 
 @Composable
 private fun SearchResultsList(
+    state: AppUiState,
     strings: NoveoStrings,
     chats: List<ChatSummary>,
     users: List<UserSummary>,
