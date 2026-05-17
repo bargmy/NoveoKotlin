@@ -1498,7 +1498,11 @@ private fun ChatListContent(
             contentPadding = PaddingValues(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(chats, key = { it.id }) { chat ->
+            items(
+                chats, 
+                key = { it.id },
+                contentType = { "chat" }
+            ) { chat ->
                 ChatRow(
                     chat = chat,
                     strings = strings,
@@ -4710,12 +4714,16 @@ private fun ChatRow(
     }
     val profileUserId = remember(chat, currentUserId) { resolveProfileUserId(chat, currentUserId) }
     val isVerified = chat.isVerified || (profileUserId?.let { usersById[it]?.isVerified } == true)
+    val containerColor = remember(selected, MaterialTheme.colorScheme) {
+        if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
+    }
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { clip = true } // Hardware caching
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
-        )
+        colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, isSavedMessages = chat.isSavedMessagesChat(currentUserId))

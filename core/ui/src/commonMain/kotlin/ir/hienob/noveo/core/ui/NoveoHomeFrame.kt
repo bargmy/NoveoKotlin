@@ -266,6 +266,7 @@ private fun NoveoHomeChat.openHeaderSubtitle(strings: NoveoStrings): String = wh
     else -> strings.lastSeenRecently
 }
 
+@androidx.compose.runtime.Immutable
 data class NoveoHomeMessage(
     val id: String,
     val senderId: String,
@@ -291,6 +292,7 @@ data class NoveoHomeMessage(
     val isSystem: Boolean = false
 )
 
+@androidx.compose.runtime.Immutable
 private data class TelegramHomeColors(
     val isDark: Boolean,
     val composerBlue: Color,
@@ -1726,7 +1728,11 @@ private fun AndroidStyleConversationPane(
         ) {
             if (state.messages.isEmpty()) item { EmptyMessagesSurface(strings, tgColors) }
             else if (visibleMessages.isEmpty()) item { EmptyMessageSearchSurface(strings, tgColors, messageSearchQuery) }
-            itemsIndexed(visibleMessages, key = { _, message -> message.id }) { index, message ->
+            itemsIndexed(
+                visibleMessages, 
+                key = { _, message -> message.id },
+                contentType = { _, message -> if (message.isSystem) "system" else "bubble" }
+            ) { index, message ->
                 val prev = visibleMessages.getOrNull(index - 1)
                 val next = visibleMessages.getOrNull(index + 1)
                 if (message.dateLabel.isNotBlank() && prev?.dateLabel != message.dateLabel) {
@@ -2342,6 +2348,10 @@ private fun AndroidStyleMessageRow(
         label = "message_pending_intro"
     )
 
+    val bubbleColor = remember(ownMessage, tgColors) { if (ownMessage) tgColors.outgoingBubble else tgColors.incomingBubble }
+    val replyColor = remember(ownMessage, tgColors) { if (ownMessage) tgColors.replyOutgoing else tgColors.replyIncoming }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+
     Column(
         horizontalAlignment = if (ownMessage) Alignment.End else Alignment.Start,
         modifier = Modifier
@@ -2355,6 +2365,8 @@ private fun AndroidStyleMessageRow(
                 onLongClick = { onOpenMenu(bubbleBounds) }
             )
             .graphicsLayer {
+                // Enable hardware caching for the bubble to make scrolling smoother
+                compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Auto
                 if (message.pending) {
                     translationY = (1f - pendingIntroFraction) * 18f
                     translationX = (1f - pendingIntroFraction) * if (ownMessage) 26f else -26f
@@ -2382,13 +2394,18 @@ private fun AndroidStyleMessageRow(
                 modifier = if (ownMessage) Modifier else Modifier.weight(1f, false)
             ) {
                 Surface(
-                    modifier = Modifier.widthIn(max = maxBubbleWidth).onGloballyPositioned { bubbleBounds = it.boundsInRoot() },
-                    shape = TelegramBubbleShape(
-                        isOutgoing = ownMessage,
-                        hasTail = hasTail,
-                        cornerRadius = with(androidx.compose.ui.platform.LocalDensity.current) { 16.dp.toPx() }
-                    ),
-                    color = if (ownMessage) tgColors.outgoingBubble else tgColors.incomingBubble,
+                    modifier = Modifier
+                        .widthIn(max = maxBubbleWidth)
+                        .onGloballyPositioned { bubbleBounds = it.boundsInRoot() }
+                        .graphicsLayer { clip = false }, // Optimize rendering
+                    shape = remember(ownMessage, hasTail) {
+                        TelegramBubbleShape(
+                            isOutgoing = ownMessage,
+                            hasTail = hasTail,
+                            cornerRadius = with(density) { 16.dp.toPx() }
+                        )
+                    },
+                    color = bubbleColor,
                     shadowElevation = 0.5.dp
                 ) {
                     Column(modifier = Modifier.padding(6.dp).padding(horizontal = 4.dp)) {
@@ -2424,7 +2441,7 @@ private fun AndroidStyleMessageRow(
                         if (!message.replyAuthor.isNullOrBlank() || !message.replyPreview.isNullOrBlank()) {
                             Surface(
                                 modifier = Modifier.padding(bottom = 4.dp),
-                                color = if (ownMessage) tgColors.replyOutgoing else tgColors.replyIncoming,
+                                color = replyColor,
                                 shape = RoundedCornerShape(4.dp)
                             ) {
                                 Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -3224,6 +3241,7 @@ private fun ProfileCircle(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
+            .graphicsLayer { clip = true }
             .background(
                 Brush.linearGradient(
                     colors = listOf(
@@ -3234,7 +3252,8 @@ private fun ProfileCircle(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(name.firstOrNull()?.uppercase() ?: "N", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+        val initials = remember(name) { name.firstOrNull()?.uppercase() ?: "N" }
+        Text(initials, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
     }
 }
 
