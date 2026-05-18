@@ -673,10 +673,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun authenticate(handle: String, password: String, captchaToken: String? = null) {
         viewModelScope.launch {
             runCatching {
-                val strings = getStrings(_uiState.value.languageCode)
+                val languageCode = _uiState.value.languageCode
+                val strings = getStrings(languageCode)
                 _uiState.value = _uiState.value.copy(startupState = StartupState.Home, loading = true, connectionTitle = strings.brandName)
                 val session = withContext(Dispatchers.IO) {
-                    if (_uiState.value.authModeSignup) api.signup(handle, password, captchaToken) else api.login(handle, password)
+                    if (_uiState.value.authModeSignup) {
+                        api.signup(handle, password, captchaToken, languageCode)
+                    } else {
+                        api.login(handle, password, languageCode)
+                    }
                 }
                 sessionStore.write(session)
                 _uiState.value = _uiState.value.copy(session = session)
@@ -2142,12 +2147,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setLanguage(code: String) {
+        val previousStrings = getStrings(_uiState.value.languageCode)
+        val nextStrings = getStrings(code)
+        val nextConnectionTitle = when (_uiState.value.connectionTitle) {
+            previousStrings.connecting -> nextStrings.connecting
+            previousStrings.updating -> nextStrings.updating
+            else -> nextStrings.brandName
+        }
         val payload = org.json.JSONObject()
             .put("type", "update_profile")
             .put("languageCode", code)
         NoveoNotificationService.send(payload)
         sessionStore.writeLanguageCode(code)
-        _uiState.value = _uiState.value.copy(languageCode = code)
+        _uiState.value = _uiState.value.copy(languageCode = code, connectionTitle = nextConnectionTitle)
     }
 
     private fun restoreCachedHomeState(cachedHomeState: CachedHomeState?) {

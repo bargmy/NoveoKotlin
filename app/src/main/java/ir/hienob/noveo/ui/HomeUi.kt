@@ -1361,7 +1361,7 @@ private fun SidebarPane(
                 strings = strings,
                 showSearch = showSearch,
                 searchQuery = searchQuery,
-                connectionTitle = state.connectionTitle,
+                connectionTitle = localizeConnectionTitle(state.connectionTitle, strings),
                 onMenuClick = onMenuClick,
                 onSearchToggle = onSearchToggle,
                 onSearchQueryChange = onSearchQueryChange
@@ -1417,6 +1417,36 @@ private fun SidebarPane(
         }
     }
 }
+
+private fun localizeConnectionTitle(rawTitle: String, strings: NoveoStrings): String {
+    val title = rawTitle.trim()
+    return when {
+        title.isBlank() -> strings.brandName
+        title in knownBrandTitles -> strings.brandName
+        title in knownConnectingTitles -> strings.connecting
+        title in knownUpdatingTitles -> strings.updating
+        else -> rawTitle
+    }
+}
+
+private val knownBrandTitles = setOf("Noveo", "Новео", "诺欧", "نوئو", "نوفيو")
+private val knownConnectingTitles = setOf(
+    "Connecting...",
+    "Verbinden...",
+    "Подключение...",
+    "连接中...",
+    "در حال اتصال...",
+    "Conectando...",
+    "Connexion...",
+    "جاري الاتصال...",
+    "Bağlanıyor..."
+)
+private val knownUpdatingTitles = setOf(
+    "Updating...",
+    "Обновление...",
+    "更新中...",
+    "در حال بروزرسانی..."
+)
 
 @Composable
 private fun SearchResultsList(
@@ -5266,6 +5296,23 @@ private fun UpdateBubble(
 ) {
     if (updateInfo.isDismissed || !updateInfo.isAvailable) return
     val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val saveUpdateLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")
+    ) { uri ->
+        val source = updateInfo.localPath?.let(::File)
+        if (uri != null && source?.exists() == true) {
+            runCatching {
+                source.inputStream().use { input ->
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        input.copyTo(output)
+                    } ?: error("Unable to open destination")
+                }
+            }.onSuccess {
+                Toast.makeText(context, strings.saveLocally, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     Surface(
         modifier = Modifier
@@ -5288,6 +5335,13 @@ private fun UpdateBubble(
                 if (updateInfo.isDownloaded) {
                     TextButton(onClick = onInstall, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
                         Text(strings.install, color = Color(0xFF2E7D32), style = MaterialTheme.typography.labelLarge)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    TextButton(
+                        onClick = { saveUpdateLauncher.launch("noveo-${updateInfo.version}.apk") },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(strings.saveLocally, color = Color(0xFF2E7D32), style = MaterialTheme.typography.labelLarge)
                     }
                 } else if (!updateInfo.isDownloading) {
                     TextButton(onClick = { uriHandler.openUri(updateInfo.url) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {

@@ -58,7 +58,7 @@ import ir.hienob.noveo.core.ui.NoveoThemePreset
 import ir.hienob.noveo.core.ui.NoveoRootFrame
 import ir.hienob.noveo.core.ui.NoveoRootFrameState
 import ir.hienob.noveo.core.ui.NoveoStartupSurface
-import ir.hienob.noveo.core.ui.coreNoveoStrings
+import ir.hienob.noveo.core.ui.NoveoStrings as CoreNoveoStrings
 
 internal enum class ThemePreset(val label: String) {
     SKY_LIGHT("Sky Light"),
@@ -365,6 +365,8 @@ fun NoveoRoot(
             .recoverCatching { context.startActivity(fallbackIntent) }
         Unit
     }
+    val strings = getStrings(state.languageCode)
+    val sharedStrings = strings.toCoreStrings()
 
     NoveoRootFrame(
         state = NoveoRootFrameState(
@@ -378,10 +380,10 @@ fun NoveoRoot(
             authModeSignup = state.authModeSignup,
             loading = state.loading,
             error = state.error,
-            connectionTitle = state.connectionTitle.ifBlank { coreNoveoStrings(state.languageCode).brandName }
+            connectionTitle = state.connectionTitle.toSharedConnectionTitle(strings)
         ),
         theme = currentTheme.toSharedTheme(),
-        strings = coreNoveoStrings(state.languageCode),
+        strings = sharedStrings,
         onDismissOnboarding = onDismissOnboarding,
         onAuthMode = onAuthMode,
         onStartRegisterCaptcha = onStartRegisterCaptcha,
@@ -460,6 +462,130 @@ fun NoveoRoot(
         }
     )
 }
+
+private fun NoveoStrings.toCoreStrings(): CoreNoveoStrings = CoreNoveoStrings(
+    languageCode = languageCode,
+    brandName = brandName,
+    next = next,
+    skip = skip,
+    onboardingAction = onboardingAction,
+    onboardingPages = onboardingPages,
+    loginTitle = loginTitle,
+    signupTitle = signupTitle,
+    switchSignup = switchSignup,
+    switchLogin = switchLogin,
+    loginButton = loginButton,
+    signupButton = signupButton,
+    handlePlaceholder = handlePlaceholder,
+    passwordPlaceholder = passwordPlaceholder,
+    registerOnWebTitle = registerOnWebTitle,
+    registerOnWebBody = registerOnWebBody,
+    openNoveoWeb = openNoveoWeb,
+    menu = menu,
+    settings = settings,
+    allContacts = allContacts,
+    savedMessages = savedMessages,
+    newChat = newChat,
+    profile = profile,
+    account = account,
+    preferences = preferences,
+    themes = themes,
+    logout = logout,
+    searchPlaceholder = searchPlaceholder,
+    messagePlaceholder = messagePlaceholder,
+    messages = messages,
+    noMessagesYet = noMessagesYet,
+    noContacts = noContacts,
+    selectChatHint = selectChatHint,
+    online = online,
+    offline = offline,
+    typingPrivate = typingPrivate,
+    sending = sending,
+    cannotSendMessage = cannotSendMessage,
+    open = open,
+    cancel = cancel,
+    reply = reply,
+    edit = edit,
+    edited = edited,
+    delete = delete,
+    forward = forward,
+    download = download,
+    copyText = copyText,
+    pin = pin,
+    unpin = unpin,
+    seenBy = seenBy,
+    addAsSticker = addAsSticker,
+    pinnedMessage = pinnedMessage,
+    forwarded = forwarded,
+    voiceChat = voiceChat,
+    join = join,
+    stars = stars,
+    userId = userId,
+    displayName = displayName,
+    saveChanges = saveChanges,
+    title = title,
+    create = create,
+    oldPassword = oldPassword,
+    newPassword = newPassword,
+    deleteAccount = deleteAccount,
+    about = about,
+    language = language,
+    selectLanguage = selectLanguage,
+    notificationSettings = notificationSettings,
+    enableNotifications = enableNotifications,
+    changePassword = changePassword,
+    group = group,
+    channel = channel,
+    privateChatType = privateChatType,
+    handleOptional = handleOptional,
+    bioOptional = bioOptional,
+    messageButton = messageButton,
+    chatInfo = chatInfo,
+    members = members,
+    membersCount = membersCount,
+    unknown = unknown,
+    lastSeenRecently = lastSeenRecently,
+    searchGlobal = searchGlobal,
+    searchMessages = searchMessages,
+    selectSource = selectSource,
+    dropToAttach = dropToAttach,
+    gallery = gallery,
+    files = files,
+    stickers = stickers,
+    noSavedStickers = noSavedStickers,
+    reactions = reactions,
+    themeLightDesc = themeLightDesc
+)
+
+private fun String.toSharedConnectionTitle(strings: NoveoStrings): String {
+    val title = trim()
+    return when {
+        title.isBlank() -> strings.brandName
+        title in knownSharedBrandTitles -> strings.brandName
+        title in knownSharedConnectingTitles -> strings.connecting
+        title in knownSharedUpdatingTitles -> strings.updating
+        else -> this
+    }
+}
+
+private val knownSharedBrandTitles = setOf("Noveo", "Новео", "诺欧", "نوئو", "نوفيو")
+private val knownSharedConnectingTitles = setOf(
+    "Connecting...",
+    "Verbinden...",
+    "Подключение...",
+    "连接中...",
+    "در حال اتصال...",
+    "Conectando...",
+    "Connexion...",
+    "جاري الاتصال...",
+    "Bağlanıyor..."
+)
+private val knownSharedUpdatingTitles = setOf(
+    "Updating...",
+    "Обновление...",
+    "更新中...",
+    "در حال بروزرسانی..."
+)
 
 @Composable
 private fun ConnectingShell(title: String) {

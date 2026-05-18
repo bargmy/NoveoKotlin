@@ -208,9 +208,10 @@ jobs:
               body = fallback
           else:
               system_prompt = (
-                  "You write concise software release notes for Android builds. "
+                  "You write concise, user-facing release notes for Android builds. "
                   "Return plain Markdown only. Be factual, do not invent behavior, "
                   "Use the code diff as the primary source and summarize only what is supported by it. "
+                  "Avoid class names, internal implementation details, and scary low-level wording unless there is no user-facing way to describe the change. "
                   "Keep the result under 900 characters so the exact same text can be reused "
                   "for GitHub Releases and message captions."
               )

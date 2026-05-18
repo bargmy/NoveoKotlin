@@ -1,6 +1,7 @@
 package ir.hienob.noveo.data
 
 import android.content.Context
+import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -79,12 +80,18 @@ class SessionStore(context: Context) {
             .apply()
     }
 
-    fun readLanguageCode(): String = prefs.getString("language_code", "en") ?: "en"
+    fun readLanguageCode(): String = prefs.getString("language_code", null)
+        ?: defaultLanguageCode()
 
     fun writeLanguageCode(code: String) {
         prefs.edit()
             .putString("language_code", code)
             .apply()
+    }
+
+    private fun defaultLanguageCode(): String {
+        val language = Locale.getDefault().language.lowercase()
+        return if (language in supportedLanguageCodes) language else "en"
     }
 
     fun readCachedHomeState(): CachedHomeState? {
@@ -178,6 +185,8 @@ class SessionStore(context: Context) {
         prefs.edit().clear().apply()
     }
 }
+
+private val supportedLanguageCodes = setOf("en", "de", "ru", "zh", "fa", "es", "fr", "ar", "tr")
 
 private fun UserSummary.toJson(): JSONObject = JSONObject()
     .put("id", id)

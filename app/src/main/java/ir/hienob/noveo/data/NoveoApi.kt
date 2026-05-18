@@ -35,20 +35,20 @@ class NoveoApi(
 
     private val userAgent = "NoveoKotlin/${ir.hienob.noveo.BuildConfig.VERSION_NAME}"
 
-    fun login(handle: String, password: String): Session = auth(
+    fun login(handle: String, password: String, languageCode: String = "en"): Session = auth(
         JSONObject()
             .put("type", "login_with_password")
             .put("username", handle)
             .put("password", password)
-            .put("languageCode", "en")
+            .put("languageCode", languageCode)
             .put("clientInfo", clientInfoJson())
     )
-    fun signup(handle: String, password: String, captchaToken: String? = null): Session = auth(
+    fun signup(handle: String, password: String, captchaToken: String? = null, languageCode: String = "en"): Session = auth(
         JSONObject()
             .put("type", "register")
             .put("username", handle)
             .put("password", password)
-            .put("languageCode", "en")
+            .put("languageCode", languageCode)
             .put("clientInfo", clientInfoJson())
             .apply { if (captchaToken != null) put("captchaToken", captchaToken) }
     )
@@ -610,4 +610,3 @@ class NoveoApi(
         }
     }
 }
-
