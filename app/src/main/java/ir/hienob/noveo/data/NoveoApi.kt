@@ -33,8 +33,6 @@ class NoveoApi(
         }
     }
 
-    private val userAgent = "NoveoKotlin/${ir.hienob.noveo.BuildConfig.VERSION_NAME}"
-
     fun login(handle: String, password: String, languageCode: String = "en"): Session = auth(
         JSONObject()
             .put("type", "login_with_password")
@@ -66,6 +64,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         client.newCall(request).execute().use { response ->
@@ -80,6 +79,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         client.newCall(request).execute().use { response ->
@@ -97,6 +97,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         client.newCall(request).execute().use { response ->
@@ -112,6 +113,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
             .get()
             .build()
         client.newCall(request).execute().use { response ->
@@ -161,9 +163,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
-            .header("User-Agent", userAgent)
-            .header("X-Noveo-Client", "kotlin")
-            .header("X-Noveo-Version", ir.hienob.noveo.BuildConfig.VERSION_NAME)
+            .noveoClientHeaders()
             .post(multipartBody)
             .build()
 
@@ -193,6 +193,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
             .get()
             .build()
         client.newCall(request).execute().use { response ->
@@ -236,6 +237,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
             .get()
             .build()
         client.newCall(request).execute().use { response ->
@@ -266,6 +268,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
             .get()
             .build()
         client.newCall(request).execute().use { response ->
@@ -289,6 +292,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         client.newCall(request).execute().use { response ->
@@ -375,6 +379,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
             .get()
             .build()
         client.newCall(request).execute().use { response ->
@@ -417,7 +422,11 @@ class NoveoApi(
 
     fun checkForUpdate(): JSONObject? {
         val url = "https://noveo.ir/update.json".toHttpUrl()
-        val request = Request.Builder().url(url).get().build()
+        val request = Request.Builder()
+            .url(url)
+            .noveoClientHeaders()
+            .get()
+            .build()
         return runCatching {
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) JSONObject(response.body?.string().orEmpty()) else null
@@ -435,6 +444,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         client.newCall(request).execute().use { response ->
@@ -452,6 +462,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         client.newCall(request).execute().use { response ->
@@ -476,9 +487,7 @@ class NoveoApi(
             .url(url)
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
-            .header("User-Agent", userAgent)
-            .header("X-Noveo-Client", "kotlin")
-            .header("X-Noveo-Version", ir.hienob.noveo.BuildConfig.VERSION_NAME)
+            .noveoClientHeaders()
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         client.newCall(request).execute().use { response ->
@@ -495,9 +504,7 @@ class NoveoApi(
         val builder = Request.Builder()
             .url(url)
             .header("Origin", origin)
-            .header("User-Agent", userAgent)
-            .header("X-Noveo-Client", "kotlin")
-            .header("X-Noveo-Version", ir.hienob.noveo.BuildConfig.VERSION_NAME)
+            .noveoClientHeaders()
         if (session != null) {
             builder.header("X-User-ID", session.userId)
             builder.header("X-Auth-Token", session.token)
@@ -568,9 +575,7 @@ class NoveoApi(
     private fun request(): Request = Request.Builder()
         .url(wsUrl)
         .header("Origin", origin)
-        .header("User-Agent", userAgent)
-        .header("X-Noveo-Client", "kotlin")
-        .header("X-Noveo-Version", ir.hienob.noveo.BuildConfig.VERSION_NAME)
+        .noveoClientHeaders()
         .build()
 
     private fun reconnect(session: Session): JSONObject = JSONObject()
@@ -580,10 +585,7 @@ class NoveoApi(
         .put("sessionId", session.sessionId)
         .put("clientInfo", clientInfoJson())
 
-    private fun clientInfoJson(): JSONObject = JSONObject()
-        .put("client", "kotlin")
-        .put("platform", "android")
-        .put("version", ir.hienob.noveo.BuildConfig.VERSION_NAME)
+    private fun clientInfoJson(): JSONObject = NoveoClientIdentity.clientInfoJson()
     private fun parseStickerList(payload: JSONObject): List<SavedSticker> {
         val stickersArray = payload.optJSONArray("stickers") ?: JSONArray()
         return (0 until stickersArray.length()).mapNotNull { index ->

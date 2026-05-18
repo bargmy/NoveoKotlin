@@ -91,6 +91,7 @@ class ChatSocket(
         val request = Request.Builder()
             .url("wss://noveo.ir:8443/ws")
             .header("Origin", origin)
+            .noveoClientHeaders()
             .build()
 
         val socket: WebSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -101,6 +102,7 @@ class ChatSocket(
                     .put("userId", session.userId)
                     .put("token", session.token)
                     .put("sessionId", session.sessionId)
+                    .put("clientInfo", NoveoClientIdentity.clientInfoJson())
                 
                 webSocket.send(reconnectPayload.toString())
             }

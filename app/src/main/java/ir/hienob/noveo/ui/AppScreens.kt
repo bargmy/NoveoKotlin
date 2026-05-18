@@ -51,6 +51,7 @@ import android.net.Uri
 import ir.hienob.noveo.app.AppUiState
 import ir.hienob.noveo.app.StartupState
 import ir.hienob.noveo.data.ChatMessage
+import ir.hienob.noveo.data.NoveoClientIdentity
 import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.data.SavedSticker
 import ir.hienob.noveo.core.ui.NoveoTheme
@@ -749,7 +750,7 @@ private fun CaptchaModal(
                         android.webkit.WebView(context).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            settings.userAgentString = "NoveoKotlin/0.8.1"
+                            settings.userAgentString = NoveoClientIdentity.userAgent
 
                             
                             webViewClient = object : android.webkit.WebViewClient() {
@@ -780,6 +781,9 @@ private fun CaptchaModal(
                                     val type = data.optString("type")
                                     if (type == "captcha-frame-ready" || type == "captcha-ready") {
                                          val authHeaders = org.json.JSONObject()
+                                         NoveoClientIdentity.headers.forEach { (name, value) ->
+                                             authHeaders.put(name, value)
+                                         }
                                          if (session != null) {
                                              authHeaders.put("X-User-ID", session.userId)
                                              authHeaders.put("X-Auth-Token", session.token)
@@ -812,9 +816,7 @@ private fun CaptchaModal(
                                 headers["X-User-ID"] = session.userId
                                 headers["X-Auth-Token"] = session.token
                             }
-                            headers["X-Noveo-Client"] = "kotlin"
-                            headers["X-Noveo-Version"] = ir.hienob.noveo.BuildConfig.VERSION_NAME
-                            headers["User-Agent"] = "NoveoKotlin/${ir.hienob.noveo.BuildConfig.VERSION_NAME}"
+                            headers.putAll(NoveoClientIdentity.headers)
 
                             loadUrl(fullUrl, headers)
                         }
