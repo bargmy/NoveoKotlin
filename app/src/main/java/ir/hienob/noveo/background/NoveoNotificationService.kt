@@ -65,7 +65,15 @@ class NoveoNotificationService : LifecycleService() {
         private val knownUsers = mutableMapOf<String, ir.hienob.noveo.data.UserSummary>()
 
         fun updateKnownUsers(users: Map<String, ir.hienob.noveo.data.UserSummary>) {
-            knownUsers.putAll(users)
+            synchronized(knownUsers) {
+                knownUsers.putAll(users)
+            }
+        }
+
+        private fun knownUsersSnapshot(): Map<String, ir.hienob.noveo.data.UserSummary> {
+            return synchronized(knownUsers) {
+                knownUsers.toMap()
+            }
         }
 
         fun send(payload: JSONObject): Boolean {
@@ -225,7 +233,12 @@ class NoveoNotificationService : LifecycleService() {
         socketJob = serviceScope.launch {
             while (true) {
                 try {
-                    socket.connect(session) { knownUsers }.collect { event ->
+                    socket.connect(session) { knownUsersSnapshot() }.collect { event ->
+                        when (event) {
+                            is SocketEvent.UserListUpdate -> updateKnownUsers(event.usersById)
+                            is SocketEvent.HistoryUpdate -> updateKnownUsers(event.users)
+                            else -> {}
+                        }
                         _socketEvents.emit(event)
                         when (event) {
                             is SocketEvent.NewMessage -> {
@@ -340,7 +353,7 @@ class NoveoNotificationService : LifecycleService() {
         wakeLock.acquire(10000)
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val caller = knownUsers[event.callerId]
+        val caller = knownUsersSnapshot()[event.callerId]
         val callerName = caller?.username ?: "Unknown Caller"
         
         val strings = getStrings(sessionStore.readLanguageCode())

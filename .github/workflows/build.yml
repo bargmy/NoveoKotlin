@@ -290,7 +290,7 @@ jobs:
             echo "cmd=gradle" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Configure minified split APKs
+      - name: Configure minified ARM universal APKs
         shell: bash
         run: |
           python3 - <<'PY'
@@ -313,7 +313,7 @@ jobs:
                   abi {
                       isEnable = true
                       reset()
-                      include("arm64-v8a", "armeabi-v7a", "x86_64")
+                      include("arm64-v8a", "armeabi-v7a")
                       isUniversalApk = true
                   }
               }
@@ -324,7 +324,7 @@ jobs:
           path.write_text(text, encoding="utf-8")
           PY
 
-      - name: Build minified split APKs
+      - name: Build minified ARM APKs
         shell: bash
         run: |
           set -o pipefail
@@ -337,7 +337,7 @@ jobs:
             -x lintVitalRelease \
             -x lintVitalReportRelease 2>&1 | tee build.log
 
-      - name: Collect minified APKs
+      - name: Collect minified ARM APKs
         shell: bash
         run: |
           set -euo pipefail
@@ -356,9 +356,6 @@ jobs:
               *armeabi-v7a*)
                 out="noveo-${RELEASE_TAG}-armeabi-v7a-minified.apk"
                 ;;
-              *x86_64*)
-                out="noveo-${RELEASE_TAG}-x86_64-minified.apk"
-                ;;
               *)
                 echo "Skipping unknown APK output: $name"
                 continue
@@ -371,7 +368,70 @@ jobs:
           test -f "dist/noveo-${RELEASE_TAG}.apk"
           test -f "dist/noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
           test -f "dist/noveo-${RELEASE_TAG}-armeabi-v7a-minified.apk"
+
+      - name: Configure minified x86 APK
+        shell: bash
+        run: |
+          git checkout -- app/build.gradle.kts
+          python3 - <<'PY'
+          import pathlib
+          import re
+
+          path = pathlib.Path("app/build.gradle.kts")
+          text = path.read_text(encoding="utf-8")
+          # ABI splits and ndk.abiFilters cannot be used together.
+          # Remove the repo's abiFilters only in this temporary CI checkout.
+          text = re.sub(
+              r'\n\s*abiFilters \+= listOf\([^)]+\)',
+              '',
+              text,
+          )
+
+          if "splits {" not in text:
+              splits = """
+              splits {
+                  abi {
+                      isEnable = true
+                      reset()
+                      include("x86_64")
+                      isUniversalApk = false
+                  }
+              }
+
+          """
+              text = text.replace("    signingConfigs {", splits + "    signingConfigs {", 1)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Build minified x86 APK
+        shell: bash
+        run: |
+          set -o pipefail
+          "${{ steps.gradle_cmd.outputs.cmd }}" \
+            --build-cache \
+            --configuration-cache \
+            -PNOVEO_VERSION_NAME="${{ needs.metadata.outputs.version }}" \
+            -PNOVEO_VERSION_CODE="${{ needs.metadata.outputs.version_code }}" \
+            assembleRelease \
+            -x lintVitalRelease \
+            -x lintVitalReportRelease 2>&1 | tee -a build.log
+
+      - name: Collect minified x86 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          found=0
+          for apk in "$APK_FOLDER"/*x86_64*.apk; do
+            cp "$apk" "dist/noveo-${RELEASE_TAG}-x86_64-minified.apk"
+            found=1
+          done
+
+          test "$found" -eq 1
           test -f "dist/noveo-${RELEASE_TAG}-x86_64-minified.apk"
+          ls -lh dist
 
       - name: Upload minified APK artifact
         uses: actions/upload-artifact@v4

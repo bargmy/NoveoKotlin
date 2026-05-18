@@ -679,6 +679,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (_uiState.value.authModeSignup) api.signup(handle, password, captchaToken) else api.login(handle, password)
                 }
                 sessionStore.write(session)
+                _uiState.value = _uiState.value.copy(session = session)
                 NoveoNotificationService.start(getApplication())
                 loadSavedStickers(session)
                 loadHome(session)
@@ -1530,9 +1531,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun handleSocketEvent(event: SocketEvent) {
         val session = _uiState.value.session ?: return
-        if (event is SocketEvent.UserListUpdate || event is SocketEvent.HistoryUpdate) {
-             NoveoNotificationService.updateKnownUsers(_uiState.value.usersById)
-        }
         when (event) {
             is SocketEvent.ConnectionState -> {
                 val currentState = _uiState.value
@@ -1626,33 +1624,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             is SocketEvent.UserListUpdate -> {
+                val mergedUsers = _uiState.value.usersById + event.usersById
+                val resolvedChats = _uiState.value.chats.resolveUserDisplay(mergedUsers, session.userId)
+                resolveCachedMessageSenders(mergedUsers)
                 _uiState.value = _uiState.value.copy(
-                    usersById = _uiState.value.usersById + event.usersById,
-                    onlineUserIds = event.onlineIds
+                    usersById = mergedUsers,
+                    onlineUserIds = event.onlineIds,
+                    chats = resolvedChats,
+                    messages = _uiState.value.messages.resolveSenderNames(mergedUsers),
+                    messagesByChat = messageCacheByChat.toMap()
                 )
+                NoveoNotificationService.updateKnownUsers(mergedUsers)
                 persistCachedHomeState()
             }
             is SocketEvent.ChatUpdated -> { /* Rely on HistoryUpdate or targeted events */ }
             is SocketEvent.HistoryUpdate -> {
+                val mergedUsers = _uiState.value.usersById + event.users
                 event.messagesByChat.forEach { (chatId, incomingMessages) ->
                     messageCacheByChat[chatId] = mergeMessages(
                         messageCacheByChat[chatId].orEmpty(),
                         incomingMessages
                     )
                 }
+                resolveCachedMessageSenders(mergedUsers)
                 val selectedChatMessages = _uiState.value.selectedChatId
                     ?.let { messageCacheByChat[it].orEmpty() }
                     ?: _uiState.value.messages
 
-                val self = event.users[session.userId]
+                val self = mergedUsers[session.userId]
                 val lang = self?.languageCode ?: _uiState.value.languageCode
                 val strings = getStrings(lang)
                 
-                val sortedChats = event.chats.sortedByDescending { it.lastMessageTimestamp }
+                val sortedChats = event.chats
+                    .resolveUserDisplay(mergedUsers, session.userId)
+                    .sortedByDescending { it.lastMessageTimestamp }
                 _uiState.value = _uiState.value.copy(
                     chats = sortedChats,
                     totalUnreadCount = sumUnread(sortedChats),
-                    usersById = _uiState.value.usersById + event.users,
+                    usersById = mergedUsers,
                     messages = selectedChatMessages,
                     loading = false,
                     connectionDetail = null,
@@ -1660,6 +1669,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     languageCode = lang,
                     messagesByChat = messageCacheByChat.toMap()
                 )
+                NoveoNotificationService.updateKnownUsers(mergedUsers)
                 persistCachedHomeState()
             }
             is SocketEvent.OlderMessages -> {
@@ -2151,6 +2161,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    private fun resolveCachedMessageSenders(usersById: Map<String, UserSummary>) {
+        if (messageCacheByChat.isEmpty()) return
+        val resolved = messageCacheByChat.mapValues { (_, messages) ->
+            messages.resolveSenderNames(usersById)
+        }
+        messageCacheByChat.clear()
+        messageCacheByChat.putAll(resolved)
+    }
+
     private fun MessageFileAttachment.cacheExtension(): String {
         val nameExtension = name.substringAfterLast('.', "")
             .takeIf { it.isNotBlank() && it.length <= 8 }
@@ -2211,6 +2230,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         )
     }
+}
+
+private fun List<ChatSummary>.resolveUserDisplay(
+    usersById: Map<String, UserSummary>,
+    selfUserId: String
+): List<ChatSummary> = map { chat ->
+    if (chat.chatType != "private") return@map chat
+    if (chat.memberIds.size == 1 && chat.memberIds.firstOrNull() == selfUserId) {
+        return@map chat.copy(title = "Saved Messages", avatarUrl = chat.avatarUrl ?: "saved_messages")
+    }
+    val peerId = chat.memberIds.firstOrNull { it != selfUserId } ?: return@map chat
+    val peer = usersById[peerId] ?: return@map chat
+    val username = peer.username.takeIf { it.isNotBlank() } ?: return@map chat
+    chat.copy(
+        title = username,
+        avatarUrl = peer.avatarUrl ?: chat.avatarUrl
+    )
+}
+
+private fun List<ChatMessage>.resolveSenderNames(usersById: Map<String, UserSummary>): List<ChatMessage> = map { message ->
+    if (message.senderId == "system" || message.senderId == "anonymous") return@map message
+    val username = usersById[message.senderId]?.username?.takeIf { it.isNotBlank() } ?: return@map message
+    if (message.senderName == username) message else message.copy(senderName = username)
 }
 
 private fun mergeMessages(existing: List<ChatMessage>, incoming: List<ChatMessage>): List<ChatMessage> {

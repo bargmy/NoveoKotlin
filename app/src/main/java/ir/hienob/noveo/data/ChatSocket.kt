@@ -87,6 +87,7 @@ class ChatSocket(
         session: Session,
         getKnownUsers: () -> Map<String, UserSummary>
     ): Flow<SocketEvent> = callbackFlow {
+        val socketKnownUsers = getKnownUsers().toMutableMap()
         val request = Request.Builder()
             .url("wss://noveo.ir:8443/ws")
             .header("Origin", origin)
@@ -109,7 +110,7 @@ class ChatSocket(
                 runCatching {
                     val json = JSONObject(text)
                     val type = json.optString("type")
-                    val knownUsers = getKnownUsers()
+                    val knownUsers = socketKnownUsers + getKnownUsers()
                     val payload = json.unwrapRealtimePayload()
 
                     when (type) {
@@ -236,6 +237,8 @@ class ChatSocket(
                         }
                         "user_list_update" -> {
                             val (users, online) = parseUsers(json)
+                            socketKnownUsers.clear()
+                            socketKnownUsers.putAll(knownUsers + users)
                             trySend(SocketEvent.UserListUpdate(users, online))
                         }
                         "chat_updated" -> {
@@ -261,6 +264,8 @@ class ChatSocket(
                         "chat_history" -> {
                             val users = parseUsers(json).first
                             val combinedUsers = knownUsers + users
+                            socketKnownUsers.clear()
+                            socketKnownUsers.putAll(combinedUsers)
                             val chats = parseChats(json, combinedUsers, session.userId)
                             val messagesByChat = parseMessagesByChat(json, combinedUsers)
                             trySend(SocketEvent.HistoryUpdate(chats, users, messagesByChat))
@@ -269,6 +274,8 @@ class ChatSocket(
                             val chatId = json.optString("chatId")
                             val users = parseUsers(json).first
                             val combinedUsers = knownUsers + users
+                            socketKnownUsers.clear()
+                            socketKnownUsers.putAll(combinedUsers)
                             val messages = parseChatMessageList(json.optJSONArray("messages"), chatId, combinedUsers)
                             val hasMore = json.optBoolean("hasMoreHistory", false)
                             trySend(SocketEvent.OlderMessages(chatId, messages, hasMore))
