@@ -136,6 +136,7 @@ class NoveoNotificationService : LifecycleService() {
                 when (event) {
                     Lifecycle.Event.ON_START -> {
                         isAppInForeground = true
+                        activeSession?.let(::connectSocketIfNeeded)
                         updatePresence(true)
                     }
                     Lifecycle.Event.ON_STOP -> {
@@ -150,7 +151,9 @@ class NoveoNotificationService : LifecycleService() {
         serviceScope.launch {
             sessionStore.read()?.let { session ->
                 activeSession = session
-                connectSocket(session)
+                if (isAppInForeground) {
+                    connectSocketIfNeeded(session)
+                }
             }
         }
     }
@@ -228,10 +231,19 @@ class NoveoNotificationService : LifecycleService() {
         }
     }
 
+    private fun connectSocketIfNeeded(session: Session) {
+        if (socketJob?.isActive == true && socket.isConnected) return
+        if (socketJob?.isActive == true) socketJob?.cancel()
+        connectSocket(session)
+    }
+
     private fun connectSocket(session: Session) {
         socketJob?.cancel()
         socketJob = serviceScope.launch {
             while (true) {
+                if (!isAppInForeground) {
+                    break
+                }
                 try {
                     socket.connect(session) { knownUsersSnapshot() }.collect { event ->
                         when (event) {
@@ -269,9 +281,19 @@ class NoveoNotificationService : LifecycleService() {
                     }
                 } catch (error: Throwable) {
                     if (error is CancellationException) throw error
-                    _socketEvents.emit(SocketEvent.ConnectionState(connected = false))
+                    if (!isAppInForeground) {
+                        _socketEvents.emit(SocketEvent.ConnectionState(connected = false, detail = "Paused until app is opened"))
+                        break
+                    }
+                    _socketEvents.emit(SocketEvent.ConnectionState(connected = false, detail = error.message))
                     delay(3000)
+                    continue
                 }
+                if (!isAppInForeground) {
+                    _socketEvents.emit(SocketEvent.ConnectionState(connected = false, detail = "Paused until app is opened"))
+                    break
+                }
+                delay(3000)
             }
         }
     }

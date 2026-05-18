@@ -96,7 +96,6 @@ class ChatSocket(
         val socket: WebSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 activeSocket = webSocket
-                trySend(SocketEvent.ConnectionState(connected = true))
                 val reconnectPayload = JSONObject()
                     .put("type", "reconnect")
                     .put("userId", session.userId)
@@ -117,6 +116,7 @@ class ChatSocket(
                         "login_success" -> {
                             val syncPayload = JSONObject().put("type", "resync_state")
                             webSocket.send(syncPayload.toString())
+                            trySend(SocketEvent.ConnectionState(connected = true))
                         }
                         "message", "new_message" -> trySend(SocketEvent.NewMessage(parseRealtimeMessage(json, knownUsers)))
                         "message_sent" -> trySend(SocketEvent.MessageSent(parseRealtimeMessage(json, knownUsers)))

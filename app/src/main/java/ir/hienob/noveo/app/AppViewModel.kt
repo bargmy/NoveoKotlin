@@ -1545,7 +1545,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     retryPendingMessages()
                     // Immediately request resync on connect to speed up UI updates
                     refreshHomeSilently()
+                    scheduleSocketResyncRetry()
                 } else {
+                    socketResyncJob?.cancel()
                     currentState.e2eeSessions.keys.forEach(::removeE2EEMessages)
                 }
             }
@@ -1639,6 +1641,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             is SocketEvent.ChatUpdated -> { /* Rely on HistoryUpdate or targeted events */ }
             is SocketEvent.HistoryUpdate -> {
+                socketResyncJob?.cancel()
                 val mergedUsers = _uiState.value.usersById + event.users
                 event.messagesByChat.forEach { (chatId, incomingMessages) ->
                     messageCacheByChat[chatId] = mergeMessages(
@@ -1735,7 +1738,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 session = session,
                 wallet = wallet,
                 contacts = contacts,
-                connectionTitle = if (_uiState.value.chats.isEmpty()) strings.connecting else _uiState.value.connectionTitle,
+                connectionTitle = if (_uiState.value.chats.isEmpty()) strings.connecting else strings.brandName,
             )
             NoveoNotificationService.updateKnownUsers(_uiState.value.usersById)
             
@@ -1752,6 +1755,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun refreshSelectedChat(session: Session, chatId: String, reason: String) {
         // We now rely on WebSocket for real-time updates.
         // If a specific refresh is needed, we could send a targeted message sync request via socket.
+    }
+
+    private fun scheduleSocketResyncRetry() {
+        socketResyncJob?.cancel()
+        socketResyncJob = viewModelScope.launch {
+            repeat(2) {
+                delay(5000)
+                if (_uiState.value.session == null) return@launch
+                refreshHomeSilently()
+            }
+        }
     }
 
     private fun sumUnread(chats: List<ChatSummary>) = chats.sumOf { it.unreadCount }
@@ -1833,11 +1847,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         val isSelectedChat = msg.chatId == latestState.selectedChatId
         val sortedChats = currentChats.sortedByDescending { it.lastMessageTimestamp }
+        val strings = getStrings(latestState.languageCode)
         _uiState.value = latestState.copy(
             messages = if (isSelectedChat) cachedMessages else latestState.messages,
             chats = sortedChats,
             totalUnreadCount = sumUnread(sortedChats),
-            messagesByChat = messageCacheByChat.toMap()
+            messagesByChat = messageCacheByChat.toMap(),
+            loading = false,
+            connectionTitle = strings.brandName,
+            connectionDetail = null
         )
         persistCachedHomeState()
 

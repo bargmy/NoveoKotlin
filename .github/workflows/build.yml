@@ -150,6 +150,8 @@ jobs:
 
           git log --no-merges --pretty=format:'- %s (%h)' "$RANGE" > commits.txt || true
           git diff --name-status "$RANGE" > files.txt || true
+          git diff --stat "$RANGE" > diffstat.txt || true
+          git diff --no-ext-diff --find-renames --unified=3 "$RANGE" > code.diff || true
           export PREV_LABEL RANGE
           python3 -m pip install --disable-pip-version-check --quiet groq
 
@@ -169,10 +171,20 @@ jobs:
 
           commits = pathlib.Path("commits.txt").read_text(encoding="utf-8", errors="ignore").strip()
           files_changed = pathlib.Path("files.txt").read_text(encoding="utf-8", errors="ignore").strip()
+          diffstat = pathlib.Path("diffstat.txt").read_text(encoding="utf-8", errors="ignore").strip()
+          code_diff = pathlib.Path("code.diff").read_text(encoding="utf-8", errors="ignore").strip()
           if not commits:
               commits = "- No commit messages available"
           if not files_changed:
               files_changed = "No file-level diff available"
+          if not diffstat:
+              diffstat = "No diffstat available"
+          if not code_diff:
+              code_diff = "No code diff available"
+
+          max_diff_chars = 60000
+          if len(code_diff) > max_diff_chars:
+              code_diff = code_diff[:max_diff_chars] + "\n\n[Diff truncated to keep the release-note prompt bounded.]"
 
           fallback = textwrap.dedent(f"""\
           Release {release_tag}
@@ -184,6 +196,12 @@ jobs:
 
           Files changed:
           {files_changed}
+
+          Diff stat:
+          {diffstat}
+
+          Code diff:
+          {code_diff}
           """).strip()
 
           if not api_key:
@@ -192,7 +210,7 @@ jobs:
               system_prompt = (
                   "You write concise software release notes for Android builds. "
                   "Return plain Markdown only. Be factual, do not invent behavior, "
-                  "and summarize only what is supported by the provided diff. "
+                  "Use the code diff as the primary source and summarize only what is supported by it. "
                   "Keep the result under 900 characters so the exact same text can be reused "
                   "for GitHub Releases and message captions."
               )
@@ -208,6 +226,14 @@ jobs:
 
               File diff:
               {files_changed}
+
+              Diff stat:
+              {diffstat}
+
+              Code diff:
+              ```diff
+              {code_diff}
+              ```
 
               Write a compact changelog with:
               - a one-line headline
