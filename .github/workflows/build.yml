@@ -360,28 +360,48 @@ jobs:
             --configuration-cache \
             -PNOVEO_VERSION_NAME="${{ needs.metadata.outputs.version }}" \
             -PNOVEO_VERSION_CODE="${{ needs.metadata.outputs.version_code }}" \
-            assembleRelease \
-            -x lintVitalRelease \
-            -x lintVitalReportRelease 2>&1 | tee build.log
+            assembleFullRelease \
+            assembleLiteRelease \
+            -x lintVitalFullRelease \
+            -x lintVitalLiteRelease \
+            -x lintVitalReportFullRelease \
+            -x lintVitalReportLiteRelease 2>&1 | tee build.log
 
       - name: Collect minified ARM APKs
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          shopt -s nullglob
+          shopt -s nullglob globstar
 
-          for apk in "$APK_FOLDER"/*.apk; do
+          for apk in app/build/outputs/apk/**/release/*.apk; do
             name="$(basename "$apk")"
+            # Our custom naming in build.gradle.kts is:
+            # ${baseName}-${appVersionName}-${abi}-${buildType}.apk
+            # baseName is "noveo" or "noveo-lite"
+            
+            # Since we want to keep the RELEASE_TAG in the final name for consistency with existing CI logic:
             case "$name" in
-              *universal*|app-release.apk)
-                out="noveo-${RELEASE_TAG}.apk"
+              noveo-lite-*)
+                flavor_prefix="noveo-lite"
+                ;;
+              noveo-*)
+                flavor_prefix="noveo"
+                ;;
+              *)
+                continue
+                ;;
+            esac
+
+            case "$name" in
+              *universal*)
+                out="${flavor_prefix}-${RELEASE_TAG}.apk"
                 ;;
               *arm64-v8a*)
-                out="noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
+                out="${flavor_prefix}-${RELEASE_TAG}-arm64-v8a-minified.apk"
                 ;;
               *armeabi-v7a*)
-                out="noveo-${RELEASE_TAG}-armeabi-v7a-minified.apk"
+                out="${flavor_prefix}-${RELEASE_TAG}-armeabi-v7a-minified.apk"
                 ;;
               *)
                 echo "Skipping unknown APK output: $name"
@@ -393,8 +413,9 @@ jobs:
 
           ls -lh dist
           test -f "dist/noveo-${RELEASE_TAG}.apk"
+          test -f "dist/noveo-lite-${RELEASE_TAG}.apk"
           test -f "dist/noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
-          test -f "dist/noveo-${RELEASE_TAG}-armeabi-v7a-minified.apk"
+          test -f "dist/noveo-lite-${RELEASE_TAG}-arm64-v8a-minified.apk"
 
       - name: Configure minified x86 APK
         shell: bash
@@ -440,24 +461,30 @@ jobs:
             --configuration-cache \
             -PNOVEO_VERSION_NAME="${{ needs.metadata.outputs.version }}" \
             -PNOVEO_VERSION_CODE="${{ needs.metadata.outputs.version_code }}" \
-            assembleRelease \
-            -x lintVitalRelease \
-            -x lintVitalReportRelease 2>&1 | tee -a build.log
+            assembleFullRelease \
+            assembleLiteRelease \
+            -x lintVitalFullRelease \
+            -x lintVitalLiteRelease \
+            -x lintVitalReportFullRelease \
+            -x lintVitalReportLiteRelease 2>&1 | tee -a build.log
 
       - name: Collect minified x86 APK
         shell: bash
         run: |
           set -euo pipefail
-          shopt -s nullglob
+          shopt -s nullglob globstar
 
           found=0
-          for apk in "$APK_FOLDER"/*x86_64*.apk; do
-            cp "$apk" "dist/noveo-${RELEASE_TAG}-x86_64-minified.apk"
+          for apk in app/build/outputs/apk/**/release/*x86_64*.apk; do
+            name="$(basename "$apk")"
+            flavor_prefix=$( [[ "$name" == noveo-lite-* ]] && echo "noveo-lite" || echo "noveo" )
+            cp "$apk" "dist/${flavor_prefix}-${RELEASE_TAG}-x86_64-minified.apk"
             found=1
           done
 
-          test "$found" -eq 1
+          test "$found" -ge 1
           test -f "dist/noveo-${RELEASE_TAG}-x86_64-minified.apk"
+          test -f "dist/noveo-lite-${RELEASE_TAG}-x86_64-minified.apk"
           ls -lh dist
 
       - name: Upload minified APK artifact
@@ -566,28 +593,33 @@ jobs:
             --configuration-cache \
             -PNOVEO_VERSION_NAME="${{ needs.metadata.outputs.version }}" \
             -PNOVEO_VERSION_CODE="${{ needs.metadata.outputs.version_code }}" \
-            assembleRelease \
-            -x lintVitalRelease \
-            -x lintVitalReportRelease 2>&1 | tee build.log
+            assembleFullRelease \
+            assembleLiteRelease \
+            -x lintVitalFullRelease \
+            -x lintVitalLiteRelease \
+            -x lintVitalReportFullRelease \
+            -x lintVitalReportLiteRelease 2>&1 | tee build.log
 
       - name: Collect not-minified APKs
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          shopt -s nullglob
+          shopt -s nullglob globstar
 
-          for apk in "$APK_FOLDER"/*.apk; do
+          for apk in app/build/outputs/apk/**/release/*.apk; do
             name="$(basename "$apk")"
+            flavor_prefix=$( [[ "$name" == noveo-lite-* ]] && echo "noveo-lite" || echo "noveo" )
+
             case "$name" in
               *arm64-v8a*)
-                out="noveo-${RELEASE_TAG}-arm64-v8a-not-minified.apk"
+                out="${flavor_prefix}-${RELEASE_TAG}-arm64-v8a-not-minified.apk"
                 ;;
               *armeabi-v7a*)
-                out="noveo-${RELEASE_TAG}-armeabi-v7a-not-minified.apk"
+                out="${flavor_prefix}-${RELEASE_TAG}-armeabi-v7a-not-minified.apk"
                 ;;
               *x86_64*)
-                out="noveo-${RELEASE_TAG}-x86_64-not-minified.apk"
+                out="${flavor_prefix}-${RELEASE_TAG}-x86_64-not-minified.apk"
                 ;;
               *)
                 echo "Skipping unknown APK output: $name"
@@ -599,8 +631,11 @@ jobs:
 
           ls -lh dist
           test -f "dist/noveo-${RELEASE_TAG}-arm64-v8a-not-minified.apk"
+          test -f "dist/noveo-lite-${RELEASE_TAG}-arm64-v8a-not-minified.apk"
           test -f "dist/noveo-${RELEASE_TAG}-armeabi-v7a-not-minified.apk"
+          test -f "dist/noveo-lite-${RELEASE_TAG}-armeabi-v7a-not-minified.apk"
           test -f "dist/noveo-${RELEASE_TAG}-x86_64-not-minified.apk"
+          test -f "dist/noveo-lite-${RELEASE_TAG}-x86_64-not-minified.apk"
 
       - name: Upload not-minified APK artifact
         uses: actions/upload-artifact@v4
@@ -699,12 +734,13 @@ jobs:
           set -euo pipefail
           ls -lh dist
           test -f "dist/noveo-${RELEASE_TAG}.apk"
+          test -f "dist/noveo-lite-${RELEASE_TAG}.apk"
           test -f "dist/noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
+          test -f "dist/noveo-lite-${RELEASE_TAG}-arm64-v8a-minified.apk"
           test -f "dist/noveo-${RELEASE_TAG}-armeabi-v7a-minified.apk"
+          test -f "dist/noveo-lite-${RELEASE_TAG}-armeabi-v7a-minified.apk"
           test -f "dist/noveo-${RELEASE_TAG}-x86_64-minified.apk"
-          test -f "dist/noveo-${RELEASE_TAG}-arm64-v8a-not-minified.apk"
-          test -f "dist/noveo-${RELEASE_TAG}-armeabi-v7a-not-minified.apk"
-          test -f "dist/noveo-${RELEASE_TAG}-x86_64-not-minified.apk"
+          test -f "dist/noveo-lite-${RELEASE_TAG}-x86_64-minified.apk"
 
       - name: Sign APKs
         shell: bash
@@ -763,20 +799,14 @@ jobs:
           set -euo pipefail
           mkdir -p delivery
 
-          UNIVERSAL_APK="dist/noveo-${RELEASE_TAG}.apk"
-          ARM64_APK="dist/noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
-
-          test -f "$UNIVERSAL_APK"
-          test -f "$ARM64_APK"
-
-          # APK files are already compressed internally, so this may not reduce size much,
-          # but -9 gives the highest ZIP compression level for delivery packages.
-          zip -9 -j "delivery/noveo-${RELEASE_TAG}.zip" "$UNIVERSAL_APK"
-          zip -9 -j "delivery/noveo-${RELEASE_TAG}-arm64-v8a-minified.zip" "$ARM64_APK"
+          zip -9 -j "delivery/noveo-${RELEASE_TAG}.zip" "dist/noveo-${RELEASE_TAG}.apk"
+          zip -9 -j "delivery/noveo-lite-${RELEASE_TAG}.zip" "dist/noveo-lite-${RELEASE_TAG}.apk"
+          zip -9 -j "delivery/noveo-${RELEASE_TAG}-arm64-v8a-minified.zip" "dist/noveo-${RELEASE_TAG}-arm64-v8a-minified.apk"
+          zip -9 -j "delivery/noveo-lite-${RELEASE_TAG}-arm64-v8a-minified.zip" "dist/noveo-lite-${RELEASE_TAG}-arm64-v8a-minified.apk"
 
           ls -lh delivery
 
-      - name: Send universal and arm64 ZIPs to Telegram as one message
+      - name: Send primary ZIPs to Telegram as one message
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TOKEN }}
@@ -788,10 +818,10 @@ jobs:
             exit 0
           fi
 
-          UNIVERSAL_ZIP="delivery/noveo-${RELEASE_TAG}.zip"
-          ARM64_ZIP="delivery/noveo-${RELEASE_TAG}-arm64-v8a-minified.zip"
-          test -f "$UNIVERSAL_ZIP"
-          test -f "$ARM64_ZIP"
+          FULL_ZIP="delivery/noveo-${RELEASE_TAG}-arm64-v8a-minified.zip"
+          LITE_ZIP="delivery/noveo-lite-${RELEASE_TAG}-arm64-v8a-minified.zip"
+          test -f "$FULL_ZIP"
+          test -f "$LITE_ZIP"
 
           python3 - <<'PY'
           import json
@@ -801,12 +831,12 @@ jobs:
           media = [
               {
                   "type": "document",
-                  "media": "attach://universal",
+                  "media": "attach://full",
                   "caption": caption,
               },
               {
                   "type": "document",
-                  "media": "attach://arm64",
+                  "media": "attach://lite",
               },
           ]
           pathlib.Path("telegram-media.json").write_text(json.dumps(media), encoding="utf-8")
@@ -816,5 +846,5 @@ jobs:
             -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup" \
             -F "chat_id=${TELEGRAM_CHAT_ID}" \
             -F "media=$(cat telegram-media.json)" \
-            -F "universal=@${UNIVERSAL_ZIP};filename=$(basename "$UNIVERSAL_ZIP")" \
-            -F "arm64=@${ARM64_ZIP};filename=$(basename "$ARM64_ZIP")"
+            -F "full=@${FULL_ZIP};filename=$(basename "$FULL_ZIP")" \
+            -F "lite=@${LITE_ZIP};filename=$(basename "$LITE_ZIP")"
