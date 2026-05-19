@@ -4246,6 +4246,19 @@ private fun ProfileModal(
                 }
                 return Offset.Zero
             }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (overscrollOffset > 0) {
+                    androidx.compose.animation.core.animate(
+                        initialValue = overscrollOffset,
+                        targetValue = 0f,
+                        animationSpec = androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessLow)
+                    ) { value, _ ->
+                        overscrollOffset = value
+                    }
+                }
+                return super.onPreFling(available)
+            }
         }
     }
 
@@ -4412,7 +4425,7 @@ private fun ProfileModal(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         // Position text relative to bottom of growing avatar
-                        .offset(y = avatarY + avatarSize + 8.dp)
+                        .offset(y = avatarY + avatarSize)
                         .alpha(expandedInfoAlpha),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -4502,6 +4515,19 @@ private fun GroupInfoModal(
                     return Offset(0f, consumed)
                 }
                 return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (overscrollOffset > 0) {
+                    androidx.compose.animation.core.animate(
+                        initialValue = overscrollOffset,
+                        targetValue = 0f,
+                        animationSpec = androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessLow)
+                    ) { value, _ ->
+                        overscrollOffset = value
+                    }
+                }
+                return super.onPreFling(available)
             }
         }
     }
@@ -4740,7 +4766,7 @@ private fun GroupInfoModal(
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .offset(y = avatarY + avatarSize + 8.dp)
+                        .offset(y = avatarY + avatarSize)
                         .alpha(expandedInfoAlpha),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
