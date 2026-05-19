@@ -4269,7 +4269,7 @@ private fun ProfileModal(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = currentHeaderHeight, bottom = 100.dp)
+                contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
                     Column(
@@ -4382,17 +4382,13 @@ private fun ProfileModal(
             
             val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
             val collapsedAvatarX = 52.dp 
-            val avatarX = if (overscrollOffset > 0) {
-                lerpDp((screenWidth / 2) - (120.dp / 2), 0.dp, overscrollFraction)
-            } else {
-                lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
-            }
+            val avatarX = lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
             
             val baseAvatarY = (expandedHeight / 2) - (120.dp / 2) - 20.dp
             val collapsedAvatarY = (collapsedHeight / 2) - (38.dp / 2)
             
             val avatarY = if (overscrollOffset > 0) {
-                lerpDp(baseAvatarY, 0.dp, overscrollFraction)
+                (currentHeaderHeight / 2) - (avatarSize / 2) - lerpDp(20.dp, 0.dp, overscrollFraction)
             } else {
                 lerpDp(baseAvatarY, collapsedAvatarY, fraction)
             }
@@ -4527,7 +4523,7 @@ private fun GroupInfoModal(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = currentHeaderHeight, bottom = 100.dp)
+                contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
                     Column(
@@ -4712,17 +4708,13 @@ private fun GroupInfoModal(
             
             val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
             val collapsedAvatarX = 52.dp 
-            val avatarX = if (overscrollOffset > 0) {
-                lerpDp((screenWidth / 2) - (120.dp / 2), 0.dp, overscrollFraction)
-            } else {
-                lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
-            }
+            val avatarX = lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
             
             val baseAvatarY = (expandedHeight / 2) - (120.dp / 2) - 20.dp
             val collapsedAvatarY = (collapsedHeight / 2) - (38.dp / 2)
             
             val avatarY = if (overscrollOffset > 0) {
-                lerpDp(baseAvatarY, 0.dp, overscrollFraction)
+                (currentHeaderHeight / 2) - (avatarSize / 2) - lerpDp(20.dp, 0.dp, overscrollFraction)
             } else {
                 lerpDp(baseAvatarY, collapsedAvatarY, fraction)
             }
