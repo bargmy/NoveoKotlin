@@ -20,6 +20,7 @@ import ir.hienob.noveo.R
 import android.media.RingtoneManager
 import android.net.Uri
 import ir.hienob.noveo.core.notifications.NotificationChannels
+import ir.hienob.noveo.data.ChatSummary
 import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.ChatSocket
 import ir.hienob.noveo.data.NotificationSettings
@@ -63,10 +64,29 @@ class NoveoNotificationService : LifecycleService() {
 
         // Track known users in service for notification name resolution
         private val knownUsers = mutableMapOf<String, ir.hienob.noveo.data.UserSummary>()
+        private val knownChatTypes = mutableMapOf<String, String>()
 
         fun updateKnownUsers(users: Map<String, ir.hienob.noveo.data.UserSummary>) {
             synchronized(knownUsers) {
                 knownUsers.putAll(users)
+            }
+        }
+
+        fun updateKnownChats(chats: List<ir.hienob.noveo.data.ChatSummary>) {
+            synchronized(knownChatTypes) {
+                chats.forEach { knownChatTypes[it.id] = it.chatType }
+            }
+        }
+
+        fun updateKnownChatType(chatId: String, chatType: String) {
+            synchronized(knownChatTypes) {
+                knownChatTypes[chatId] = chatType
+            }
+        }
+
+        private fun getKnownChatType(chatId: String): String? {
+            return synchronized(knownChatTypes) {
+                knownChatTypes[chatId]
             }
         }
 
@@ -248,12 +268,18 @@ class NoveoNotificationService : LifecycleService() {
                     socket.connect(session) { knownUsersSnapshot() }.collect { event ->
                         when (event) {
                             is SocketEvent.UserListUpdate -> updateKnownUsers(event.usersById)
-                            is SocketEvent.HistoryUpdate -> updateKnownUsers(event.users)
+                            is SocketEvent.HistoryUpdate -> {
+                                updateKnownUsers(event.users)
+                                updateKnownChats(event.chats)
+                            }
+                            is SocketEvent.ChannelInfo -> updateKnownChats(listOf(event.chat))
+                            is SocketEvent.NewChatInfo -> updateKnownChats(listOf(event.chat))
                             else -> {}
                         }
                         _socketEvents.emit(event)
                         when (event) {
                             is SocketEvent.NewMessage -> {
+                                updateKnownChatType(event.message.chatId, event.message.chatType)
                                 if (!isAppInForeground && event.message.senderId != activeSession?.userId) {
                                     val settings = sessionStore.readNotificationSettings()
                                     if (settings.enabled) {
@@ -270,7 +296,11 @@ class NoveoNotificationService : LifecycleService() {
                                 }
                             }
                             is SocketEvent.IncomingCall -> {
-                                // Always show call notification to ensure consistency
+                                // Only trigger incoming calls for DMs (private chats)
+                                val chatType = getKnownChatType(event.chatId)
+                                if (chatType != null && chatType != "private") {
+                                    return@collect
+                                }
                                 showCallNotification(event)
                             }
                             is SocketEvent.VoiceCallEnded -> {
