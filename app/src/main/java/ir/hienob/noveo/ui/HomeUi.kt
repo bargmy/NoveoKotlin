@@ -4232,8 +4232,11 @@ private fun ProfileModal(
             override fun onPreScroll(available: Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): Offset {
                 // If at the top and pulling down
                 if (available.y > 0 && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
-                    overscrollOffset += available.y
-                    return available
+                    val maxOverscroll = expandedHeightPx * 0.8f
+                    val newOffset = (overscrollOffset + available.y).coerceAtMost(maxOverscroll)
+                    val consumed = newOffset - overscrollOffset
+                    overscrollOffset = newOffset
+                    return Offset(0f, consumed)
                 }
                 // If we have overscroll and scrolling up
                 if (available.y < 0 && overscrollOffset > 0) {
@@ -4268,7 +4271,7 @@ private fun ProfileModal(
             
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().graphicsLayer { translationY = overscrollOffset },
                 contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
@@ -4487,8 +4490,11 @@ private fun GroupInfoModal(
         object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): Offset {
                 if (available.y > 0 && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
-                    overscrollOffset += available.y
-                    return available
+                    val maxOverscroll = expandedHeightPx * 0.8f
+                    val newOffset = (overscrollOffset + available.y).coerceAtMost(maxOverscroll)
+                    val consumed = newOffset - overscrollOffset
+                    overscrollOffset = newOffset
+                    return Offset(0f, consumed)
                 }
                 if (available.y < 0 && overscrollOffset > 0) {
                     val consumed = available.y.coerceAtLeast(-overscrollOffset)
@@ -4522,7 +4528,7 @@ private fun GroupInfoModal(
             
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().graphicsLayer { translationY = overscrollOffset },
                 contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
