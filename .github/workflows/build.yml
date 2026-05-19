@@ -699,7 +699,8 @@ jobs:
           "${{ steps.gradle_cmd.outputs.cmd }}" \
             --build-cache \
             --configuration-cache \
-            lintVitalRelease
+            lintVitalFullRelease \
+            lintVitalLiteRelease
 
   publish:
     name: Publish APKs
