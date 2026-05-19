@@ -4251,18 +4251,16 @@ private fun ProfileModal(
         else (listState.firstVisibleItemScrollOffset.toFloat() / (expandedHeightPx - collapsedHeightPx)).coerceIn(0f, 1f)
     } }.value
     
-    val overscrollFraction = (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f)
-    
     Surface(
         color = MaterialTheme.colorScheme.background,
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val screenWidth = maxWidth
             
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
@@ -4313,11 +4311,7 @@ private fun ProfileModal(
             }
             
             // Collapsing Header
-            val currentHeaderHeight = if (overscrollOffset > 0) {
-                expandedHeight + with(density) { overscrollOffset.toDp() }
-            } else {
-                lerpDp(expandedHeight, collapsedHeight, fraction)
-            }
+            val currentHeaderHeight = lerpDp(expandedHeight, collapsedHeight, fraction)
             
             Surface(
                 modifier = Modifier.fillMaxWidth().height(currentHeaderHeight),
@@ -4331,82 +4325,6 @@ private fun ProfileModal(
                         onClick = onClose,
                         modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                     )
-                    
-                    val avatarSize = if (overscrollOffset > 0) {
-                        lerpDp(120.dp, screenWidth, overscrollFraction)
-                    } else {
-                        lerpDp(120.dp, 38.dp, fraction)
-                    }
-                    
-                    val avatarShape = if (overscrollOffset > 0) {
-                        RoundedCornerShape(lerpDp(avatarSize / 2, 0.dp, overscrollFraction))
-                    } else {
-                        CircleShape
-                    }
-                    
-                    // Avatar position calculation
-                    val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
-                    val collapsedAvatarX = 52.dp // Next to back button
-                    
-                    val avatarX = if (overscrollOffset > 0) {
-                        lerpDp((screenWidth / 2) - (120.dp / 2), 0.dp, overscrollFraction)
-                    } else {
-                        lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
-                    }
-                    
-                    val expandedAvatarY = (expandedHeight / 2) - (120.dp / 2) - 20.dp
-                    val collapsedAvatarY = (collapsedHeight / 2) - (38.dp / 2)
-                    
-                    val avatarY = if (overscrollOffset > 0) {
-                        lerpDp(expandedAvatarY, 0.dp, overscrollFraction)
-                    } else {
-                        // Recalculate expandedAvatarY based on current avatarSize if needed, 
-                        // but original logic was fixed relative to expandedHeight.
-                        // We use a simplified lerp for cleaner animation.
-                        lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
-                    }
-                    
-                    Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
-                        ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = avatarSize, shape = avatarShape)
-                    }
-                    
-                    // Expanded Name/Status (Fades out on overscroll or collapse)
-                    val expandedInfoAlpha = if (overscrollOffset > 0) {
-                        (1f - overscrollFraction * 3f).coerceIn(0f, 1f)
-                    } else {
-                        (1f - fraction * 2f).coerceIn(0f, 1f)
-                    }
-                    
-                    if (expandedInfoAlpha > 0f) {
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .offset(y = expandedAvatarY + 120.dp + 16.dp)
-                                .alpha(expandedInfoAlpha),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    user.username, 
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                if (user.isVerified) {
-                                    Spacer(Modifier.width(6.dp))
-                                    VerifiedIcon(modifier = Modifier.size(18.dp))
-                                }
-                            }
-                            val lastSeenText = remember(user, strings) {
-                                if (user.isOnline) strings.online
-                                else formatLastSeen(user.lastSeen, strings)
-                            }
-                            Text(
-                                lastSeenText, 
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
                     
                     // Collapsed Name/Status
                     if (fraction > 0.5f && overscrollOffset <= 0) {
@@ -4441,6 +4359,78 @@ private fun ProfileModal(
                             )
                         }
                     }
+                }
+            }
+            
+            // Avatar and Expanded Info (Overlay)
+            val avatarSize = if (overscrollOffset > 0) {
+                lerpDp(120.dp, screenWidth, (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f))
+            } else {
+                lerpDp(120.dp, 38.dp, fraction)
+            }
+            
+            val avatarShape = if (overscrollOffset > 0) {
+                val shapeFraction = (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f)
+                RoundedCornerShape(lerpDp(avatarSize / 2, 0.dp, shapeFraction))
+            } else {
+                CircleShape
+            }
+            
+            val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
+            val collapsedAvatarX = 52.dp 
+            val avatarX = if (overscrollOffset > 0) {
+                lerpDp((screenWidth / 2) - (120.dp / 2), 0.dp, (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f))
+            } else {
+                lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
+            }
+            
+            val expandedAvatarY = (expandedHeight / 2) - (120.dp / 2) - 20.dp
+            val collapsedAvatarY = (collapsedHeight / 2) - (38.dp / 2)
+            val avatarY = if (overscrollOffset > 0) {
+                lerpDp(expandedAvatarY, 0.dp, (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f))
+            } else {
+                lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
+            }
+            
+            Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
+                ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = avatarSize, shape = avatarShape)
+            }
+            
+            // Expanded Name/Status (Fades out on overscroll or collapse)
+            val expandedInfoAlpha = if (overscrollOffset > 0) {
+                (1f - (overscrollOffset / expandedHeightPx) * 3f).coerceIn(0f, 1f)
+            } else {
+                (1f - fraction * 2f).coerceIn(0f, 1f)
+            }
+            
+            if (expandedInfoAlpha > 0f) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = expandedAvatarY + 120.dp + 16.dp)
+                        .alpha(expandedInfoAlpha),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            user.username, 
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (user.isVerified) {
+                            Spacer(Modifier.width(6.dp))
+                            VerifiedIcon(modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    val lastSeenText = remember(user, strings) {
+                        if (user.isOnline) strings.online
+                        else formatLastSeen(user.lastSeen, strings)
+                    }
+                    Text(
+                        lastSeenText, 
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -4513,18 +4503,16 @@ private fun GroupInfoModal(
         else (listState.firstVisibleItemScrollOffset.toFloat() / (expandedHeightPx - collapsedHeightPx)).coerceIn(0f, 1f)
     } }.value
 
-    val overscrollFraction = (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f)
-    
     Surface(
         color = MaterialTheme.colorScheme.background,
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val screenWidth = maxWidth
             
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
@@ -4651,11 +4639,7 @@ private fun GroupInfoModal(
             }
             
             // Collapsing Header
-            val currentHeaderHeight = if (overscrollOffset > 0) {
-                expandedHeight + with(density) { overscrollOffset.toDp() }
-            } else {
-                lerpDp(expandedHeight, collapsedHeight, fraction)
-            }
+            val currentHeaderHeight = lerpDp(expandedHeight, collapsedHeight, fraction)
             
             Surface(
                 modifier = Modifier.fillMaxWidth().height(currentHeaderHeight),
@@ -4669,75 +4653,6 @@ private fun GroupInfoModal(
                         onClick = onClose,
                         modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                     )
-                    
-                    val avatarSize = if (overscrollOffset > 0) {
-                        lerpDp(120.dp, screenWidth, overscrollFraction)
-                    } else {
-                        lerpDp(120.dp, 38.dp, fraction)
-                    }
-                    
-                    val avatarShape = if (overscrollOffset > 0) {
-                        RoundedCornerShape(lerpDp(avatarSize / 2, 0.dp, overscrollFraction))
-                    } else {
-                        CircleShape
-                    }
-                    
-                    // Avatar position calculation
-                    val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
-                    val collapsedAvatarX = 52.dp 
-                    
-                    val avatarX = if (overscrollOffset > 0) {
-                        lerpDp((screenWidth / 2) - (120.dp / 2), 0.dp, overscrollFraction)
-                    } else {
-                        lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
-                    }
-                    
-                    val expandedAvatarY = (expandedHeight / 2) - (120.dp / 2) - 20.dp
-                    val collapsedAvatarY = (collapsedHeight / 2) - (38.dp / 2)
-                    
-                    val avatarY = if (overscrollOffset > 0) {
-                        lerpDp(expandedAvatarY, 0.dp, overscrollFraction)
-                    } else {
-                        lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
-                    }
-                    
-                    Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
-                        ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize, isSavedMessages = isSavedMessages, shape = avatarShape)
-                    }
-                    
-                    // Expanded Title/Subtitle (Fades out on overscroll)
-                    val expandedInfoAlpha = if (overscrollOffset > 0) {
-                        (1f - overscrollFraction * 3f).coerceIn(0f, 1f)
-                    } else {
-                        (1f - fraction * 2f).coerceIn(0f, 1f)
-                    }
-                    
-                    if (expandedInfoAlpha > 0f) {
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .offset(y = expandedAvatarY + 120.dp + 16.dp)
-                                .alpha(expandedInfoAlpha),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    chatTitle, 
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                if (isVerified) {
-                                    Spacer(Modifier.width(6.dp))
-                                    VerifiedIcon(modifier = Modifier.size(18.dp))
-                                }
-                            }
-                            Text(
-                                if (isSavedMessages) formatMessagesCount(savedMessagesCount, strings) else formatMembersCount(chat.memberIds.size, strings),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
                     
                     // Collapsed Title/Subtitle
                     if (fraction > 0.5f && overscrollOffset <= 0) {
@@ -4769,6 +4684,74 @@ private fun GroupInfoModal(
                             )
                         }
                     }
+                }
+            }
+            
+            // Avatar and Expanded Info (Overlay)
+            val avatarSize = if (overscrollOffset > 0) {
+                lerpDp(120.dp, screenWidth, (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f))
+            } else {
+                lerpDp(120.dp, 38.dp, fraction)
+            }
+            
+            val avatarShape = if (overscrollOffset > 0) {
+                val shapeFraction = (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f)
+                RoundedCornerShape(lerpDp(avatarSize / 2, 0.dp, shapeFraction))
+            } else {
+                CircleShape
+            }
+            
+            val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
+            val collapsedAvatarX = 52.dp 
+            val avatarX = if (overscrollOffset > 0) {
+                lerpDp((screenWidth / 2) - (120.dp / 2), 0.dp, (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f))
+            } else {
+                lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
+            }
+            
+            val expandedAvatarY = (expandedHeight / 2) - (120.dp / 2) - 20.dp
+            val collapsedAvatarY = (collapsedHeight / 2) - (38.dp / 2)
+            val avatarY = if (overscrollOffset > 0) {
+                lerpDp(expandedAvatarY, 0.dp, (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f))
+            } else {
+                lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
+            }
+            
+            Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
+                ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize, isSavedMessages = isSavedMessages, shape = avatarShape)
+            }
+            
+            // Expanded Title/Subtitle (Fades out on overscroll)
+            val expandedInfoAlpha = if (overscrollOffset > 0) {
+                (1f - (overscrollOffset / expandedHeightPx) * 3f).coerceIn(0f, 1f)
+            } else {
+                (1f - fraction * 2f).coerceIn(0f, 1f)
+            }
+            
+            if (expandedInfoAlpha > 0f) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = expandedAvatarY + 120.dp + 16.dp)
+                        .alpha(expandedInfoAlpha),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            chatTitle, 
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (isVerified) {
+                            Spacer(Modifier.width(6.dp))
+                            VerifiedIcon(modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    Text(
+                        if (isSavedMessages) formatMessagesCount(savedMessagesCount, strings) else formatMembersCount(chat.memberIds.size, strings),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

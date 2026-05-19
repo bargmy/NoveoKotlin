@@ -819,9 +819,7 @@ jobs:
             exit 0
           fi
 
-          FULL_ZIP="delivery/noveo-${RELEASE_TAG}-arm64-v8a-minified.zip"
           LITE_ZIP="delivery/noveo-lite-${RELEASE_TAG}-arm64-v8a-minified.zip"
-          test -f "$FULL_ZIP"
           test -f "$LITE_ZIP"
 
           python3 - <<'PY'
@@ -832,12 +830,8 @@ jobs:
           media = [
               {
                   "type": "document",
-                  "media": "attach://full",
-                  "caption": caption,
-              },
-              {
-                  "type": "document",
                   "media": "attach://lite",
+                  "caption": caption,
               },
           ]
           pathlib.Path("telegram-media.json").write_text(json.dumps(media), encoding="utf-8")
@@ -847,5 +841,4 @@ jobs:
             -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup" \
             -F "chat_id=${TELEGRAM_CHAT_ID}" \
             -F "media=$(cat telegram-media.json)" \
-            -F "full=@${FULL_ZIP};filename=$(basename "$FULL_ZIP")" \
             -F "lite=@${LITE_ZIP};filename=$(basename "$LITE_ZIP")"
