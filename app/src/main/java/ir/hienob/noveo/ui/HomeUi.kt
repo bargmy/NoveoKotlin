@@ -148,6 +148,9 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
@@ -4259,7 +4262,7 @@ private fun ProfileModal(
             
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().androidx.compose.ui.input.nestedscroll.nestedScroll(nestedScrollConnection),
+                modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection),
                 contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
@@ -4521,7 +4524,7 @@ private fun GroupInfoModal(
             
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().androidx.compose.ui.input.nestedscroll.nestedScroll(nestedScrollConnection),
+                modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection),
                 contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
