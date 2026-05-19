@@ -4220,7 +4220,7 @@ private fun ProfileModal(
     val density = LocalDensity.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     
-    val expandedHeight = 320.dp
+    val expandedHeight = 260.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
@@ -4387,7 +4387,7 @@ private fun ProfileModal(
             val collapsedAvatarX = 52.dp 
             val avatarX = lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
             
-            val baseAvatarY = (expandedHeight / 2) - (120.dp / 2) - 20.dp
+            val baseAvatarY = 60.dp
             val collapsedAvatarY = (collapsedHeight / 2) - (38.dp / 2)
             
             val avatarY = if (overscrollOffset > 0) {
@@ -4412,7 +4412,7 @@ private fun ProfileModal(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         // Position text relative to bottom of growing avatar
-                        .offset(y = avatarY + avatarSize + 16.dp)
+                        .offset(y = avatarY + avatarSize + 8.dp)
                         .alpha(expandedInfoAlpha),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -4479,7 +4479,7 @@ private fun GroupInfoModal(
     val density = LocalDensity.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     
-    val expandedHeight = 320.dp
+    val expandedHeight = 260.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
@@ -4716,7 +4716,7 @@ private fun GroupInfoModal(
             val collapsedAvatarX = 52.dp 
             val avatarX = lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
             
-            val baseAvatarY = (expandedHeight / 2) - (120.dp / 2) - 20.dp
+            val baseAvatarY = 60.dp
             val collapsedAvatarY = (collapsedHeight / 2) - (38.dp / 2)
             
             val avatarY = if (overscrollOffset > 0) {
@@ -4740,7 +4740,7 @@ private fun GroupInfoModal(
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .offset(y = avatarY + avatarSize + 16.dp)
+                        .offset(y = avatarY + avatarSize + 8.dp)
                         .alpha(expandedInfoAlpha),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
