@@ -447,6 +447,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun checkForUpdate(manual: Boolean = false) {
+        if (ir.hienob.noveo.BuildConfig.FLAVOR == "lite") return
         viewModelScope.launch(Dispatchers.IO) {
             val currentVersion = ir.hienob.noveo.BuildConfig.VERSION_NAME
             if (manual) _uiState.value = _uiState.value.copy(isCheckingUpdate = true)

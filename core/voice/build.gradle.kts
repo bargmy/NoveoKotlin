@@ -17,5 +17,4 @@ android {
 
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
-    implementation("io.livekit:livekit-android:2.18.0")
 }

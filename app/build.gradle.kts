@@ -28,6 +28,36 @@ android {
         resourceConfigurations += listOf("en", "fa", "ru", "zh")
     }
 
+    flavorDimensions += "version"
+    productFlavors {
+        create("full") {
+            dimension = "version"
+            applicationIdSuffix = ""
+        }
+        create("lite") {
+            dimension = "version"
+            applicationId = "ir.hienob.noveolite"
+            versionName = "$appVersionName-lite"
+        }
+    }
+
+    applicationVariants.all {
+        val variant = this
+        outputs.all {
+            val output = this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
+            val flavor = variant.productFlavors[0].name
+            val abi = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
+            val buildType = variant.buildType.name
+            
+            // variant.versionName will contain "-lite" for the lite flavor due to our flavor config
+            val baseName = if (flavor == "lite") "noveo-lite" else "noveo"
+            // Use appVersionName here to avoid double "-lite" if that's preferred, 
+            // but variant.versionName is usually what's expected for the "build version".
+            // Let's use the explicit appVersionName for the filename as requested.
+            output.outputFileName = "${baseName}-${appVersionName}-${abi}-${buildType}.apk"
+        }
+    }
+
     signingConfigs {
         create("release") {
             // These properties can be set in local.properties or via command line -P
@@ -123,7 +153,7 @@ dependencies {
     implementation("com.airbnb.android:lottie-compose:6.4.0")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("io.livekit:livekit-android:2.18.0")
+    "fullImplementation"("io.livekit:livekit-android:2.18.0")
     implementation("com.github.ajalt:timberkt:1.5.1")
 
     implementation("androidx.media3:media3-exoplayer:1.5.0")
