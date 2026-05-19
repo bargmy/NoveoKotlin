@@ -4441,8 +4441,6 @@ private fun ProfileModal(
             }
         }
     }
-        }
-    }
 }
 
 @Composable
