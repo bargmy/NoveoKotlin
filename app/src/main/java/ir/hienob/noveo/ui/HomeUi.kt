@@ -4221,19 +4221,21 @@ private fun ProfileModal(
     val density = LocalDensity.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     
+    val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
     val expandedHeight = 260.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
+    val screenWidthPx = with(density) { screenWidth.toPx() }
+    val maxOverscroll = (screenWidthPx - expandedHeightPx).coerceAtLeast(0f)
     
     // Track overscroll for "pull down to grow" effect
     var overscrollOffset by remember { mutableStateOf(0f) }
-    val nestedScrollConnection = remember {
+    val nestedScrollConnection = remember(maxOverscroll) {
         object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): Offset {
                 // If at the top and pulling down
                 if (available.y > 0 && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
-                    val maxOverscroll = expandedHeightPx * 0.8f
                     val newOffset = (overscrollOffset + available.y).coerceAtMost(maxOverscroll)
                     val consumed = newOffset - overscrollOffset
                     overscrollOffset = newOffset
@@ -4249,7 +4251,7 @@ private fun ProfileModal(
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (overscrollOffset > 0) {
+                if (available.y < 0 && overscrollOffset > 0) {
                     androidx.compose.animation.core.animate(
                         initialValue = overscrollOffset,
                         targetValue = 0f,
@@ -4273,8 +4275,11 @@ private fun ProfileModal(
         modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val screenWidth = maxWidth
-            val overscrollFraction = (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f)
+            val overscrollFraction = if (maxOverscroll > 0f) {
+                (overscrollOffset / maxOverscroll).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
             
             // Header Height logic: follows overscroll growth or standard collapse
             val currentHeaderHeight = if (overscrollOffset > 0) {
@@ -4493,18 +4498,20 @@ private fun GroupInfoModal(
     val density = LocalDensity.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     
+    val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
     val expandedHeight = 260.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
+    val screenWidthPx = with(density) { screenWidth.toPx() }
+    val maxOverscroll = (screenWidthPx - expandedHeightPx).coerceAtLeast(0f)
     
     // Track overscroll for "pull down to grow" effect
     var overscrollOffset by remember { mutableStateOf(0f) }
-    val nestedScrollConnection = remember {
+    val nestedScrollConnection = remember(maxOverscroll) {
         object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): Offset {
                 if (available.y > 0 && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
-                    val maxOverscroll = expandedHeightPx * 0.8f
                     val newOffset = (overscrollOffset + available.y).coerceAtMost(maxOverscroll)
                     val consumed = newOffset - overscrollOffset
                     overscrollOffset = newOffset
@@ -4519,7 +4526,7 @@ private fun GroupInfoModal(
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (overscrollOffset > 0) {
+                if (available.y < 0 && overscrollOffset > 0) {
                     androidx.compose.animation.core.animate(
                         initialValue = overscrollOffset,
                         targetValue = 0f,
@@ -4543,8 +4550,11 @@ private fun GroupInfoModal(
         modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val screenWidth = maxWidth
-            val overscrollFraction = (overscrollOffset / expandedHeightPx).coerceIn(0f, 1f)
+            val overscrollFraction = if (maxOverscroll > 0f) {
+                (overscrollOffset / maxOverscroll).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
 
             // Header Height logic: follows overscroll growth or standard collapse
             val currentHeaderHeight = if (overscrollOffset > 0) {
