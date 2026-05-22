@@ -274,6 +274,7 @@ class NoveoNotificationService : LifecycleService() {
                             }
                             is SocketEvent.ChannelInfo -> updateKnownChats(listOf(event.chat))
                             is SocketEvent.NewChatInfo -> updateKnownChats(listOf(event.chat))
+                            is SocketEvent.UserUpdated -> updateKnownUsers(mapOf(event.user.id to event.user))
                             else -> {}
                         }
                         _socketEvents.emit(event)

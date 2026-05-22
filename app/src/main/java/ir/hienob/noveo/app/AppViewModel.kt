@@ -1645,6 +1645,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 NoveoNotificationService.updateKnownUsers(mergedUsers)
                 persistCachedHomeState()
             }
+            is SocketEvent.UserUpdated -> {
+                val existingUser = _uiState.value.usersById[event.user.id]
+                val updatedUser = if (existingUser != null) {
+                    event.user.copy(isOnline = existingUser.isOnline)
+                } else {
+                    event.user
+                }
+                val mergedUsers = _uiState.value.usersById + (updatedUser.id to updatedUser)
+                val resolvedChats = _uiState.value.chats.resolveUserDisplay(mergedUsers, session.userId)
+                resolveCachedMessageSenders(mergedUsers)
+                _uiState.value = _uiState.value.copy(
+                    usersById = mergedUsers,
+                    chats = resolvedChats,
+                    messages = _uiState.value.messages.resolveSenderNames(mergedUsers),
+                    messagesByChat = messageCacheByChat.toMap()
+                )
+                NoveoNotificationService.updateKnownUsers(mergedUsers)
+                persistCachedHomeState()
+            }
             is SocketEvent.ChatUpdated -> { /* Rely on HistoryUpdate or targeted events */ }
             is SocketEvent.HistoryUpdate -> {
                 socketResyncJob?.cancel()

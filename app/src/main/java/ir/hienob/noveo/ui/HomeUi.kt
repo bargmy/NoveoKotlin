@@ -4756,7 +4756,7 @@ private fun ProfileModal(
                         fallbackColor = fallbackHeaderBg
                     ),
                 color = Color.Transparent,
-                shadowElevation = lerpDp(0.dp, 4.dp, fraction),
+                shadowElevation = 0.dp,
                 contentColor = if (hasPremiumSkin) Color.White else MaterialTheme.colorScheme.onSurface
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {

@@ -22,6 +22,7 @@ sealed class SocketEvent {
     data class MessagePinUpdate(val chatId: String, val messageId: String, val isPinned: Boolean) : SocketEvent()
     data class MessagePinnedUpdate(val chatId: String, val pinnedMessage: ChatMessage?) : SocketEvent()
     data class UserListUpdate(val usersById: Map<String, UserSummary>, val onlineIds: Set<String>) : SocketEvent()
+    data class UserUpdated(val user: UserSummary) : SocketEvent()
     data class ChatUpdated(val chatId: String) : SocketEvent()
     data class HistoryUpdate(
         val chats: List<ChatSummary>,
@@ -242,6 +243,11 @@ class ChatSocket(
                             socketKnownUsers.clear()
                             socketKnownUsers.putAll(knownUsers + users)
                             trySend(SocketEvent.UserListUpdate(users, online))
+                        }
+                        "user_updated" -> {
+                            val user = parseUser(json)
+                            socketKnownUsers[user.id] = user
+                            trySend(SocketEvent.UserUpdated(user))
                         }
                         "chat_updated" -> {
                             payload.optString("chatId").sanitizeRealtimeField()
