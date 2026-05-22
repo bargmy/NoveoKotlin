@@ -216,6 +216,8 @@ import androidx.compose.ui.unit.lerp as lerpDp
 import androidx.compose.ui.text.lerp as lerpTextStyle
 import androidx.compose.ui.util.lerp as lerpFloat
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import java.io.File
 import java.util.Calendar
 import java.util.Date
@@ -5275,8 +5277,8 @@ private fun GiftCard(gift: UserGift, modifier: Modifier = Modifier) {
                             )
                         } else {
                             val context = LocalContext.current
-                            val request = remember(normalizedUrl) {
-                                coil3.request.ImageRequest.Builder(context)
+                            val request = remember<ImageRequest>(normalizedUrl) {
+                                ImageRequest.Builder(context)
                                     .data(normalizedUrl)
                                     .crossfade(true)
                                     .build()
