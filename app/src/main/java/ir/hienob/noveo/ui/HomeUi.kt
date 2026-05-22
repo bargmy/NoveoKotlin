@@ -1209,14 +1209,6 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
     )
 }
 
-        if (selectedMediaAttachment != null) {
-            FullscreenMediaModal(
-                attachment = selectedMediaAttachment!!.attachment,
-                localPath = selectedMediaAttachment!!.localPath,
-                onDismiss = { selectedMediaAttachment = null }
-            )
-        }
-
         ModalHost(visible = showSettingsModal, onDismiss = { showSettingsModal = false }) {
             SettingsModal(
                 state = state,
@@ -1344,6 +1336,14 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 onToggleMute = onToggleMute,
                 onToggleDeafen = onToggleDeafen,
                 onMinimize = onToggleMinimize
+            )
+        }
+
+        if (selectedMediaAttachment != null) {
+            FullscreenMediaModal(
+                attachment = selectedMediaAttachment!!.attachment,
+                localPath = selectedMediaAttachment!!.localPath,
+                onDismiss = { selectedMediaAttachment = null }
             )
         }
     }
