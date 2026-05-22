@@ -1265,7 +1265,18 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                         infoChatId = null
                         animateModalEntrance = false
                     },
-                    animateEntrance = animateModalEntrance
+                    animateEntrance = animateModalEntrance,
+                    onAvatarClick = { avatarUrl ->
+                        selectedMediaAttachment = SelectedMediaAttachment(
+                            attachment = MessageFileAttachment(
+                                url = avatarUrl,
+                                name = "Avatar",
+                                type = "image/png",
+                                size = 0L
+                            ),
+                            localPath = ""
+                        )
+                    }
                 )
             }
         }
@@ -1288,7 +1299,18 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                         onStartDirectChat(user.id)
                     },
                     onLeaveChat = onLeaveChat,
-                    animateEntrance = animateModalEntrance
+                    animateEntrance = animateModalEntrance,
+                    onAvatarClick = { avatarUrl ->
+                        selectedMediaAttachment = SelectedMediaAttachment(
+                            attachment = MessageFileAttachment(
+                                url = avatarUrl,
+                                name = "Avatar",
+                                type = "image/png",
+                                size = 0L
+                            ),
+                            localPath = ""
+                        )
+                    }
                 )
             }
         }
@@ -4215,7 +4237,8 @@ private fun ProfileModal(
     onClose: () -> Unit,
     onMessage: () -> Unit,
     onLeaveChat: ((String) -> Unit)? = null,
-    animateEntrance: Boolean = false
+    animateEntrance: Boolean = false,
+    onAvatarClick: (String) -> Unit
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -4316,7 +4339,15 @@ private fun ProfileModal(
                     val collapsedAvatarY = (collapsedHeight / 2) - (avatarSize / 2)
                     val avatarY = lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
                     
-                    Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
+                    val hasAvatar = !user.avatarUrl.isNullOrBlank() && !user.avatarUrl.endsWith("default.png")
+                    Box(
+                        modifier = Modifier
+                            .offset(x = avatarX, y = avatarY)
+                            .then(
+                                if (hasAvatar) Modifier.clip(CircleShape).clickable { onAvatarClick(user.avatarUrl) }
+                                else Modifier
+                            )
+                    ) {
                         ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = avatarSize)
                     }
                     
@@ -4412,7 +4443,8 @@ private fun GroupInfoModal(
     onJoinChat: (String) -> Unit,
     onLeaveChat: (String) -> Unit,
     onOpenChat: (String) -> Unit,
-    animateEntrance: Boolean = false
+    animateEntrance: Boolean = false,
+    onAvatarClick: (String) -> Unit
 ) {
     val usersById = state.usersById
     val sessionUserId = state.session?.userId
@@ -4600,7 +4632,15 @@ private fun GroupInfoModal(
                     val collapsedAvatarY = (collapsedHeight / 2) - (avatarSize / 2)
                     val avatarY = lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
                     
-                    Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
+                    val hasAvatar = !chat.avatarUrl.isNullOrBlank() && !chat.avatarUrl.endsWith("default.png")
+                    Box(
+                        modifier = Modifier
+                            .offset(x = avatarX, y = avatarY)
+                            .then(
+                                if (hasAvatar) Modifier.clip(CircleShape).clickable { onAvatarClick(chat.avatarUrl) }
+                                else Modifier
+                            )
+                    ) {
                         ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize, isSavedMessages = isSavedMessages)
                     }
                     
@@ -4919,7 +4959,12 @@ private fun ProfileCircle(name: String, imageUrl: String?, size: Dp = 40.dp, mod
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Text(name.firstOrNull()?.uppercase() ?: "N", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            Text(
+                text = name.firstOrNull()?.uppercase() ?: "N",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                fontSize = with(LocalDensity.current) { (size * 0.45f).toSp() }
+            )
         }
     }
 
@@ -5099,7 +5144,7 @@ private fun FullscreenMediaModal(attachment: MessageFileAttachment, localPath: S
                 )
             } else {
                 AsyncImage(
-                    model = File(localPath),
+                    model = mediaUri ?: File(localPath),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit
@@ -5109,7 +5154,13 @@ private fun FullscreenMediaModal(attachment: MessageFileAttachment, localPath: S
             HeaderIconButton(
                 icon = Icons.Outlined.Close,
                 onClick = onDismiss,
-                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(16.dp)
+                    .graphicsLayer {
+                        blendMode = androidx.compose.ui.graphics.BlendMode.Difference
+                    },
                 tint = Color.White
             )
         }
