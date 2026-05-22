@@ -85,22 +85,23 @@ private fun parsePremiumStarIcon(json: JSONObject?): PremiumStarIcon? {
 
 private fun parseUserGifts(array: JSONArray?): List<UserGift> {
     if (array == null) return emptyList()
-    return buildList {
-        for (i in 0 until array.length()) {
-            val item = array.optJSONObject(i) ?: continue
-            val giftId = item.optString("giftId").sanitizeServerString().ifBlank { continue }
-            add(
-                UserGift(
-                    giftId = giftId,
-                    giftNumber = item.optInt("giftNumber").takeIf { it > 0 },
-                    name = item.optString("name").sanitizeServerString().ifBlank { "Gift" },
-                    imageUrl = item.optString("imageUrl").sanitizeServerString(),
-                    quantity = item.optInt("quantity", 1).coerceAtLeast(1),
-                    acquiredAt = item.optLong("acquiredAt", 0L)
-                )
+    val list = mutableListOf<UserGift>()
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        val giftId = item.optString("giftId").sanitizeServerString()
+        if (giftId.isBlank()) continue
+        list.add(
+            UserGift(
+                giftId = giftId,
+                giftNumber = item.optInt("giftNumber").takeIf { it > 0 },
+                name = item.optString("name").sanitizeServerString().ifBlank { "Gift" },
+                imageUrl = item.optString("imageUrl").sanitizeServerString(),
+                quantity = item.optInt("quantity", 1).coerceAtLeast(1),
+                acquiredAt = item.optLong("acquiredAt", 0L)
             )
-        }
+        )
     }
+    return list
 }
 
 fun parseChat(item: JSONObject, usersById: Map<String, UserSummary>, selfUserId: String): ChatSummary {

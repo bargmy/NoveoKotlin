@@ -204,7 +204,7 @@ private fun UserSummary.toJson(): JSONObject = JSONObject()
     .put("membershipTier", membershipTier)
     .put("nicknameFont", nicknameFont)
     .put("premiumStarIcon", premiumStarIcon?.toJson())
-    .put("gifts", JSONArray().apply { gifts.forEach { add(it.toJson()) } })
+    .put("gifts", JSONArray().apply { gifts.forEach { put(it.toJson()) } })
 
 private fun ProfileSkin.toJson(): JSONObject = JSONObject()
     .put("mode", mode)
