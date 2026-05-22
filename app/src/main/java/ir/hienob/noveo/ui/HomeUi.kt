@@ -3365,7 +3365,7 @@ private fun CodeBlockView(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.clickable {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         val clip = android.content.ClipData.newPlainText("Copied Code", code)
                         clipboard.setPrimaryClip(clip)
                         Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
