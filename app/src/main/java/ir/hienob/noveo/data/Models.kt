@@ -66,7 +66,7 @@ data class UserSummary(
     val membershipTier: String = "",
     val nicknameFont: String = "",
     val premiumStarIcon: PremiumStarIcon? = null,
-    val gifts: List<UserGift> = emptyList()
+    val gifts: List<UserGift>? = null
 )
 
 data class MessageFileAttachment(

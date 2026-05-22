@@ -19,15 +19,19 @@ fun parseUser(item: JSONObject, onlineIds: Set<String> = emptySet()): UserSummar
         bio = item.optString("bio").sanitizeServerString(),
         isOnline = onlineIds.contains(userId) || item.optBoolean("online", false),
         isVerified = item.optBoolean("isVerified", false),
-        profileSkin = parseProfileSkin(item.optJSONObject("profileSkin")),
+        profileSkin = if (item.has("profileSkin")) parseProfileSkin(item.optJSONObject("profileSkin")) else null,
         starsBalance = item.optDouble("starsBalance", 0.0),
         languageCode = item.optString("languageCode").sanitizeServerString().ifBlank { "en" },
         lastSeen = item.optLong("lastSeen", item.optLong("last_seen", 0L)).takeIf { it > 0 },
         joinedAt = item.optLong("joinedAt", item.optLong("createdAt", 0L)).takeIf { it > 0 },
         membershipTier = item.optString("membershipTier").sanitizeServerString().ifBlank { item.optString("membership_tier").sanitizeServerString() },
         nicknameFont = item.optString("nicknameFont").sanitizeServerString().ifBlank { item.optString("nickname_font").sanitizeServerString() },
-        premiumStarIcon = parsePremiumStarIcon(item.optJSONObject("premiumStarIcon") ?: item.optJSONObject("premium_star_icon")),
-        gifts = parseUserGifts(item.optJSONArray("gifts"))
+        premiumStarIcon = if (item.has("premiumStarIcon") || item.has("premium_star_icon")) {
+            parsePremiumStarIcon(item.optJSONObject("premiumStarIcon") ?: item.optJSONObject("premium_star_icon"))
+        } else {
+            null
+        },
+        gifts = if (item.has("gifts")) parseUserGifts(item.optJSONArray("gifts")) else null
     )
 }
 

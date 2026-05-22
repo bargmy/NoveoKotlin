@@ -204,7 +204,7 @@ private fun UserSummary.toJson(): JSONObject = JSONObject()
     .put("membershipTier", membershipTier)
     .put("nicknameFont", nicknameFont)
     .put("premiumStarIcon", premiumStarIcon?.toJson())
-    .put("gifts", JSONArray().apply { gifts.forEach { put(it.toJson()) } })
+    .put("gifts", gifts?.let { g -> JSONArray().apply { g.forEach { put(it.toJson()) } } })
 
 private fun ProfileSkin.toJson(): JSONObject = JSONObject()
     .put("mode", mode)
@@ -292,7 +292,7 @@ private fun JSONObject.toUserSummary(): UserSummary = UserSummary(
     membershipTier = optString("membershipTier", ""),
     nicknameFont = optString("nicknameFont", ""),
     premiumStarIcon = optJSONObject("premiumStarIcon")?.toPremiumStarIcon(),
-    gifts = buildList {
+    gifts = if (has("gifts")) buildList {
         val arr = optJSONArray("gifts") ?: return@buildList
         for (i in 0 until arr.length()) {
             val item = arr.optJSONObject(i) ?: continue
@@ -306,7 +306,7 @@ private fun JSONObject.toUserSummary(): UserSummary = UserSummary(
                 acquiredAt = item.optLong("acquiredAt", 0L)
             ))
         }
-    }
+    } else null
 )
 
 private fun JSONObject.toPremiumStarIcon(): PremiumStarIcon = PremiumStarIcon(

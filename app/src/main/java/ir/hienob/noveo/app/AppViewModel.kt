@@ -1632,7 +1632,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             is SocketEvent.UserListUpdate -> {
-                val mergedUsers = _uiState.value.usersById + event.usersById
+                val mergedUsers = mergeUsersMaps(_uiState.value.usersById, event.usersById)
                 val resolvedChats = _uiState.value.chats.resolveUserDisplay(mergedUsers, session.userId)
                 resolveCachedMessageSenders(mergedUsers)
                 _uiState.value = _uiState.value.copy(
@@ -1652,7 +1652,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     event.user
                 }
-                val mergedUsers = _uiState.value.usersById + (updatedUser.id to updatedUser)
+                val mergedUsers = mergeUsersMaps(_uiState.value.usersById, mapOf(updatedUser.id to updatedUser))
                 val resolvedChats = _uiState.value.chats.resolveUserDisplay(mergedUsers, session.userId)
                 resolveCachedMessageSenders(mergedUsers)
                 _uiState.value = _uiState.value.copy(
@@ -1667,7 +1667,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             is SocketEvent.ChatUpdated -> { /* Rely on HistoryUpdate or targeted events */ }
             is SocketEvent.HistoryUpdate -> {
                 socketResyncJob?.cancel()
-                val mergedUsers = _uiState.value.usersById + event.users
+                val mergedUsers = mergeUsersMaps(_uiState.value.usersById, event.users)
                 event.messagesByChat.forEach { (chatId, incomingMessages) ->
                     messageCacheByChat[chatId] = mergeMessages(
                         messageCacheByChat[chatId].orEmpty(),
@@ -2075,7 +2075,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 val (foundUsers, foundChats) = withContext(Dispatchers.IO) { api.searchPublicUsers(session, normalized) }
                 _uiState.value = _uiState.value.copy(
-                    usersById = _uiState.value.usersById + foundUsers.associateBy { it.id },
+                    usersById = mergeUsersMaps(_uiState.value.usersById, foundUsers.associateBy { it.id }),
                     chats = (_uiState.value.chats + foundChats).distinctBy { it.id }.sortedByDescending { it.lastMessageTimestamp }
                 )
             }
@@ -2097,7 +2097,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 val userProfile = withContext(Dispatchers.IO) { api.getUserProfile(session, userId) }
                 _uiState.value = _uiState.value.copy(
-                    usersById = _uiState.value.usersById + (userId to userProfile)
+                    usersById = mergeUsersMaps(_uiState.value.usersById, mapOf(userId to userProfile))
                 )
             }.onFailure {
                 it.printStackTrace()
@@ -2223,6 +2223,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             )
         )
+    }
+
+    private fun mergeUserSummary(existing: UserSummary?, incoming: UserSummary): UserSummary {
+        if (existing == null) return incoming
+        return incoming.copy(
+            gifts = incoming.gifts ?: existing.gifts,
+            profileSkin = incoming.profileSkin ?: existing.profileSkin,
+            premiumStarIcon = incoming.premiumStarIcon ?: existing.premiumStarIcon,
+            starsBalance = if (incoming.starsBalance == 0.0) existing.starsBalance else incoming.starsBalance,
+            nicknameFont = if (incoming.nicknameFont.isEmpty()) existing.nicknameFont else incoming.nicknameFont,
+            membershipTier = if (incoming.membershipTier.isEmpty()) existing.membershipTier else incoming.membershipTier,
+            bio = if (incoming.bio.isEmpty()) existing.bio else incoming.bio,
+            handle = incoming.handle ?: existing.handle,
+            joinedAt = incoming.joinedAt ?: existing.joinedAt,
+            avatarUrl = incoming.avatarUrl ?: existing.avatarUrl
+        )
+    }
+
+    private fun mergeUsersMaps(existing: Map<String, UserSummary>, incoming: Map<String, UserSummary>): Map<String, UserSummary> {
+        val result = existing.toMutableMap()
+        for ((id, incomingUser) in incoming) {
+            val prev = result[id]
+            result[id] = mergeUserSummary(prev, incomingUser)
+        }
+        return result
     }
 
     private fun resolveCachedMessageSenders(usersById: Map<String, UserSummary>) {

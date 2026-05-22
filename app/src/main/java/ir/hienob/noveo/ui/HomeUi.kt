@@ -4841,7 +4841,8 @@ private fun ProfileModal(
                             }
                         } else {
                             // ── Gifts Tab ────────────────────────────────────────────
-                            if (user.gifts.isEmpty()) {
+                            val giftsList = user.gifts.orEmpty()
+                            if (giftsList.isEmpty()) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -4865,7 +4866,7 @@ private fun ProfileModal(
                             } else {
                                 // Grid: 3 columns
                                 val columns = 3
-                                val rows = (user.gifts.size + columns - 1) / columns
+                                val rows = (giftsList.size + columns - 1) / columns
                                 Column(
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -4877,8 +4878,8 @@ private fun ProfileModal(
                                         ) {
                                             for (col in 0 until columns) {
                                                 val index = row * columns + col
-                                                if (index < user.gifts.size) {
-                                                    val gift = user.gifts[index]
+                                                if (index < giftsList.size) {
+                                                    val gift = giftsList[index]
                                                     GiftCard(gift = gift, modifier = Modifier.weight(1f))
                                                 } else {
                                                     Spacer(modifier = Modifier.weight(1f))
