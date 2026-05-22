@@ -4221,64 +4221,11 @@ private fun ProfileModal(
     val density = LocalDensity.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     
-    val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
-    val expandedHeight = 260.dp
+    val expandedHeight = 320.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
-    val screenWidthPx = with(density) { screenWidth.toPx() }
-    val maxOverscroll = expandedHeightPx
     
-    // Track overscroll for "pull down to grow" effect
-    var overscrollOffset by remember { mutableStateOf(0f) }
-    val nestedScrollConnection = remember(maxOverscroll) {
-        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): Offset {
-                // Check if the scroll is triggered by the user (not programmatic entrance animations)
-                if (source != androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput) {
-                    return Offset.Zero
-                }
-                // If at the top and pulling down
-                if (available.y > 0 && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
-                    val newOffset = (overscrollOffset + available.y).coerceAtMost(maxOverscroll)
-                    val consumed = newOffset - overscrollOffset
-                    overscrollOffset = newOffset
-                    return Offset(0f, consumed)
-                }
-                // If we have overscroll and scrolling up
-                if (available.y < 0 && overscrollOffset > 0) {
-                    val consumed = available.y.coerceAtLeast(-overscrollOffset)
-                    overscrollOffset += consumed
-                    return Offset(0f, consumed)
-                }
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                if (overscrollOffset > 0f) {
-                    val target = if (available.y < -100f) {
-                        0f
-                    } else if (available.y > 100f) {
-                        maxOverscroll
-                    } else if (overscrollOffset > maxOverscroll * 0.5f) {
-                        maxOverscroll
-                    } else {
-                        0f
-                    }
-                    androidx.compose.animation.core.animate(
-                        initialValue = overscrollOffset,
-                        targetValue = target,
-                        animationSpec = androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessLow)
-                    ) { value, _ ->
-                        overscrollOffset = value
-                    }
-                    return available
-                }
-                return super.onPreFling(available)
-            }
-        }
-    }
-
     val fraction = remember { derivedStateOf { 
         if (listState.firstVisibleItemIndex > 0) 1f 
         else (listState.firstVisibleItemScrollOffset.toFloat() / (expandedHeightPx - collapsedHeightPx)).coerceIn(0f, 1f)
@@ -4286,31 +4233,14 @@ private fun ProfileModal(
     
     Surface(
         color = MaterialTheme.colorScheme.background,
-        modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)
+        modifier = Modifier.fillMaxSize()
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val overscrollFraction = if (maxOverscroll > 0f) {
-                (overscrollOffset / maxOverscroll).coerceIn(0f, 1f)
-            } else {
-                0f
-            }
-            
-            // Header Height logic: follows overscroll growth or standard collapse
-            val currentHeaderHeight = if (overscrollOffset > 0) {
-                lerpDp(expandedHeight, screenWidth, overscrollFraction)
-            } else {
-                lerpDp(expandedHeight, collapsedHeight, fraction)
-            }
+            val screenWidth = maxWidth
             
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().graphicsLayer { 
-                    translationY = if (overscrollOffset > 0f) {
-                        (currentHeaderHeight - expandedHeight).toPx()
-                    } else {
-                        0f
-                    }
-                },
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
@@ -4360,26 +4290,74 @@ private fun ProfileModal(
                 }
             }
             
-            // Collapsing Header Background
+            // Collapsing Header
+            val currentHeaderHeight = lerpDp(expandedHeight, collapsedHeight, fraction)
             Surface(
                 modifier = Modifier.fillMaxWidth().height(currentHeaderHeight),
                 color = MaterialTheme.colorScheme.surface,
-                shadowElevation = if (overscrollOffset > 0) 0.dp else lerpDp(0.dp, 4.dp, fraction)
+                shadowElevation = lerpDp(0.dp, 4.dp, fraction)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Back Button (Always accessible)
+                    // Back Button
                     HeaderIconButton(
                         icon = Icons.AutoMirrored.Outlined.ArrowBack,
                         onClick = onClose,
-                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp).statusBarsPadding()
+                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                     )
                     
-                    // Collapsed Name/Status (Only visible when small)
-                    if (fraction > 0.5f && overscrollOffset <= 0) {
+                    val avatarSize = lerpDp(120.dp, 38.dp, fraction)
+                    
+                    // Avatar position calculation
+                    val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
+                    val collapsedAvatarX = 52.dp // Next to back button
+                    val avatarX = lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
+                    
+                    val expandedAvatarY = (expandedHeight / 2) - (avatarSize / 2) - 20.dp
+                    val collapsedAvatarY = (collapsedHeight / 2) - (avatarSize / 2)
+                    val avatarY = lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
+                    
+                    Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
+                        ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = avatarSize)
+                    }
+                    
+                    // Expanded Name/Status
+                    if (fraction < 0.5f) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .offset(y = expandedAvatarY + avatarSize + 16.dp)
+                                .alpha((1f - fraction * 2f).coerceIn(0f, 1f)),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    user.username, 
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (user.isVerified) {
+                                    Spacer(Modifier.width(6.dp))
+                                    VerifiedIcon(modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            val lastSeenText = remember(user, strings) {
+                                if (user.isOnline) strings.online
+                                else formatLastSeen(user.lastSeen, strings)
+                            }
+                            Text(
+                                lastSeenText, 
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
+                    // Collapsed Name/Status
+                    if (fraction > 0.5f) {
                         Column(
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
-                                .padding(start = 100.dp) 
+                                .padding(start = 100.dp) // Offset by back button + avatar
                                 .alpha(((fraction - 0.5f) * 2f).coerceIn(0f, 1f))
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -4387,6 +4365,7 @@ private fun ProfileModal(
                                     user.username,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -4402,79 +4381,11 @@ private fun ProfileModal(
                             Text(
                                 lastSeenText,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp
                             )
                         }
                     }
-                }
-            }
-            
-            // Avatar Scaling Logic
-            val avatarSize = if (overscrollOffset > 0) {
-                lerpDp(120.dp, screenWidth, overscrollFraction)
-            } else {
-                lerpDp(120.dp, 38.dp, fraction)
-            }
-            
-            val avatarShape = if (overscrollOffset > 0) {
-                RoundedCornerShape(lerpDp(avatarSize / 2, 0.dp, overscrollFraction))
-            } else {
-                CircleShape
-            }
-            
-            val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
-            val collapsedAvatarX = 52.dp 
-            val avatarX = lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
-            
-            val baseAvatarY = 60.dp
-            val collapsedAvatarY = (collapsedHeight / 2) - (38.dp / 2)
-            
-            val avatarY = if (overscrollOffset > 0) {
-                (currentHeaderHeight / 2) - (avatarSize / 2) - lerpDp(20.dp, 0.dp, overscrollFraction)
-            } else {
-                lerpDp(baseAvatarY, collapsedAvatarY, fraction)
-            }
-            
-            Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
-                ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = avatarSize, shape = avatarShape)
-            }
-            
-            // Expanded Info (Name and Status under avatar)
-            val expandedInfoAlpha = if (overscrollOffset > 0) {
-                (1f - overscrollFraction * 4f).coerceIn(0f, 1f)
-            } else {
-                (1f - fraction * 2f).coerceIn(0f, 1f)
-            }
-            
-            if (expandedInfoAlpha > 0f) {
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        // Position text relative to bottom of growing avatar
-                        .offset(y = avatarY + avatarSize)
-                        .alpha(expandedInfoAlpha),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            user.username, 
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (user.isVerified) {
-                            Spacer(Modifier.width(6.dp))
-                            VerifiedIcon(modifier = Modifier.size(18.dp))
-                        }
-                    }
-                    val lastSeenText = remember(user, strings) {
-                        if (user.isOnline) strings.online
-                        else formatLastSeen(user.lastSeen, strings)
-                    }
-                    Text(
-                        lastSeenText, 
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
@@ -4518,96 +4429,26 @@ private fun GroupInfoModal(
     val density = LocalDensity.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     
-    val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
-    val expandedHeight = 260.dp
+    val expandedHeight = 320.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
-    val screenWidthPx = with(density) { screenWidth.toPx() }
-    val maxOverscroll = expandedHeightPx
     
-    // Track overscroll for "pull down to grow" effect
-    var overscrollOffset by remember { mutableStateOf(0f) }
-    val nestedScrollConnection = remember(maxOverscroll) {
-        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): Offset {
-                // Check if the scroll is triggered by the user (not programmatic entrance animations)
-                if (source != androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput) {
-                    return Offset.Zero
-                }
-                // If at the top and pulling down
-                if (available.y > 0 && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
-                    val newOffset = (overscrollOffset + available.y).coerceAtMost(maxOverscroll)
-                    val consumed = newOffset - overscrollOffset
-                    overscrollOffset = newOffset
-                    return Offset(0f, consumed)
-                }
-                // If we have overscroll and scrolling up
-                if (available.y < 0 && overscrollOffset > 0) {
-                    val consumed = available.y.coerceAtLeast(-overscrollOffset)
-                    overscrollOffset += consumed
-                    return Offset(0f, consumed)
-                }
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                if (overscrollOffset > 0f) {
-                    val target = if (available.y < -100f) {
-                        0f
-                    } else if (available.y > 100f) {
-                        maxOverscroll
-                    } else if (overscrollOffset > maxOverscroll * 0.5f) {
-                        maxOverscroll
-                    } else {
-                        0f
-                    }
-                    androidx.compose.animation.core.animate(
-                        initialValue = overscrollOffset,
-                        targetValue = target,
-                        animationSpec = androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessLow)
-                    ) { value, _ ->
-                        overscrollOffset = value
-                    }
-                    return available
-                }
-                return super.onPreFling(available)
-            }
-        }
-    }
-
     val fraction = remember { derivedStateOf { 
         if (listState.firstVisibleItemIndex > 0) 1f 
         else (listState.firstVisibleItemScrollOffset.toFloat() / (expandedHeightPx - collapsedHeightPx)).coerceIn(0f, 1f)
     } }.value
-
+    
     Surface(
         color = MaterialTheme.colorScheme.background,
-        modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)
+        modifier = Modifier.fillMaxSize()
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val overscrollFraction = if (maxOverscroll > 0f) {
-                (overscrollOffset / maxOverscroll).coerceIn(0f, 1f)
-            } else {
-                0f
-            }
-
-            // Header Height logic: follows overscroll growth or standard collapse
-            val currentHeaderHeight = if (overscrollOffset > 0) {
-                lerpDp(expandedHeight, screenWidth, overscrollFraction)
-            } else {
-                lerpDp(expandedHeight, collapsedHeight, fraction)
-            }
+            val screenWidth = maxWidth
             
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().graphicsLayer { 
-                    translationY = if (overscrollOffset > 0f) {
-                        (currentHeaderHeight - expandedHeight).toPx()
-                    } else {
-                        0f
-                    }
-                },
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
@@ -4733,22 +4574,66 @@ private fun GroupInfoModal(
                 }
             }
             
-            // Collapsing Header Background
+            // Collapsing Header
+            val currentHeaderHeight = lerpDp(expandedHeight, collapsedHeight, fraction)
             Surface(
                 modifier = Modifier.fillMaxWidth().height(currentHeaderHeight),
                 color = MaterialTheme.colorScheme.surface,
-                shadowElevation = if (overscrollOffset > 0) 0.dp else lerpDp(0.dp, 4.dp, fraction)
+                shadowElevation = lerpDp(0.dp, 4.dp, fraction)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     // Back Button
                     HeaderIconButton(
                         icon = Icons.AutoMirrored.Outlined.ArrowBack,
                         onClick = onClose,
-                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp).statusBarsPadding()
+                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                     )
                     
+                    val avatarSize = lerpDp(120.dp, 38.dp, fraction)
+                    
+                    // Avatar position calculation
+                    val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
+                    val collapsedAvatarX = 52.dp 
+                    val avatarX = lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
+                    
+                    val expandedAvatarY = (expandedHeight / 2) - (avatarSize / 2) - 20.dp
+                    val collapsedAvatarY = (collapsedHeight / 2) - (avatarSize / 2)
+                    val avatarY = lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
+                    
+                    Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
+                        ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize, isSavedMessages = isSavedMessages)
+                    }
+                    
+                    // Expanded Title/Subtitle
+                    if (fraction < 0.5f) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .offset(y = expandedAvatarY + avatarSize + 16.dp)
+                                .alpha((1f - fraction * 2f).coerceIn(0f, 1f)),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    chatTitle, 
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (isVerified) {
+                                    Spacer(Modifier.width(6.dp))
+                                    VerifiedIcon(modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            Text(
+                                if (isSavedMessages) formatMessagesCount(savedMessagesCount, strings) else formatMembersCount(chat.memberIds.size, strings),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
                     // Collapsed Title/Subtitle
-                    if (fraction > 0.5f && overscrollOffset <= 0) {
+                    if (fraction > 0.5f) {
                         Column(
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
@@ -4760,6 +4645,7 @@ private fun GroupInfoModal(
                                     chatTitle,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -4771,74 +4657,11 @@ private fun GroupInfoModal(
                             Text(
                                 if (isSavedMessages) formatMessagesCount(savedMessagesCount, strings) else formatMembersCount(chat.memberIds.size, strings),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp
                             )
                         }
                     }
-                }
-            }
-            
-            // Avatar and Expanded Info (Overlay)
-            val avatarSize = if (overscrollOffset > 0) {
-                lerpDp(120.dp, screenWidth, overscrollFraction)
-            } else {
-                lerpDp(120.dp, 38.dp, fraction)
-            }
-            
-            val avatarShape = if (overscrollOffset > 0) {
-                RoundedCornerShape(lerpDp(avatarSize / 2, 0.dp, overscrollFraction))
-            } else {
-                CircleShape
-            }
-            
-            val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
-            val collapsedAvatarX = 52.dp 
-            val avatarX = lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
-            
-            val baseAvatarY = 60.dp
-            val collapsedAvatarY = (collapsedHeight / 2) - (38.dp / 2)
-            
-            val avatarY = if (overscrollOffset > 0) {
-                (currentHeaderHeight / 2) - (avatarSize / 2) - lerpDp(20.dp, 0.dp, overscrollFraction)
-            } else {
-                lerpDp(baseAvatarY, collapsedAvatarY, fraction)
-            }
-            
-            Box(modifier = Modifier.offset(x = avatarX, y = avatarY)) {
-                ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, size = avatarSize, isSavedMessages = isSavedMessages, shape = avatarShape)
-            }
-            
-            // Expanded Title/Subtitle (Fades out on overscroll)
-            val expandedInfoAlpha = if (overscrollOffset > 0) {
-                (1f - overscrollFraction * 4f).coerceIn(0f, 1f)
-            } else {
-                (1f - fraction * 2f).coerceIn(0f, 1f)
-            }
-            
-            if (expandedInfoAlpha > 0f) {
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .offset(y = avatarY + avatarSize)
-                        .alpha(expandedInfoAlpha),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            chatTitle, 
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (isVerified) {
-                            Spacer(Modifier.width(6.dp))
-                            VerifiedIcon(modifier = Modifier.size(18.dp))
-                        }
-                    }
-                    Text(
-                        if (isSavedMessages) formatMessagesCount(savedMessagesCount, strings) else formatMembersCount(chat.memberIds.size, strings),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
