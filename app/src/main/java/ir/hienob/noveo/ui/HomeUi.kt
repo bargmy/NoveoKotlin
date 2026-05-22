@@ -3462,10 +3462,12 @@ private fun MarkdownTextChunk(
     urlToConfirm: (String) -> Unit
 ) {
     val handleColor = if (color == MaterialTheme.colorScheme.onSurface) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.95f)
+    val urlRegex = remember { Regex("""\b(?:https?://|www\.)[^\s()<>]+(?:\([\w\d]+\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’])""", RegexOption.IGNORE_CASE) }
     
     val hasHandle = onHandleClick != null && visibleText.indexOf('@') >= 0
     val hasCommand = onSendCommand != null && visibleText.indexOf('/') >= 0
-    val hasLink = visibleText.indexOf('[') >= 0 && visibleText.indexOf(']') >= 0 && visibleText.indexOf('(') >= 0 && visibleText.indexOf(')') >= 0
+    val hasRegularUrl = visibleText.indexOf("http://") >= 0 || visibleText.indexOf("https://") >= 0 || visibleText.indexOf("www.") >= 0
+    val hasLink = (visibleText.indexOf('[') >= 0 && visibleText.indexOf(']') >= 0 && visibleText.indexOf('(') >= 0 && visibleText.indexOf(')') >= 0) || hasRegularUrl
     val hasClickableElement = hasHandle || hasCommand || hasLink
     val hasFormattingMarkup = visibleText.indexOf('*') >= 0
 
@@ -3500,6 +3502,14 @@ private fun MarkdownTextChunk(
                     val nextHandle = if (hasHandle) visibleText.indexOf("@", index) else -1
                     val nextSlash = if (hasCommand) visibleText.indexOf("/", index) else -1
                     val nextLink = if (hasLink) visibleText.indexOf("[", index) else -1
+                    
+                    var nextUrlIndex = -1
+                    var urlText = ""
+                    val urlMatch = urlRegex.find(visibleText, index)
+                    if (urlMatch != null) {
+                        nextUrlIndex = urlMatch.range.first
+                        urlText = urlMatch.value
+                    }
 
                     val markers = mutableListOf<Pair<Int, String>>()
                     if (nextMarker != -1) markers.add(nextMarker to "**")
@@ -3507,6 +3517,7 @@ private fun MarkdownTextChunk(
                     if (nextHandle != -1) markers.add(nextHandle to "@")
                     if (nextSlash != -1) markers.add(nextSlash to "/")
                     if (nextLink != -1) markers.add(nextLink to "[")
+                    if (nextUrlIndex != -1) markers.add(nextUrlIndex to "URL")
 
                     val nearest = markers.minByOrNull { it.first }
 
@@ -3615,6 +3626,14 @@ private fun MarkdownTextChunk(
                                 append("[")
                                 index = nearest.first + 1
                             }
+                        }
+                        "URL" -> {
+                            pushStringAnnotation("link", urlText)
+                            withStyle(SpanStyle(color = handleColor, fontWeight = FontWeight.SemiBold, textDecoration = TextDecoration.Underline)) {
+                                append(urlText)
+                            }
+                            pop()
+                            index = nearest.first + urlText.length
                         }
                     }
                 }
