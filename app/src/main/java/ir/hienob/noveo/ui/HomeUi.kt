@@ -233,6 +233,7 @@ import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.SocketEvent
 import ir.hienob.noveo.data.UserSummary
 import ir.hienob.noveo.data.ProfileSkin
+import ir.hienob.noveo.data.PremiumStarIcon
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.material3.LocalContentColor
 import kotlinx.coroutines.delay
@@ -1781,6 +1782,42 @@ fun VerifiedIcon(modifier: Modifier = Modifier.size(14.dp)) {
 }
 
 @Composable
+fun UserBadges(
+    isVerified: Boolean,
+    premiumStarIcon: PremiumStarIcon?,
+    modifier: Modifier = Modifier,
+    verifiedSize: Dp = 14.dp,
+    starSize: Dp = 14.dp,
+    spacing: Dp = 4.dp
+) {
+    if (!isVerified && (premiumStarIcon == null || premiumStarIcon.url.isNullOrBlank())) return
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing)
+    ) {
+        if (isVerified) {
+            VerifiedIcon(modifier = Modifier.size(verifiedSize))
+        }
+        if (premiumStarIcon != null && !premiumStarIcon.url.isNullOrBlank()) {
+            val normalizedUrl = remember(premiumStarIcon.url) { premiumStarIcon.url.normalizeNoveoUrl() }
+            if (premiumStarIcon.type == "tgs") {
+                TgsSticker(
+                    url = normalizedUrl,
+                    modifier = Modifier.size(starSize)
+                )
+            } else {
+                AsyncImage(
+                    model = normalizedUrl,
+                    contentDescription = "Premium Star",
+                    modifier = Modifier.size(starSize)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun MessageDateSeparator(
     label: String,
     tgColors: TelegramThemeColors
@@ -2264,10 +2301,13 @@ private fun ChatPane(
                                 fontFamily = getNicknameFontFamily(nicknameFont),
                                 modifier = Modifier.weight(1f, fill = false)
                             )
-                            if (selectedChat?.isVerified == true || profileUser?.isVerified == true) {
-                                Spacer(Modifier.width(4.dp))
-                                VerifiedIcon(modifier = Modifier.size(14.dp))
-                            }
+                            UserBadges(
+                                isVerified = selectedChat?.isVerified == true || profileUser?.isVerified == true,
+                                premiumStarIcon = profileUser?.premiumStarIcon,
+                                modifier = Modifier.padding(start = 4.dp),
+                                verifiedSize = 14.dp,
+                                starSize = 14.dp
+                            )
                         }
                         Spacer(Modifier.height(3.dp))
                         Text(
@@ -3007,10 +3047,13 @@ private fun MessageRow(
                                         fontFamily = getNicknameFontFamily(senderFont),
                                         modifier = Modifier.weight(1f, fill = false)
                                     )
-                                    if (isSenderVerified) {
-                                        Spacer(Modifier.width(4.dp))
-                                        VerifiedIcon(modifier = Modifier.size(13.dp))
-                                    }
+                                    UserBadges(
+                                        isVerified = isSenderVerified,
+                                        premiumStarIcon = usersById[message.senderId]?.premiumStarIcon,
+                                        modifier = Modifier.padding(start = 4.dp),
+                                        verifiedSize = 13.dp,
+                                        starSize = 13.dp
+                                    )
                                 }
                             }
                             if (message.content.forwardedInfo != null) {
@@ -4152,10 +4195,13 @@ private fun ContactRow(
                             overflow = TextOverflow.Ellipsis,
                             fontFamily = getNicknameFontFamily(user.nicknameFont)
                         )
-                        if (user.isVerified) {
-                            Spacer(Modifier.width(4.dp))
-                            VerifiedIcon(modifier = Modifier.size(14.dp))
-                        }
+                        UserBadges(
+                            isVerified = user.isVerified,
+                            premiumStarIcon = user.premiumStarIcon,
+                            modifier = Modifier.padding(start = 4.dp),
+                            verifiedSize = 14.dp,
+                            starSize = 14.dp
+                        )
                     }
                     Text(
                         user.handle ?: user.bio.ifBlank { if (user.isOnline) strings.online else strings.offline },
@@ -4836,10 +4882,13 @@ private fun ProfileModal(
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = getNicknameFontFamily(user.nicknameFont)
                                 )
-                                if (user.isVerified) {
-                                    Spacer(Modifier.width(6.dp))
-                                    VerifiedIcon(modifier = Modifier.size(18.dp))
-                                }
+                                UserBadges(
+                                    isVerified = user.isVerified,
+                                    premiumStarIcon = user.premiumStarIcon,
+                                    modifier = Modifier.padding(start = 6.dp),
+                                    verifiedSize = 18.dp,
+                                    starSize = 18.dp
+                                )
                             }
                             val lastSeenText = remember(user, strings) {
                                 if (user.isOnline) strings.online
@@ -4875,10 +4924,13 @@ private fun ProfileModal(
                                     overflow = TextOverflow.Ellipsis,
                                     fontFamily = getNicknameFontFamily(user.nicknameFont)
                                 )
-                                if (user.isVerified) {
-                                    Spacer(Modifier.width(4.dp))
-                                    VerifiedIcon(modifier = Modifier.size(14.dp))
-                                }
+                                UserBadges(
+                                    isVerified = user.isVerified,
+                                    premiumStarIcon = user.premiumStarIcon,
+                                    modifier = Modifier.padding(start = 4.dp),
+                                    verifiedSize = 14.dp,
+                                    starSize = 14.dp
+                                )
                             }
                             val lastSeenText = remember(user, strings) {
                                 if (user.isOnline) strings.online
@@ -5157,10 +5209,13 @@ private fun GroupInfoModal(
                                             fontWeight = FontWeight.SemiBold,
                                             fontFamily = getNicknameFontFamily(user?.nicknameFont)
                                         )
-                                        if (user?.isVerified == true) {
-                                            Spacer(Modifier.width(4.dp))
-                                            VerifiedIcon(modifier = Modifier.size(14.dp))
-                                        }
+                                        UserBadges(
+                                            isVerified = user?.isVerified == true,
+                                            premiumStarIcon = user?.premiumStarIcon,
+                                            modifier = Modifier.padding(start = 4.dp),
+                                            verifiedSize = 14.dp,
+                                            starSize = 14.dp
+                                        )
                                     }
                                     val lastSeenText = remember(user, strings) {
                                         if (user?.isOnline == true) strings.online
@@ -5233,12 +5288,16 @@ private fun GroupInfoModal(
                                 Text(
                                     chatTitle, 
                                     style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
-                                if (isVerified) {
-                                    Spacer(Modifier.width(6.dp))
-                                    VerifiedIcon(modifier = Modifier.size(18.dp))
-                                }
+                                UserBadges(
+                                    isVerified = isVerified,
+                                    premiumStarIcon = profileUserId?.let { usersById[it]?.premiumStarIcon },
+                                    modifier = Modifier.padding(start = 6.dp),
+                                    verifiedSize = 18.dp,
+                                    starSize = 18.dp
+                                )
                             }
                             Text(
                                 if (isSavedMessages) formatMessagesCount(savedMessagesCount, strings) else formatMembersCount(chat.memberIds.size, strings),
@@ -5263,12 +5322,16 @@ private fun GroupInfoModal(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
-                                if (isVerified) {
-                                    Spacer(Modifier.width(4.dp))
-                                    VerifiedIcon(modifier = Modifier.size(14.dp))
-                                }
+                                UserBadges(
+                                    isVerified = isVerified,
+                                    premiumStarIcon = profileUserId?.let { usersById[it]?.premiumStarIcon },
+                                    modifier = Modifier.padding(start = 4.dp),
+                                    verifiedSize = 14.dp,
+                                    starSize = 14.dp
+                                )
                             }
                             Text(
                                 if (isSavedMessages) formatMessagesCount(savedMessagesCount, strings) else formatMembersCount(chat.memberIds.size, strings),
@@ -5399,12 +5462,16 @@ private fun ChatRow(
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        fontFamily = getNicknameFontFamily(nicknameFont)
+                        fontFamily = getNicknameFontFamily(nicknameFont),
+                        modifier = Modifier.weight(1f, fill = false)
                     )
-                    if (isVerified) {
-                        Spacer(Modifier.width(4.dp))
-                        VerifiedIcon()
-                    }
+                    UserBadges(
+                        isVerified = isVerified,
+                        premiumStarIcon = profileUserId?.let { usersById[it]?.premiumStarIcon },
+                        modifier = Modifier.padding(start = 4.dp),
+                        verifiedSize = 14.dp,
+                        starSize = 14.dp
+                    )
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(localizeMessagePreview(chat.lastMessagePreview, strings).ifBlank { strings.noMessagesYet }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)

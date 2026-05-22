@@ -18,6 +18,13 @@ data class ProfileSkin(
     val color: String = ""
 )
 
+data class PremiumStarIcon(
+    val url: String = "",
+    val type: String = "image",
+    val source: String = "template",
+    val templateId: String? = null
+)
+
 data class Transaction(
     val id: String,
     val amountTenths: Int,
@@ -48,7 +55,8 @@ data class UserSummary(
     val lastSeen: Long? = null,
     val joinedAt: Long? = null,
     val membershipTier: String = "",
-    val nicknameFont: String = ""
+    val nicknameFont: String = "",
+    val premiumStarIcon: PremiumStarIcon? = null
 )
 
 data class MessageFileAttachment(

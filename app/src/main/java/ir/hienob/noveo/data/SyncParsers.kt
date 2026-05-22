@@ -25,7 +25,8 @@ fun parseUser(item: JSONObject, onlineIds: Set<String> = emptySet()): UserSummar
         lastSeen = item.optLong("lastSeen", item.optLong("last_seen", 0L)).takeIf { it > 0 },
         joinedAt = item.optLong("joinedAt", item.optLong("createdAt", 0L)).takeIf { it > 0 },
         membershipTier = item.optString("membershipTier").sanitizeServerString().ifBlank { item.optString("membership_tier").sanitizeServerString() },
-        nicknameFont = item.optString("nicknameFont").sanitizeServerString().ifBlank { item.optString("nickname_font").sanitizeServerString() }
+        nicknameFont = item.optString("nicknameFont").sanitizeServerString().ifBlank { item.optString("nickname_font").sanitizeServerString() },
+        premiumStarIcon = parsePremiumStarIcon(item.optJSONObject("premiumStarIcon") ?: item.optJSONObject("premium_star_icon"))
     )
 }
 
@@ -68,6 +69,16 @@ private fun parseProfileSkin(json: JSONObject?): ProfileSkin? {
         colors = colorsList,
         angle = json.optInt("angle", 135),
         color = json.optString("color").sanitizeServerString()
+    )
+}
+
+private fun parsePremiumStarIcon(json: JSONObject?): PremiumStarIcon? {
+    if (json == null) return null
+    return PremiumStarIcon(
+        url = json.optString("url").sanitizeServerString(),
+        type = json.optString("type").sanitizeServerString().ifBlank { "image" },
+        source = json.optString("source").sanitizeServerString().ifBlank { "template" },
+        templateId = json.optString("templateId").sanitizeServerString().takeIf { it.isNotBlank() }
     )
 }
 

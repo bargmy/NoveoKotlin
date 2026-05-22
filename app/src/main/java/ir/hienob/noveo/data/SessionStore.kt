@@ -203,6 +203,7 @@ private fun UserSummary.toJson(): JSONObject = JSONObject()
     .put("profileSkin", profileSkin?.toJson())
     .put("membershipTier", membershipTier)
     .put("nicknameFont", nicknameFont)
+    .put("premiumStarIcon", premiumStarIcon?.toJson())
 
 private fun ProfileSkin.toJson(): JSONObject = JSONObject()
     .put("mode", mode)
@@ -213,6 +214,12 @@ private fun ProfileSkin.toJson(): JSONObject = JSONObject()
     .put("colors", JSONArray().apply { colors.forEach(::put) })
     .put("angle", angle)
     .put("color", color)
+
+private fun PremiumStarIcon.toJson(): JSONObject = JSONObject()
+    .put("url", url)
+    .put("type", type)
+    .put("source", source)
+    .put("templateId", templateId)
 
 private fun ChatSummary.toJson(): JSONObject = JSONObject()
     .put("id", id)
@@ -274,7 +281,15 @@ private fun JSONObject.toUserSummary(): UserSummary = UserSummary(
     lastSeen = optLong("lastSeen").takeIf { it > 0L },
     joinedAt = optLong("joinedAt").takeIf { it > 0L },
     membershipTier = optString("membershipTier", ""),
-    nicknameFont = optString("nicknameFont", "")
+    nicknameFont = optString("nicknameFont", ""),
+    premiumStarIcon = optJSONObject("premiumStarIcon")?.toPremiumStarIcon()
+)
+
+private fun JSONObject.toPremiumStarIcon(): PremiumStarIcon = PremiumStarIcon(
+    url = optString("url", ""),
+    type = optString("type", "image"),
+    source = optString("source", "template"),
+    templateId = optString("templateId").takeIf { it.isNotBlank() }
 )
 
 private fun JSONObject.toProfileSkin(): ProfileSkin {
