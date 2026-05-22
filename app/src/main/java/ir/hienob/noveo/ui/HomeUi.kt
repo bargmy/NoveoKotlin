@@ -3467,9 +3467,9 @@ private fun MarkdownTextChunk(
     val hasCommand = onSendCommand != null && visibleText.indexOf('/') >= 0
     val hasLink = visibleText.indexOf('[') >= 0 && visibleText.indexOf(']') >= 0 && visibleText.indexOf('(') >= 0 && visibleText.indexOf(')') >= 0
     val hasClickableElement = hasHandle || hasCommand || hasLink
-    val hasBoldMarkup = visibleText.indexOf("**") >= 0
+    val hasFormattingMarkup = visibleText.indexOf('*') >= 0
 
-    if (!hasClickableElement && !hasBoldMarkup) {
+    if (!hasClickableElement && !hasFormattingMarkup) {
         Text(
             text = visibleText,
             style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
@@ -3482,12 +3482,28 @@ private fun MarkdownTextChunk(
                 var index = 0
                 while (index < visibleText.length) {
                     val nextMarker = visibleText.indexOf("**", index)
+                    
+                    var pos = index
+                    var nextItalic = -1
+                    while (pos < visibleText.length) {
+                        val star = visibleText.indexOf('*', pos)
+                        if (star == -1) break
+                        val isDoublePrev = star > 0 && visibleText[star - 1] == '*'
+                        val isDoubleNext = star + 1 < visibleText.length && visibleText[star + 1] == '*'
+                        if (!isDoublePrev && !isDoubleNext) {
+                            nextItalic = star
+                            break
+                        }
+                        pos = star + 1
+                    }
+
                     val nextHandle = if (hasHandle) visibleText.indexOf("@", index) else -1
                     val nextSlash = if (hasCommand) visibleText.indexOf("/", index) else -1
                     val nextLink = if (hasLink) visibleText.indexOf("[", index) else -1
 
                     val markers = mutableListOf<Pair<Int, String>>()
                     if (nextMarker != -1) markers.add(nextMarker to "**")
+                    if (nextItalic != -1) markers.add(nextItalic to "*")
                     if (nextHandle != -1) markers.add(nextHandle to "@")
                     if (nextSlash != -1) markers.add(nextSlash to "/")
                     if (nextLink != -1) markers.add(nextLink to "[")
@@ -3514,6 +3530,30 @@ private fun MarkdownTextChunk(
                             } else {
                                 append("**")
                                 index = nearest.first + 2
+                            }
+                        }
+                        "*" -> {
+                            var pos2 = nearest.first + 1
+                            var endItalic = -1
+                            while (pos2 < visibleText.length) {
+                                val star = visibleText.indexOf('*', pos2)
+                                if (star == -1) break
+                                val isDoublePrev = star > 0 && visibleText[star - 1] == '*'
+                                val isDoubleNext = star + 1 < visibleText.length && visibleText[star + 1] == '*'
+                                if (!isDoublePrev && !isDoubleNext) {
+                                    endItalic = star
+                                    break
+                                }
+                                pos2 = star + 1
+                            }
+                            if (endItalic != -1) {
+                                withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                                    append(visibleText.substring(nearest.first + 1, endItalic))
+                                }
+                                index = endItalic + 1
+                            } else {
+                                append("*")
+                                index = nearest.first + 1
                             }
                         }
                         "@" -> {
