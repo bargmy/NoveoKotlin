@@ -116,6 +116,7 @@ jobs:
               fh.write(f"prerelease={prerelease}\n")
               fh.write(f"release_name={release_name}\n")
               fh.write(f"latest_release_tag={latest_release_tag}\n")
+              fh.write(f"latest_stable_tag={latest_stable_tag}\n")
           PY
 
       - name: Groq Diffgen
@@ -126,11 +127,16 @@ jobs:
           RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
           RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
           RELEASE_PRERELEASE: ${{ steps.release_meta.outputs.prerelease }}
-          PREVIOUS_RELEASE_TAG: ${{ steps.release_meta.outputs.latest_release_tag }}
+          LATEST_RELEASE_TAG: ${{ steps.release_meta.outputs.latest_release_tag }}
+          LATEST_STABLE_TAG: ${{ steps.release_meta.outputs.latest_stable_tag }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           set -euo pipefail
-          PREV_TAG="${PREVIOUS_RELEASE_TAG}"
+          if [ "$RELEASE_PRERELEASE" = "true" ]; then
+            PREV_TAG="${LATEST_RELEASE_TAG}"
+          else
+            PREV_TAG="${LATEST_STABLE_TAG:-$LATEST_RELEASE_TAG}"
+          fi
           if [ -n "$PREV_TAG" ] && git rev-parse "$PREV_TAG^{commit}" >/dev/null 2>&1; then
             RANGE="${PREV_TAG}..${GITHUB_SHA}"
             PREV_LABEL="$PREV_TAG"

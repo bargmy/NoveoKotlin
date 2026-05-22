@@ -30,6 +30,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -109,6 +110,11 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -2151,6 +2157,7 @@ private fun ChatPane(
                     onDownloadFile = onDownloadFile,
                     onCancelDownload = onCancelDownload,
                     onHandleClick = onHandleClick,
+                    onSendCommand = onSend,
                     onBotCallback = onBotCallback,
                     currentAudioMessageId = currentAudioMessageId,
                     isAudioPlaying = currentAudioMessageId == message.id && currentAudioPlaying,
@@ -2681,6 +2688,7 @@ private fun MessageRow(
     onDownloadFile: (ChatMessage) -> Unit,
     onCancelDownload: (ChatMessage) -> Unit,
     onHandleClick: (String) -> Unit,
+    onSendCommand: ((String) -> Unit)? = null,
     onBotCallback: (String, String, String) -> Unit,
     currentAudioMessageId: String?,
     isAudioPlaying: Boolean,
@@ -3083,6 +3091,7 @@ private fun MessageRow(
                                         text = caption,
                                         color = if (ownMessage) tgColors.outgoingText else tgColors.incomingText,
                                         onHandleClick = onHandleClick,
+                                        onSendCommand = onSendCommand,
                                         strings = strings
                                     )
                                 }
@@ -3229,60 +3238,273 @@ private fun showLessText(strings: NoveoStrings): String = when (strings.language
     else -> "Show less"
 }
 
-@Composable
-private fun MarkdownText(
-    text: String,
-    color: Color = MaterialTheme.colorScheme.onSurface,
-    onHandleClick: ((String) -> Unit)? = null,
-    strings: NoveoStrings? = null,
-    collapseLongText: Boolean = true
-) {
-    val handleColor = if (color == MaterialTheme.colorScheme.onSurface) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.95f)
-    val shouldCollapse = collapseLongText && text.length > LONG_MESSAGE_COLLAPSE_CHAR_LIMIT
-    var expanded by remember(text) { mutableStateOf(false) }
-    val visibleText = remember(text, shouldCollapse, expanded) {
-        if (shouldCollapse && !expanded) {
-            text.take(LONG_MESSAGE_COLLAPSE_CHAR_LIMIT).trimEnd() + "…"
+sealed class MessageChunk {
+    data class Text(val content: String) : MessageChunk()
+    data class CodeBlock(val language: String, val code: String) : MessageChunk()
+}
+
+private fun parseMessageChunks(text: String): List<MessageChunk> {
+    val chunks = mutableListOf<MessageChunk>()
+    var index = 0
+    while (index < text.length) {
+        val startCode = text.indexOf("```", index)
+        if (startCode == -1) {
+            chunks.add(MessageChunk.Text(text.substring(index)))
+            break
+        }
+        
+        if (startCode > index) {
+            chunks.add(MessageChunk.Text(text.substring(index, startCode)))
+        }
+        
+        val endCode = text.indexOf("```", startCode + 3)
+        if (endCode != -1) {
+            val block = text.substring(startCode + 3, endCode)
+            val firstNewLine = block.indexOf('\n')
+            val (lang, code) = if (firstNewLine != -1) {
+                val potentialLang = block.substring(0, firstNewLine).trim()
+                if (potentialLang.all { it.isLetterOrDigit() }) {
+                    potentialLang to block.substring(firstNewLine + 1)
+                } else {
+                    "" to block
+                }
+            } else {
+                "" to block
+            }
+            chunks.add(MessageChunk.CodeBlock(lang, code.trim('\n', '\r')))
+            index = endCode + 3
         } else {
-            text
+            chunks.add(MessageChunk.Text(text.substring(startCode)))
+            break
         }
     }
-    val maxLines = if (shouldCollapse && !expanded) LONG_MESSAGE_COLLAPSE_MAX_LINES else Int.MAX_VALUE
-    val hasClickableHandle = onHandleClick != null && visibleText.indexOf('@') >= 0
+    return chunks
+}
+
+private fun getUrlWarningTitle(lang: String): String = when (lang) {
+    "fa" -> "لینک خارجی"
+    "fr" -> "Lien externe"
+    "de" -> "Externer Link"
+    "ru" -> "Внешняя ссылка"
+    "zh" -> "外部链接"
+    "es" -> "Enlace externo"
+    "ar" -> "رابط خارجي"
+    "tr" -> "Dış Bağlantı"
+    else -> "External Link"
+}
+
+private fun getUrlWarningText(lang: String, url: String): String = when (lang) {
+    "fa" -> "این لینک به آدرس زیر می‌رود:\n$url\nآیا مطمئن هستید که می‌خواهید آن را باز کنید؟"
+    "fr" -> "Cette URL mène à :\n$url\nÊtes-vous sûr de vouloir l'ouvrir ?"
+    "de" -> "Diese URL führt zu:\n$url\nSind Sie sicher, dass Sie sie öffnen möchten?"
+    "ru" -> "Этот URL ведёт на:\n$url\nВы уверены, что хотите открыть его?"
+    "zh" -> "此 URL 指向：\n$url\n您确定要打开它吗？"
+    "es" -> "Este enlace lleva a:\n$url\n¿Está seguro de que desea abrirlo?"
+    "ar" -> "هذا الرابط يؤدي إلى:\n$url\nهل أنت متأكد أنك تريد فتحه؟"
+    "tr" -> "Bu bağlantı şuraya gidiyor:\n$url\nAçmak istediğinizden emin misiniz?"
+    else -> "This URL goes to:\n$url\nAre you sure you want to open it?"
+}
+
+private fun getYesText(lang: String): String = when (lang) {
+    "fa" -> "بله"
+    "fr" -> "Oui"
+    "de" -> "Ja"
+    "ru" -> "Да"
+    "zh" -> "确定"
+    "es" -> "Sí"
+    "ar" -> "نعم"
+    "tr" -> "Evet"
+    else -> "Yes"
+}
+
+@Composable
+private fun CodeBlockView(
+    code: String,
+    language: String,
+    strings: NoveoStrings?
+) {
+    val context = LocalContext.current
+    val isLong = remember(code) { code.lines().size > 6 || code.length > 250 }
+    var maximized by remember { mutableStateOf(!isLong) }
+    
+    val visibleCode = remember(code, maximized, isLong) {
+        if (isLong && !maximized) {
+            code.lines().take(6).joinToString("\n") + "\n..."
+        } else {
+            code
+        }
+    }
+
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1E1E1E)
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        border = BorderStroke(1.dp, Color(0xFF333333))
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF2D2D2D))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = language.ifBlank { "code" }.uppercase(),
+                    color = Color(0xFF888888),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("Copied Code", code)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.ContentCopy,
+                        contentDescription = "Copy",
+                        tint = Color(0xFF888888),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "Copy",
+                        color = Color(0xFF888888),
+                        fontSize = 11.sp
+                    )
+                }
+            }
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            ) {
+                Text(
+                    text = visibleCode,
+                    color = Color(0xFFD4D4D4),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                )
+            }
+            
+            if (isLong) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF252526))
+                        .clickable { maximized = !maximized }
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (maximized) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                            contentDescription = null,
+                            tint = Color(0xFF9CDCFE),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = if (maximized) {
+                                when (strings?.languageCode) {
+                                    "fa" -> "کوچک کردن"
+                                    "fr" -> "Réduire"
+                                    "de" -> "Minimieren"
+                                    "ru" -> "Свернуть"
+                                    "zh" -> "收起"
+                                    else -> "Minimize"
+                                }
+                            } else {
+                                when (strings?.languageCode) {
+                                    "fa" -> "بزرگ کردن"
+                                    "fr" -> "Agrandir"
+                                    "de" -> "Maximieren"
+                                    "ru" -> "Развернуть"
+                                    "zh" -> "展开"
+                                    else -> "Maximize"
+                                }
+                            },
+                            color = Color(0xFF9CDCFE),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarkdownTextChunk(
+    visibleText: String,
+    color: Color,
+    onHandleClick: ((String) -> Unit)?,
+    onSendCommand: ((String) -> Unit)?,
+    strings: NoveoStrings?,
+    maxLines: Int,
+    urlToConfirm: (String) -> Unit
+) {
+    val handleColor = if (color == MaterialTheme.colorScheme.onSurface) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.95f)
+    
+    val hasHandle = onHandleClick != null && visibleText.indexOf('@') >= 0
+    val hasCommand = onSendCommand != null && visibleText.indexOf('/') >= 0
+    val hasLink = visibleText.indexOf('[') >= 0 && visibleText.indexOf(']') >= 0 && visibleText.indexOf('(') >= 0 && visibleText.indexOf(')') >= 0
+    val hasClickableElement = hasHandle || hasCommand || hasLink
     val hasBoldMarkup = visibleText.indexOf("**") >= 0
 
-    Column {
-        if (!hasClickableHandle && !hasBoldMarkup) {
-            Text(
-                text = visibleText,
-                style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
-                maxLines = maxLines,
-                overflow = TextOverflow.Ellipsis
-            )
-        } else {
-            val annotated = remember(visibleText, handleColor, hasClickableHandle) {
-                buildAnnotatedString {
-                    var index = 0
-                    while (index < visibleText.length) {
-                        val nextMarker = visibleText.indexOf("**", index)
-                        val nextHandle = if (hasClickableHandle) visibleText.indexOf("@", index) else -1
+    if (!hasClickableElement && !hasBoldMarkup) {
+        Text(
+            text = visibleText,
+            style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis
+        )
+    } else {
+        val annotated = remember(visibleText, handleColor, hasHandle, hasCommand, hasLink) {
+            buildAnnotatedString {
+                var index = 0
+                while (index < visibleText.length) {
+                    val nextMarker = visibleText.indexOf("**", index)
+                    val nextHandle = if (hasHandle) visibleText.indexOf("@", index) else -1
+                    val nextSlash = if (hasCommand) visibleText.indexOf("/", index) else -1
+                    val nextLink = if (hasLink) visibleText.indexOf("[", index) else -1
 
-                        val markers = mutableListOf<Pair<Int, String>>()
-                        if (nextMarker != -1) markers.add(nextMarker to "**")
-                        if (nextHandle != -1) markers.add(nextHandle to "@")
+                    val markers = mutableListOf<Pair<Int, String>>()
+                    if (nextMarker != -1) markers.add(nextMarker to "**")
+                    if (nextHandle != -1) markers.add(nextHandle to "@")
+                    if (nextSlash != -1) markers.add(nextSlash to "/")
+                    if (nextLink != -1) markers.add(nextLink to "[")
 
-                        val nearest = markers.minByOrNull { it.first }
+                    val nearest = markers.minByOrNull { it.first }
 
-                        if (nearest == null) {
-                            append(visibleText.substring(index))
-                            break
-                        }
+                    if (nearest == null) {
+                        append(visibleText.substring(index))
+                        break
+                    }
 
-                        if (nearest.first > index) {
-                            append(visibleText.substring(index, nearest.first))
-                        }
+                    if (nearest.first > index) {
+                        append(visibleText.substring(index, nearest.first))
+                    }
 
-                        if (nearest.second == "**") {
+                    when (nearest.second) {
+                        "**" -> {
                             val endBold = visibleText.indexOf("**", nearest.first + 2)
                             if (endBold != -1) {
                                 withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
@@ -3293,7 +3515,8 @@ private fun MarkdownText(
                                 append("**")
                                 index = nearest.first + 2
                             }
-                        } else if (nearest.second == "@") {
+                        }
+                        "@" -> {
                             var endHandle = nearest.first + 1
                             while (endHandle < visibleText.length && (visibleText[endHandle].isLetterOrDigit() || visibleText[endHandle] == '_')) {
                                 endHandle++
@@ -3311,48 +3534,157 @@ private fun MarkdownText(
                                 index = nearest.first + 1
                             }
                         }
+                        "/" -> {
+                            val isPrecededByWhitespace = nearest.first == 0 || visibleText[nearest.first - 1].isWhitespace()
+                            var endCommand = nearest.first + 1
+                            while (endCommand < visibleText.length && (visibleText[endCommand].isLetterOrDigit() || visibleText[endCommand] == '_')) {
+                                endCommand++
+                            }
+                            if (isPrecededByWhitespace && endCommand > nearest.first + 1) {
+                                val command = visibleText.substring(nearest.first, endCommand)
+                                pushStringAnnotation("command", command)
+                                withStyle(SpanStyle(color = handleColor, fontWeight = FontWeight.SemiBold)) {
+                                    append(command)
+                                }
+                                pop()
+                                index = endCommand
+                            } else {
+                                append("/")
+                                index = nearest.first + 1
+                            }
+                        }
+                        "[" -> {
+                            val endTitle = visibleText.indexOf("](", nearest.first + 1)
+                            if (endTitle != -1) {
+                                val endUrl = visibleText.indexOf(")", endTitle + 2)
+                                if (endUrl != -1) {
+                                    val title = visibleText.substring(nearest.first + 1, endTitle)
+                                    val url = visibleText.substring(endTitle + 2, endUrl)
+                                    
+                                    pushStringAnnotation("link", url)
+                                    withStyle(SpanStyle(color = handleColor, fontWeight = FontWeight.SemiBold, textDecoration = TextDecoration.Underline)) {
+                                        append(title)
+                                    }
+                                    pop()
+                                    index = endUrl + 1
+                                } else {
+                                    append("[")
+                                    index = nearest.first + 1
+                                }
+                            } else {
+                                append("[")
+                                index = nearest.first + 1
+                            }
+                        }
                     }
                 }
             }
+        }
 
-            if (hasClickableHandle && onHandleClick != null) {
-                val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
-                Text(
-                    text = annotated,
-                    style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
-                    maxLines = maxLines,
-                    overflow = TextOverflow.Ellipsis,
-                    onTextLayout = { layoutResult.value = it },
-                    modifier = Modifier.pointerInput(annotated, onHandleClick) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val change = event.changes.firstOrNull() ?: continue
-                                if (event.type == PointerEventType.Press) {
-                                    val layout = layoutResult.value ?: continue
-                                    val position = layout.getOffsetForPosition(change.position)
-                                    val annotation = annotated.getStringAnnotations("handle", position, position).firstOrNull()
+        if (hasClickableElement) {
+            val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
+            Text(
+                text = annotated,
+                style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
+                maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { layoutResult.value = it },
+                modifier = Modifier.pointerInput(annotated, onHandleClick, onSendCommand, urlToConfirm) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull() ?: continue
+                            if (event.type == PointerEventType.Press) {
+                                val layout = layoutResult.value ?: continue
+                                val position = layout.getOffsetForPosition(change.position)
+                                val handleAnnotation = annotated.getStringAnnotations("handle", position, position).firstOrNull()
+                                val commandAnnotation = annotated.getStringAnnotations("command", position, position).firstOrNull()
+                                val linkAnnotation = annotated.getStringAnnotations("link", position, position).firstOrNull()
 
-                                    if (annotation != null) {
-                                        change.consume()
-                                        val up = waitForUpOrCancellation()
-                                        if (up != null) {
-                                            up.consume()
-                                            onHandleClick(annotation.item)
-                                        }
+                                if (handleAnnotation != null) {
+                                    change.consume()
+                                    val up = waitForUpOrCancellation()
+                                    if (up != null) {
+                                        up.consume()
+                                        onHandleClick?.invoke(handleAnnotation.item)
+                                    }
+                                } else if (commandAnnotation != null) {
+                                    change.consume()
+                                    val up = waitForUpOrCancellation()
+                                    if (up != null) {
+                                        up.consume()
+                                        onSendCommand?.invoke(commandAnnotation.item)
+                                    }
+                                } else if (linkAnnotation != null) {
+                                    change.consume()
+                                    val up = waitForUpOrCancellation()
+                                    if (up != null) {
+                                        up.consume()
+                                        urlToConfirm(linkAnnotation.item)
                                     }
                                 }
                             }
                         }
                     }
-                )
-            } else {
-                Text(
-                    text = annotated,
-                    style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
-                    maxLines = maxLines,
-                    overflow = TextOverflow.Ellipsis
-                )
+                }
+            )
+        } else {
+            Text(
+                text = annotated,
+                style = TextStyle(color = color, fontSize = 16.sp, lineHeight = 20.sp),
+                maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun MarkdownText(
+    text: String,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    onHandleClick: ((String) -> Unit)? = null,
+    onSendCommand: ((String) -> Unit)? = null,
+    strings: NoveoStrings? = null,
+    collapseLongText: Boolean = true
+) {
+    val context = LocalContext.current
+    val handleColor = if (color == MaterialTheme.colorScheme.onSurface) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.95f)
+    val shouldCollapse = collapseLongText && text.length > LONG_MESSAGE_COLLAPSE_CHAR_LIMIT
+    var expanded by remember(text) { mutableStateOf(false) }
+    val visibleText = remember(text, shouldCollapse, expanded) {
+        if (shouldCollapse && !expanded) {
+            text.take(LONG_MESSAGE_COLLAPSE_CHAR_LIMIT).trimEnd() + "…"
+        } else {
+            text
+        }
+    }
+    val maxLines = if (shouldCollapse && !expanded) LONG_MESSAGE_COLLAPSE_MAX_LINES else Int.MAX_VALUE
+    
+    val chunks = remember(visibleText) { parseMessageChunks(visibleText) }
+    var urlToConfirm by remember { mutableStateOf<String?>(null) }
+
+    Column {
+        chunks.forEach { chunk ->
+            when (chunk) {
+                is MessageChunk.Text -> {
+                    MarkdownTextChunk(
+                        visibleText = chunk.content,
+                        color = color,
+                        onHandleClick = onHandleClick,
+                        onSendCommand = onSendCommand,
+                        strings = strings,
+                        maxLines = maxLines,
+                        urlToConfirm = { urlToConfirm = it }
+                    )
+                }
+                is MessageChunk.CodeBlock -> {
+                    CodeBlockView(
+                        code = chunk.code,
+                        language = chunk.language,
+                        strings = strings
+                    )
+                }
             }
         }
 
@@ -3370,6 +3702,41 @@ private fun MarkdownText(
                     .clickable { expanded = !expanded }
             )
         }
+    }
+
+    if (urlToConfirm != null) {
+        val url = urlToConfirm!!
+        val lang = strings?.languageCode ?: "en"
+        AlertDialog(
+            onDismissRequest = { urlToConfirm = null },
+            title = { Text(getUrlWarningTitle(lang)) },
+            text = { Text(getUrlWarningText(lang, url)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        try {
+                            val targetUrl = if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+                                "https://$url"
+                            } else {
+                                url
+                            }
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(targetUrl))
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Could not open URL", Toast.LENGTH_SHORT).show()
+                        }
+                        urlToConfirm = null
+                    }
+                ) {
+                    Text(getYesText(lang))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { urlToConfirm = null }) {
+                    Text(strings?.cancel ?: "Cancel")
+                }
+            }
+        )
     }
 }
 
