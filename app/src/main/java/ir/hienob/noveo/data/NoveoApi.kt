@@ -452,6 +452,25 @@ class NoveoApi(
         }
     }
 
+    fun getUserProfile(session: Session, userId: String): UserSummary {
+        val url = "https://noveo.ir:8443/user/profile".toHttpUrl().newBuilder()
+            .addQueryParameter("userId", userId)
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
+            .get()
+            .build()
+        return client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Failed to load user profile (${response.code})")
+            val json = JSONObject(response.body?.string().orEmpty())
+            val profileJson = json.optJSONObject("profile") ?: error("Profile object not found in payload")
+            parseUser(profileJson, emptySet())
+        }
+    }
+
     fun getVoiceToken(session: Session, chatId: String, callId: String? = null): JSONObject {
         val url = "https://noveo.ir:8443/voice/token".toHttpUrl()
         val body = JSONObject()

@@ -501,6 +501,7 @@ internal fun HomeScreen(
     onAttachFile: (android.net.Uri) -> Unit,
     onRemoveAttachment: () -> Unit,
     onUpdateProfile: (String, String) -> Unit,
+    onFetchUserProfile: (String) -> Unit,
     onLoadOlder: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
     onEditMessage: (ChatMessage?) -> Unit,
@@ -568,6 +569,10 @@ internal fun HomeScreen(
     val onOpenProfile = { userId: String ->
         profileUserId = userId
         animateModalEntrance = true
+    }
+
+    LaunchedEffect(profileUserId) {
+        profileUserId?.let { onFetchUserProfile(it) }
     }
 
     val keyboardHeight = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
@@ -4775,113 +4780,109 @@ private fun ProfileModal(
                 contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
-                    // Tab Row
-                    TabRow(
-                        selectedTabIndex = selectedTab,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        tabs.forEachIndexed { index, title ->
-                            Tab(
-                                selected = selectedTab == index,
-                                onClick = { selectedTab = index },
-                                text = { Text(title, style = MaterialTheme.typography.labelLarge) }
-                            )
-                        }
-                    }
-                }
-
-                if (selectedTab == 0) {
-                    // ── Information Tab ──────────────────────────────────────
-                    item {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Tab Row
+                        TabRow(
+                            selectedTabIndex = selectedTab,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    InfoItem(label = strings.displayName, value = user.username)
-                                    if (!user.handle.isNullOrBlank()) {
-                                        InfoItem(label = strings.handle, value = user.handle, onClick = {
-                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(user.handle))
-                                        })
-                                    }
-                                    if (user.bio.isNotBlank()) {
-                                        InfoItem(label = strings.about, value = user.bio)
-                                    }
-                                    val joinedDateText = remember(user.joinedAt) {
-                                        val joinedAt = user.joinedAt
-                                        if (joinedAt != null && joinedAt > 0) {
-                                            val date = Date(joinedAt * 1000L)
-                                            SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(date)
-                                        } else {
-                                            "April 2026"
-                                        }
-                                    }
-                                    InfoItem(label = strings.joinDate, value = joinedDateText)
-                                }
-                            }
-
-                            Button(
-                                onClick = onMessage,
-                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(strings.sendMessage)
-                            }
-
-                            Spacer(Modifier.height(300.dp))
-                        }
-                    }
-                } else {
-                    // ── Gifts Tab ────────────────────────────────────────────
-                    if (user.gifts.isEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 64.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Star,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(48.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                                    )
-                                    Text(
-                                        strings.noGifts,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                    )
-                                }
+                            tabs.forEachIndexed { index, title ->
+                                Tab(
+                                    selected = selectedTab == index,
+                                    onClick = { selectedTab = index },
+                                    text = { Text(title, style = MaterialTheme.typography.labelLarge) }
+                                )
                             }
                         }
-                    } else {
-                        // Grid: 3 columns
-                        item {
-                            val columns = 3
-                            val rows = (user.gifts.size + columns - 1) / columns
+
+                        if (selectedTab == 0) {
+                            // ── Information Tab ──────────────────────────────────────
                             Column(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                for (row in 0 until rows) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        for (col in 0 until columns) {
-                                            val index = row * columns + col
-                                            if (index < user.gifts.size) {
-                                                val gift = user.gifts[index]
-                                                GiftCard(gift = gift, modifier = Modifier.weight(1f))
+                                Card(
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                        InfoItem(label = strings.displayName, value = user.username)
+                                        if (!user.handle.isNullOrBlank()) {
+                                            InfoItem(label = strings.handle, value = user.handle, onClick = {
+                                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(user.handle))
+                                            })
+                                        }
+                                        if (user.bio.isNotBlank()) {
+                                            InfoItem(label = strings.about, value = user.bio)
+                                        }
+                                        val joinedDateText = remember(user.joinedAt) {
+                                            val joinedAt = user.joinedAt
+                                            if (joinedAt != null && joinedAt > 0) {
+                                                val date = Date(joinedAt * 1000L)
+                                                SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(date)
                                             } else {
-                                                Spacer(modifier = Modifier.weight(1f))
+                                                "April 2026"
+                                            }
+                                        }
+                                        InfoItem(label = strings.joinDate, value = joinedDateText)
+                                    }
+                                }
+
+                                Button(
+                                    onClick = onMessage,
+                                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(strings.sendMessage)
+                                }
+
+                                Spacer(Modifier.height(300.dp))
+                            }
+                        } else {
+                            // ── Gifts Tab ────────────────────────────────────────────
+                            if (user.gifts.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 64.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Star,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(48.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                        )
+                                        Text(
+                                            strings.noGifts,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                            } else {
+                                // Grid: 3 columns
+                                val columns = 3
+                                val rows = (user.gifts.size + columns - 1) / columns
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    for (row in 0 until rows) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            for (col in 0 until columns) {
+                                                val index = row * columns + col
+                                                if (index < user.gifts.size) {
+                                                    val gift = user.gifts[index]
+                                                    GiftCard(gift = gift, modifier = Modifier.weight(1f))
+                                                } else {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
                                             }
                                         }
                                     }

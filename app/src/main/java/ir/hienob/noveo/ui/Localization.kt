@@ -349,6 +349,9 @@ private val translations = mapOf(
         addAsSticker = "Als Sticker hinzufügen",
         edited = "bearbeitet",
         seenBy = "Gesehen von",
+        information = "Information",
+        gifts = "Geschenke",
+        noGifts = "Noch keine Geschenke",
         onboardingPages = listOf(
             "Chatten Sie mit Ihren Kontakten an einem Ort.",
             "Springen Sie mit der Noveo-Mobilschale schnell in Gespräche.",
@@ -504,6 +507,9 @@ private val translations = mapOf(
         addAsSticker = "Добавить как стикер",
         edited = "изменено",
         seenBy = "Просмотрено",
+        information = "Информация",
+        gifts = "Подарки",
+        noGifts = "Подарков пока нет",
         onboardingPages = listOf(
             "Общайтесь со всеми контактами в одном месте.",
             "Быстро переходите к разговорам с мобильной оболочкой Новео.",
@@ -832,7 +838,7 @@ private val translations = mapOf(
         activeCall = "تماس فعال",
         information = "اطلاعات",
         gifts = "هدایا",
-        noGifts = "هنوز هدیه‌ای ندارید",
+        noGifts = "هنوز هدیه‌ای ندارد",
         accept = "قبول",
         decline = "رد کردن",
         micOn = "میکروفون روشن",

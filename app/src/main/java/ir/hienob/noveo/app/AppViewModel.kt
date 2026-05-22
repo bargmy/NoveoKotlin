@@ -2091,6 +2091,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // Optimistic update or wait for sync? The server should broadcast a user update.
     }
 
+    fun fetchUserProfile(userId: String) {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            runCatching {
+                val userProfile = withContext(Dispatchers.IO) { api.getUserProfile(session, userId) }
+                _uiState.value = _uiState.value.copy(
+                    usersById = _uiState.value.usersById + (userId to userProfile)
+                )
+            }.onFailure {
+                it.printStackTrace()
+            }
+        }
+    }
+
     fun changePassword(old: String, new: String) {
         val payload = org.json.JSONObject()
             .put("type", "change_password")

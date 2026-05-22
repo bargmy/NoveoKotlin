@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
                 onCaptchaTokenReceived = viewModel::onCaptchaTokenReceived,
                 onCaptchaDismiss = viewModel::dismissCaptcha,
                 onUpdateProfile = { u, b -> viewModel.updateProfile(u, b) },
+                onFetchUserProfile = viewModel::fetchUserProfile,
                 onLoadOlder = viewModel::loadOlderMessages,
                 onReply = viewModel::setReplyingTo,
                 onEditMessage = viewModel::setEditingMessage,
