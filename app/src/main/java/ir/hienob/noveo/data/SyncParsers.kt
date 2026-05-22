@@ -23,7 +23,8 @@ fun parseUser(item: JSONObject, onlineIds: Set<String> = emptySet()): UserSummar
         starsBalance = item.optDouble("starsBalance", 0.0),
         languageCode = item.optString("languageCode").sanitizeServerString().ifBlank { "en" },
         lastSeen = item.optLong("lastSeen", item.optLong("last_seen", 0L)).takeIf { it > 0 },
-        joinedAt = item.optLong("joinedAt", item.optLong("createdAt", 0L)).takeIf { it > 0 }
+        joinedAt = item.optLong("joinedAt", item.optLong("createdAt", 0L)).takeIf { it > 0 },
+        membershipTier = item.optString("membershipTier").sanitizeServerString().ifBlank { item.optString("membership_tier").sanitizeServerString() }
     )
 }
 
@@ -46,12 +47,26 @@ internal fun parseUsers(payload: JSONObject): Pair<Map<String, UserSummary>, Set
 
 private fun parseProfileSkin(json: JSONObject?): ProfileSkin? {
     if (json == null) return null
+    val colorsArray = json.optJSONArray("colors")
+    val colorsList = if (colorsArray != null) {
+        val list = mutableListOf<String>()
+        for (i in 0 until colorsArray.length()) {
+            val c = colorsArray.optString(i).sanitizeServerString()
+            if (c.isNotBlank()) list.add(c)
+        }
+        list
+    } else {
+        emptyList()
+    }
     return ProfileSkin(
         mode = json.optString("mode").sanitizeServerString(),
         primaryColor = json.optString("primaryColor").sanitizeServerString(),
         secondaryColor = json.optString("secondaryColor").sanitizeServerString(),
         tertiaryColor = json.optString("tertiaryColor").sanitizeServerString(),
-        gradientStops = json.optInt("gradientStops", 2)
+        gradientStops = json.optInt("gradientStops", 2),
+        colors = colorsList,
+        angle = json.optInt("angle", 135),
+        color = json.optString("color").sanitizeServerString()
     )
 }
 

@@ -12,7 +12,10 @@ data class ProfileSkin(
     val primaryColor: String = "",
     val secondaryColor: String = "",
     val tertiaryColor: String = "",
-    val gradientStops: Int = 2
+    val gradientStops: Int = 2,
+    val colors: List<String> = emptyList(),
+    val angle: Int = 135,
+    val color: String = ""
 )
 
 data class Transaction(
@@ -43,7 +46,8 @@ data class UserSummary(
     val starsBalance: Double = 0.0,
     val languageCode: String = "en",
     val lastSeen: Long? = null,
-    val joinedAt: Long? = null
+    val joinedAt: Long? = null,
+    val membershipTier: String = ""
 )
 
 data class MessageFileAttachment(

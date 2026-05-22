@@ -199,7 +199,9 @@ private fun UserSummary.toJson(): JSONObject = JSONObject()
     .put("starsBalance", starsBalance)
     .put("languageCode", languageCode)
     .put("lastSeen", lastSeen)
+    .put("joinedAt", joinedAt)
     .put("profileSkin", profileSkin?.toJson())
+    .put("membershipTier", membershipTier)
 
 private fun ProfileSkin.toJson(): JSONObject = JSONObject()
     .put("mode", mode)
@@ -207,6 +209,9 @@ private fun ProfileSkin.toJson(): JSONObject = JSONObject()
     .put("secondaryColor", secondaryColor)
     .put("tertiaryColor", tertiaryColor)
     .put("gradientStops", gradientStops)
+    .put("colors", JSONArray().apply { colors.forEach(::put) })
+    .put("angle", angle)
+    .put("color", color)
 
 private fun ChatSummary.toJson(): JSONObject = JSONObject()
     .put("id", id)
@@ -265,16 +270,34 @@ private fun JSONObject.toUserSummary(): UserSummary = UserSummary(
     profileSkin = optJSONObject("profileSkin")?.toProfileSkin(),
     starsBalance = optDouble("starsBalance", 0.0),
     languageCode = optString("languageCode", "en"),
-    lastSeen = optLong("lastSeen").takeIf { it > 0L }
+    lastSeen = optLong("lastSeen").takeIf { it > 0L },
+    joinedAt = optLong("joinedAt").takeIf { it > 0L },
+    membershipTier = optString("membershipTier", "")
 )
 
-private fun JSONObject.toProfileSkin(): ProfileSkin = ProfileSkin(
-    mode = optString("mode"),
-    primaryColor = optString("primaryColor"),
-    secondaryColor = optString("secondaryColor"),
-    tertiaryColor = optString("tertiaryColor"),
-    gradientStops = optInt("gradientStops", 2)
-)
+private fun JSONObject.toProfileSkin(): ProfileSkin {
+    val colorsArray = optJSONArray("colors")
+    val colorsList = if (colorsArray != null) {
+        val list = mutableListOf<String>()
+        for (i in 0 until colorsArray.length()) {
+            val c = colorsArray.optString(i)
+            if (c.isNotBlank()) list.add(c)
+        }
+        list
+    } else {
+        emptyList()
+    }
+    return ProfileSkin(
+        mode = optString("mode"),
+        primaryColor = optString("primaryColor"),
+        secondaryColor = optString("secondaryColor"),
+        tertiaryColor = optString("tertiaryColor"),
+        gradientStops = optInt("gradientStops", 2),
+        colors = colorsList,
+        angle = optInt("angle", 135),
+        color = optString("color")
+    )
+}
 
 private fun JSONObject.toChatSummary(): ChatSummary = ChatSummary(
     id = optString("id"),

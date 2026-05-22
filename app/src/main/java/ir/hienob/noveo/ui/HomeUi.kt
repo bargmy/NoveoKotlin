@@ -232,6 +232,9 @@ import ir.hienob.noveo.data.SavedSticker
 import ir.hienob.noveo.data.Session
 import ir.hienob.noveo.data.SocketEvent
 import ir.hienob.noveo.data.UserSummary
+import ir.hienob.noveo.data.ProfileSkin
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.material3.LocalContentColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
@@ -4741,17 +4744,28 @@ private fun ProfileModal(
             
             // Collapsing Header
             val currentHeaderHeight = lerpDp(expandedHeight, collapsedHeight, fraction)
+            val hasPremiumSkin = user.membershipTier.lowercase(Locale.ROOT) == "premium" && user.profileSkin != null
+            val fallbackHeaderBg = MaterialTheme.colorScheme.surface
             Surface(
-                modifier = Modifier.fillMaxWidth().height(currentHeaderHeight),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = lerpDp(0.dp, 4.dp, fraction)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(currentHeaderHeight)
+                    .profileGradientBackground(
+                        profileSkin = user.profileSkin,
+                        membershipTier = user.membershipTier,
+                        fallbackColor = fallbackHeaderBg
+                    ),
+                color = Color.Transparent,
+                shadowElevation = lerpDp(0.dp, 4.dp, fraction),
+                contentColor = if (hasPremiumSkin) Color.White else MaterialTheme.colorScheme.onSurface
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     // Back Button
                     HeaderIconButton(
                         icon = Icons.AutoMirrored.Outlined.ArrowBack,
                         onClick = onClose,
-                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
+                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+                        tint = LocalContentColor.current
                     )
                     
                     val avatarSize = lerpDp(120.dp, 38.dp, fraction)
@@ -4804,7 +4818,11 @@ private fun ProfileModal(
                             Text(
                                 lastSeenText, 
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (user.isOnline) {
+                                    if (hasPremiumSkin) Color(0xFF81D4FA) else MaterialTheme.colorScheme.primary
+                                } else {
+                                    LocalContentColor.current.copy(alpha = 0.7f)
+                                }
                             )
                         }
                     }
@@ -4838,7 +4856,11 @@ private fun ProfileModal(
                             Text(
                                 lastSeenText,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (user.isOnline) {
+                                    if (hasPremiumSkin) Color(0xFF81D4FA) else MaterialTheme.colorScheme.primary
+                                } else {
+                                    LocalContentColor.current.copy(alpha = 0.7f)
+                                },
                                 fontSize = 13.sp
                             )
                         }
@@ -4856,6 +4878,99 @@ private fun InfoItem(label: String, value: String, onClick: (() -> Unit)? = null
     ) {
         Text(value, style = MaterialTheme.typography.bodyLarge)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+private fun Modifier.profileGradientBackground(
+    profileSkin: ProfileSkin?,
+    membershipTier: String,
+    fallbackColor: Color
+): Modifier = this.drawBehind {
+    val skin = profileSkin
+    val isPremium = membershipTier.lowercase(Locale.ROOT) == "premium"
+    if (isPremium && skin != null) {
+        val mode = skin.mode.lowercase(Locale.ROOT).trim()
+        if (mode == "solid") {
+            val solidHex = skin.color.ifBlank { skin.primaryColor }
+            if (solidHex.isNotBlank()) {
+                val parsedColor = runCatching {
+                    val formatted = if (solidHex.startsWith("#")) solidHex else "#$solidHex"
+                    Color(android.graphics.Color.parseColor(formatted))
+                }.getOrDefault(fallbackColor)
+                drawRect(color = parsedColor)
+            } else {
+                drawRect(color = fallbackColor)
+            }
+        } else if (mode == "gradient") {
+            val colorsList = skin.colors.map { hex ->
+                runCatching {
+                    val formatted = if (hex.startsWith("#")) hex else "#$hex"
+                    Color(android.graphics.Color.parseColor(formatted))
+                }.getOrDefault(fallbackColor)
+            }.filter { it != Color.Unspecified }
+
+            if (colorsList.size >= 2) {
+                val w = size.width
+                val h = size.height
+                val angleRad = Math.toRadians(skin.angle.toDouble())
+                val dx = Math.sin(angleRad)
+                val dy = -Math.cos(angleRad)
+                val len = Math.abs(w * dx) + Math.abs(h * dy)
+                
+                val startX = (w / 2f) - (dx * len / 2f).toFloat()
+                val startY = (h / 2f) - (dy * len / 2f).toFloat()
+                val endX = (w / 2f) + (dx * len / 2f).toFloat()
+                val endY = (h / 2f) + (dy * len / 2f).toFloat()
+                
+                val brush = Brush.linearGradient(
+                    colors = colorsList,
+                    start = Offset(startX, startY),
+                    end = Offset(endX, endY)
+                )
+                drawRect(brush = brush)
+            } else if (colorsList.size == 1) {
+                drawRect(color = colorsList[0])
+            } else {
+                val legacyColors = listOfNotNull(
+                    skin.primaryColor.takeIf { it.isNotBlank() },
+                    skin.secondaryColor.takeIf { it.isNotBlank() },
+                    skin.tertiaryColor.takeIf { it.isNotBlank() }
+                ).map { hex ->
+                    runCatching {
+                        val formatted = if (hex.startsWith("#")) hex else "#$hex"
+                        Color(android.graphics.Color.parseColor(formatted))
+                    }.getOrDefault(fallbackColor)
+                }
+                if (legacyColors.size >= 2) {
+                    val w = size.width
+                    val h = size.height
+                    val angleRad = Math.toRadians(skin.angle.toDouble())
+                    val dx = Math.sin(angleRad)
+                    val dy = -Math.cos(angleRad)
+                    val len = Math.abs(w * dx) + Math.abs(h * dy)
+                    
+                    val startX = (w / 2f) - (dx * len / 2f).toFloat()
+                    val startY = (h / 2f) - (dy * len / 2f).toFloat()
+                    val endX = (w / 2f) + (dx * len / 2f).toFloat()
+                    val endY = (h / 2f) + (dy * len / 2f).toFloat()
+                    
+                    val brush = Brush.linearGradient(
+                        colors = legacyColors,
+                        start = Offset(startX, startY),
+                        end = Offset(endX, endY)
+                    )
+                    drawRect(brush = brush)
+                } else if (legacyColors.size == 1) {
+                    drawRect(color = legacyColors[0])
+                } else {
+                    drawRect(color = fallbackColor)
+                }
+            }
+        } else {
+            drawRect(color = fallbackColor)
+        }
+    } else {
+        drawRect(color = fallbackColor)
     }
 }
 
