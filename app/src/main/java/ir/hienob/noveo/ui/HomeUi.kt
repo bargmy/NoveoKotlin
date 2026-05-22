@@ -5055,11 +5055,21 @@ private fun GiftCard(gift: UserGift, modifier: Modifier = Modifier) {
                 ) {
                     if (gift.imageUrl.isNotBlank()) {
                         val normalizedUrl = remember(gift.imageUrl) { gift.imageUrl.normalizeNoveoUrl() }
-                        AsyncImage(
-                            model = normalizedUrl,
-                            contentDescription = gift.name,
-                            modifier = Modifier.fillMaxSize().padding(6.dp)
-                        )
+                        val isTgs = remember(gift.imageUrl) {
+                            gift.imageUrl.lowercase(Locale.ROOT).contains(".tgs")
+                        }
+                        if (isTgs) {
+                            TgsSticker(
+                                url = normalizedUrl,
+                                modifier = Modifier.fillMaxSize().padding(6.dp)
+                            )
+                        } else {
+                            AsyncImage(
+                                model = normalizedUrl,
+                                contentDescription = gift.name,
+                                modifier = Modifier.fillMaxSize().padding(6.dp)
+                            )
+                        }
                     } else {
                         Icon(
                             imageVector = Icons.Outlined.Star,
@@ -5672,8 +5682,7 @@ private fun ModalHost(visible: Boolean, onDismiss: () -> Unit, fullscreen: Boole
             contentAlignment = Alignment.Center
         ) {
             Box(
-                modifier = if (fullscreen) Modifier.fillMaxSize() else Modifier
-                    .padding(18.dp)
+                modifier = (if (fullscreen) Modifier.fillMaxSize() else Modifier.padding(18.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
