@@ -52,23 +52,46 @@ class NoveoApi(
     )
 
     fun createChat(session: Session, name: String, type: String, handle: String? = null, bio: String? = null, captchaToken: String? = null) {
-        val url = "https://noveo.ir:8443/chat/create".toHttpUrl()
-        val body = JSONObject()
-            .put("title", name)
-            .put("chatType", type)
-            .put("handle", handle)
-            .put("bio", bio)
-            .apply { if (captchaToken != null) put("captchaToken", captchaToken) }
-            .toString()
-        val request = Request.Builder()
-            .url(url)
-            .header("X-User-ID", session.userId)
-            .header("X-Auth-Token", session.token)
-            .noveoClientHeaders()
-            .post(body.toRequestBody("application/json".toMediaType()))
-            .build()
+        val baseUrl = "https://noveo.ir:8443"
+        val request = if (type == "channel") {
+            val multipartBuilder = okhttp3.MultipartBody.Builder()
+                .setType(okhttp3.MultipartBody.FORM)
+                .addFormDataPart("name", name)
+            if (handle != null) {
+                multipartBuilder.addFormDataPart("handle", handle)
+            }
+            if (captchaToken != null) {
+                multipartBuilder.addFormDataPart("captchaToken", captchaToken)
+            }
+            Request.Builder()
+                .url("$baseUrl/create_channel")
+                .header("X-User-ID", session.userId)
+                .header("X-Auth-Token", session.token)
+                .noveoClientHeaders()
+                .post(multipartBuilder.build())
+                .build()
+        } else {
+            val body = JSONObject()
+                .put("name", name)
+                .put("handle", handle)
+                .apply { if (captchaToken != null) put("captchaToken", captchaToken) }
+                .toString()
+            Request.Builder()
+                .url("$baseUrl/create_group")
+                .header("X-User-ID", session.userId)
+                .header("X-Auth-Token", session.token)
+                .noveoClientHeaders()
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+        }
+        
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("Chat creation failed (${response.code})")
+            if (!response.isSuccessful) {
+                val errorMsg = response.body?.string()?.let {
+                    runCatching { JSONObject(it).getString("error") }.getOrNull()
+                } ?: "Chat creation failed (${response.code})"
+                error(errorMsg)
+            }
         }
     }
 

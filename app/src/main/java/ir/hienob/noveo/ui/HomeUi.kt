@@ -4236,37 +4236,246 @@ private fun CreateChannelModal(
     var bio by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("group") }
 
-    Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            ModalHeader(title = strings.newChat, onClose = onClose)
-            Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(strings.newChat) }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = handle, onValueChange = { handle = it }, label = { Text(strings.handleOptional) }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = bio, onValueChange = { bio = it }, label = { Text(strings.bioOptional) }, modifier = Modifier.fillMaxWidth())
-                
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { type = "group" },
-                        modifier = Modifier.weight(1f),
-                        border = if (type == "group") BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else ButtonDefaults.outlinedButtonBorder
-                    ) { Text(strings.group) }
-                    OutlinedButton(
-                        onClick = { type = "channel" },
-                        modifier = Modifier.weight(1f),
-                        border = if (type == "channel") BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else ButtonDefaults.outlinedButtonBorder
-                    ) { Text(strings.channel) }
+    val isFa = strings.languageCode == "fa"
+
+    val nameLabel = if (isFa) {
+        if (type == "group") "نام گروه" else "نام کانال"
+    } else {
+        if (type == "group") "Group Name" else "Channel Name"
+    }
+
+    val handleLabel = if (isFa) {
+        if (type == "channel") "نام کاربری (الزامی)" else "نام کاربری (اختیاری)"
+    } else {
+        if (type == "channel") "Username / Handle (Required)" else "Username / Handle (Optional)"
+    }
+
+    val handleHint = if (isFa) {
+        "نام کاربری یکتایی برای لینک عمومی (مثلا my_chat)"
+    } else {
+        "A unique handle for your public link (e.g., my_chat)"
+    }
+
+    val handleRequiredError = if (isFa) {
+        "نام کاربری برای ساخت کانال الزامی است"
+    } else {
+        "Handle is required for channels"
+    }
+
+    val handleFormatError = if (isFa) {
+        "باید ۳ تا ۳۲ کاراکتر انگلیسی، اعداد یا خط تیره (_) باشد"
+    } else {
+        "Must be 3-32 characters: English letters, numbers, or underscores"
+    }
+
+    val bioLabel = if (isFa) "توضیحات (اختیاری)" else strings.bioOptional
+
+    // Validation
+    val isHandleFormatValid = handle.isEmpty() || handle.matches(Regex("^[a-zA-Z0-9_]{3,32}$"))
+    val isNameValid = name.isNotBlank() && name.length <= 80
+    val isHandleProvided = type == "group" || handle.isNotBlank()
+    val isFormValid = isNameValid && isHandleProvided && isHandleFormatValid
+
+    Surface(
+        shape = RoundedCornerShape(28.dp),
+        tonalElevation = 6.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(28.dp))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        )
+                    )
+                )
+        ) {
+            // Modal Header
+            ModalHeader(
+                title = if (isFa) {
+                    if (type == "group") "ایجاد گروه جدید" else "ایجاد کانال جدید"
+                } else {
+                    if (type == "group") "Create New Group" else "Create New Channel"
+                },
+                onClose = onClose
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Interactive Type Switcher (Pill Layout)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    listOf("group", "channel").forEach { t ->
+                        val isSelected = type == t
+                        val typeText = if (t == "group") strings.group else strings.channel
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(
+                                    if (isSelected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        Color.Transparent
+                                    }
+                                )
+                                .clickable { type = t }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = typeText,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
-                
+
+                // Description subtitle depending on selected type
+                val switcherDescription = if (isFa) {
+                    if (type == "group") "گروه‌ها برای گفتگوی گروهی با دوستان و اعضا عالی هستند." else "کانال‌ها برای انتشار یک‌طرفه مطالب به مخاطبان نامحدود می‌باشند."
+                } else {
+                    if (type == "group") "Groups are ideal for multi-party chat and collaboration." else "Channels are built for broadcasting messages to unlimited audiences."
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = switcherDescription,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Group / Channel Name Field
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { if (it.length <= 100) name = it },
+                    label = { Text(nameLabel) },
+                    singleLine = true,
+                    supportingText = {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            Text(
+                                text = "${name.length}/80",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (name.length > 80) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                    },
+                    isError = name.length > 80,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Handle (Public Link) Field
+                val hasHandleError = !isHandleFormatValid || (type == "channel" && handle.isBlank())
+                val handleErrText = when {
+                    !isHandleFormatValid -> handleFormatError
+                    type == "channel" && handle.isBlank() -> handleRequiredError
+                    else -> null
+                }
+
+                OutlinedTextField(
+                    value = handle,
+                    onValueChange = { input ->
+                        val clean = input.trim().removePrefix("@")
+                        if (clean.length <= 40) handle = clean
+                    },
+                    label = { Text(handleLabel) },
+                    singleLine = true,
+                    leadingIcon = {
+                        Text(
+                            text = "@",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 12.dp, end = 2.dp)
+                        )
+                    },
+                    supportingText = {
+                        Text(
+                            text = handleErrText ?: handleHint,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (hasHandleError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    },
+                    isError = hasHandleError,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Bio Description Field
+                OutlinedTextField(
+                    value = bio,
+                    onValueChange = { if (it.length <= 250) bio = it },
+                    label = { Text(bioLabel) },
+                    maxLines = 3,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Create Action Button
                 Button(
-                    onClick = { 
-                        if (name.isNotBlank()) {
-                            onCreate(name, type, handle.takeIf { it.isNotBlank() }, bio.takeIf { it.isNotBlank() })
+                    onClick = {
+                        if (isFormValid) {
+                            val cleanHandle = handle.trim().takeIf { it.isNotBlank() }?.let {
+                                if (it.startsWith("@")) it else "@$it"
+                            }
+                            onCreate(name.trim(), type, cleanHandle, bio.trim().takeIf { it.isNotBlank() })
                             onClose()
                         }
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = name.isNotBlank()
-                ) { Text(strings.create) }
+                    enabled = isFormValid,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Text(
+                        text = if (isFa) "ایجاد" else strings.create,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
@@ -5065,8 +5274,15 @@ private fun GiftCard(gift: UserGift, modifier: Modifier = Modifier) {
                                 modifier = Modifier.fillMaxSize().padding(6.dp)
                             )
                         } else {
+                            val context = LocalContext.current
+                            val request = remember(normalizedUrl) {
+                                coil3.request.ImageRequest.Builder(context)
+                                    .data(normalizedUrl)
+                                    .crossfade(true)
+                                    .build()
+                            }
                             AsyncImage(
-                                model = normalizedUrl,
+                                model = request,
                                 contentDescription = gift.name,
                                 modifier = Modifier.fillMaxSize().padding(6.dp)
                             )

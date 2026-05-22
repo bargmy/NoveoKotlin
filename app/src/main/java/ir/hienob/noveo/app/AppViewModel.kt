@@ -732,7 +732,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startCreateChatCaptcha(name: String, type: String, handle: String? = null, bio: String? = null) {
-        createChat(name, type, handle, bio)
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            runCatching {
+                _uiState.value = _uiState.value.copy(loading = true)
+                val started = withContext(Dispatchers.IO) {
+                    api.startCaptcha(session, "create_chat")
+                }
+                _uiState.value = _uiState.value.copy(
+                    loading = false,
+                    captchaInfo = CaptchaInfo(
+                        sessionId = started.getString("sessionId"),
+                        action = "create_chat",
+                        extra = mapOf(
+                            "name" to name,
+                            "type" to type,
+                            "handle" to handle.orEmpty(),
+                            "bio" to bio.orEmpty()
+                        )
+                    )
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(loading = false, error = it.message ?: "Failed to start captcha")
+            }
+        }
     }
 
     fun logout() {
