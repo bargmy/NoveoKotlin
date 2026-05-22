@@ -5158,9 +5158,7 @@ private fun FullscreenMediaModal(attachment: MessageFileAttachment, localPath: S
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
                     .padding(16.dp)
-                    .graphicsLayer {
-                        blendMode = androidx.compose.ui.graphics.BlendMode.Difference
-                    },
+                    .background(Color.Black.copy(alpha = 0.45f), CircleShape),
                 tint = Color.White
             )
         }
