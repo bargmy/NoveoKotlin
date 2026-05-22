@@ -204,6 +204,7 @@ private fun UserSummary.toJson(): JSONObject = JSONObject()
     .put("membershipTier", membershipTier)
     .put("nicknameFont", nicknameFont)
     .put("premiumStarIcon", premiumStarIcon?.toJson())
+    .put("gifts", JSONArray().apply { gifts.forEach { add(it.toJson()) } })
 
 private fun ProfileSkin.toJson(): JSONObject = JSONObject()
     .put("mode", mode)
@@ -214,6 +215,14 @@ private fun ProfileSkin.toJson(): JSONObject = JSONObject()
     .put("colors", JSONArray().apply { colors.forEach(::put) })
     .put("angle", angle)
     .put("color", color)
+
+private fun UserGift.toJson(): JSONObject = JSONObject()
+    .put("giftId", giftId)
+    .put("giftNumber", giftNumber)
+    .put("name", name)
+    .put("imageUrl", imageUrl)
+    .put("quantity", quantity)
+    .put("acquiredAt", acquiredAt)
 
 private fun PremiumStarIcon.toJson(): JSONObject = JSONObject()
     .put("url", url)
@@ -282,7 +291,22 @@ private fun JSONObject.toUserSummary(): UserSummary = UserSummary(
     joinedAt = optLong("joinedAt").takeIf { it > 0L },
     membershipTier = optString("membershipTier", ""),
     nicknameFont = optString("nicknameFont", ""),
-    premiumStarIcon = optJSONObject("premiumStarIcon")?.toPremiumStarIcon()
+    premiumStarIcon = optJSONObject("premiumStarIcon")?.toPremiumStarIcon(),
+    gifts = buildList {
+        val arr = optJSONArray("gifts") ?: return@buildList
+        for (i in 0 until arr.length()) {
+            val item = arr.optJSONObject(i) ?: continue
+            val giftId = item.optString("giftId").takeIf { it.isNotBlank() } ?: continue
+            add(UserGift(
+                giftId = giftId,
+                giftNumber = item.optInt("giftNumber").takeIf { it > 0 },
+                name = item.optString("name", "Gift"),
+                imageUrl = item.optString("imageUrl", ""),
+                quantity = item.optInt("quantity", 1).coerceAtLeast(1),
+                acquiredAt = item.optLong("acquiredAt", 0L)
+            ))
+        }
+    }
 )
 
 private fun JSONObject.toPremiumStarIcon(): PremiumStarIcon = PremiumStarIcon(

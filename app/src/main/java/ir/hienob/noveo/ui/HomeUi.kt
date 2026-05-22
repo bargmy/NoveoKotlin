@@ -4747,76 +4747,150 @@ private fun ProfileModal(
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
-    
+
+    var selectedTab by remember { mutableStateOf(0) }
+    val tabs = listOf(strings.information, strings.gifts)
+
     val expandedHeight = 320.dp
     val collapsedHeight = 56.dp
     val expandedHeightPx = with(density) { expandedHeight.toPx() }
     val collapsedHeightPx = with(density) { collapsedHeight.toPx() }
-    
-    val fraction = remember { derivedStateOf { 
-        if (listState.firstVisibleItemIndex > 0) 1f 
+
+    val fraction = remember { derivedStateOf {
+        if (listState.firstVisibleItemIndex > 0) 1f
         else (listState.firstVisibleItemScrollOffset.toFloat() / (expandedHeightPx - collapsedHeightPx)).coerceIn(0f, 1f)
     } }.value
-    
+
     Surface(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val screenWidth = maxWidth
-            
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = expandedHeight, bottom = 100.dp)
             ) {
                 item {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    // Tab Row
+                    TabRow(
+                        selectedTabIndex = selectedTab,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        // Info Section (Telegram Style)
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                        tabs.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTab == index,
+                                onClick = { selectedTab = index },
+                                text = { Text(title, style = MaterialTheme.typography.labelLarge) }
+                            )
+                        }
+                    }
+                }
+
+                if (selectedTab == 0) {
+                    // ── Information Tab ──────────────────────────────────────
+                    item {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                InfoItem(label = strings.displayName, value = user.username)
-                                if (!user.handle.isNullOrBlank()) {
-                                    InfoItem(label = strings.handle, value = user.handle, onClick = {
-                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(user.handle))
-                                    })
-                                }
-                                if (user.bio.isNotBlank()) {
-                                    InfoItem(label = strings.about, value = user.bio)
-                                }
-                                val joinedDateText = remember(user.joinedAt) {
-                                    val joinedAt = user.joinedAt
-                                    if (joinedAt != null && joinedAt > 0) {
-                                        val date = Date(joinedAt * 1000L)
-                                        SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(date)
-                                    } else {
-                                        "April 2026"
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    InfoItem(label = strings.displayName, value = user.username)
+                                    if (!user.handle.isNullOrBlank()) {
+                                        InfoItem(label = strings.handle, value = user.handle, onClick = {
+                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(user.handle))
+                                        })
                                     }
+                                    if (user.bio.isNotBlank()) {
+                                        InfoItem(label = strings.about, value = user.bio)
+                                    }
+                                    val joinedDateText = remember(user.joinedAt) {
+                                        val joinedAt = user.joinedAt
+                                        if (joinedAt != null && joinedAt > 0) {
+                                            val date = Date(joinedAt * 1000L)
+                                            SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(date)
+                                        } else {
+                                            "April 2026"
+                                        }
+                                    }
+                                    InfoItem(label = strings.joinDate, value = joinedDateText)
                                 }
-                                InfoItem(label = strings.joinDate, value = joinedDateText)
+                            }
+
+                            Button(
+                                onClick = onMessage,
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(strings.sendMessage)
+                            }
+
+                            Spacer(Modifier.height(300.dp))
+                        }
+                    }
+                } else {
+                    // ── Gifts Tab ────────────────────────────────────────────
+                    if (user.gifts.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 64.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Star,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                    )
+                                    Text(
+                                        strings.noGifts,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                }
                             }
                         }
-
-                        Button(
-                            onClick = onMessage, 
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        ) { 
-                            Text(strings.sendMessage) 
+                    } else {
+                        // Grid: 3 columns
+                        item {
+                            val columns = 3
+                            val rows = (user.gifts.size + columns - 1) / columns
+                            Column(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                for (row in 0 until rows) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        for (col in 0 until columns) {
+                                            val index = row * columns + col
+                                            if (index < user.gifts.size) {
+                                                val gift = user.gifts[index]
+                                                GiftCard(gift = gift, modifier = Modifier.weight(1f))
+                                            } else {
+                                                Spacer(modifier = Modifier.weight(1f))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        
-                        Spacer(Modifier.height(300.dp))
                     }
                 }
             }
-            
+
             // Collapsing Header
             val currentHeaderHeight = lerpDp(expandedHeight, collapsedHeight, fraction)
             val hasPremiumSkin = user.membershipTier.lowercase(Locale.ROOT) == "premium" && user.profileSkin != null
@@ -4842,18 +4916,18 @@ private fun ProfileModal(
                         modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
                         tint = LocalContentColor.current
                     )
-                    
+
                     val avatarSize = lerpDp(120.dp, 38.dp, fraction)
-                    
+
                     // Avatar position calculation
                     val expandedAvatarX = (screenWidth / 2) - (avatarSize / 2)
                     val collapsedAvatarX = 52.dp // Next to back button
                     val avatarX = lerpDp(expandedAvatarX, collapsedAvatarX, fraction)
-                    
+
                     val expandedAvatarY = (expandedHeight / 2) - (avatarSize / 2) - 20.dp
                     val collapsedAvatarY = (collapsedHeight / 2) - (avatarSize / 2)
                     val avatarY = lerpDp(expandedAvatarY, collapsedAvatarY, fraction)
-                    
+
                     val hasAvatar = !user.avatarUrl.isNullOrBlank() && !user.avatarUrl.endsWith("default.png")
                     Box(
                         modifier = Modifier
@@ -4865,7 +4939,7 @@ private fun ProfileModal(
                     ) {
                         ProfileCircle(name = user.username, imageUrl = user.avatarUrl, size = avatarSize)
                     }
-                    
+
                     // Expanded Name/Status
                     if (fraction < 0.5f) {
                         Column(
@@ -4877,7 +4951,7 @@ private fun ProfileModal(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    user.username, 
+                                    user.username,
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = getNicknameFontFamily(user.nicknameFont)
@@ -4895,7 +4969,7 @@ private fun ProfileModal(
                                 else formatLastSeen(user.lastSeen, strings)
                             }
                             Text(
-                                lastSeenText, 
+                                lastSeenText,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (user.isOnline) {
                                     if (hasPremiumSkin) Color(0xFF81D4FA) else MaterialTheme.colorScheme.primary
@@ -4905,7 +4979,7 @@ private fun ProfileModal(
                             )
                         }
                     }
-                    
+
                     // Collapsed Name/Status
                     if (fraction > 0.5f) {
                         Column(
@@ -4953,6 +5027,79 @@ private fun ProfileModal(
         }
     }
 }
+
+@Composable
+private fun GiftCard(gift: UserGift, modifier: Modifier = Modifier) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        modifier = modifier
+    ) {
+        Box(modifier = Modifier.padding(8.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Gift thumbnail
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (gift.imageUrl.isNotBlank()) {
+                        val normalizedUrl = remember(gift.imageUrl) { gift.imageUrl.normalizeNoveoUrl() }
+                        AsyncImage(
+                            model = normalizedUrl,
+                            contentDescription = gift.name,
+                            modifier = Modifier.fillMaxSize().padding(6.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.Star,
+                            contentDescription = gift.name,
+                            modifier = Modifier.size(36.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+                // Gift name
+                Text(
+                    text = gift.name,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+            // Quantity badge
+            if (gift.quantity > 1) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "×${gift.quantity}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 private fun InfoItem(label: String, value: String, onClick: (() -> Unit)? = null) {

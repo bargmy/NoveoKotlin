@@ -25,6 +25,15 @@ data class PremiumStarIcon(
     val templateId: String? = null
 )
 
+data class UserGift(
+    val giftId: String,
+    val giftNumber: Int?,
+    val name: String,
+    val imageUrl: String,
+    val quantity: Int,
+    val acquiredAt: Long
+)
+
 data class Transaction(
     val id: String,
     val amountTenths: Int,
@@ -56,7 +65,8 @@ data class UserSummary(
     val joinedAt: Long? = null,
     val membershipTier: String = "",
     val nicknameFont: String = "",
-    val premiumStarIcon: PremiumStarIcon? = null
+    val premiumStarIcon: PremiumStarIcon? = null,
+    val gifts: List<UserGift> = emptyList()
 )
 
 data class MessageFileAttachment(

@@ -26,7 +26,8 @@ fun parseUser(item: JSONObject, onlineIds: Set<String> = emptySet()): UserSummar
         joinedAt = item.optLong("joinedAt", item.optLong("createdAt", 0L)).takeIf { it > 0 },
         membershipTier = item.optString("membershipTier").sanitizeServerString().ifBlank { item.optString("membership_tier").sanitizeServerString() },
         nicknameFont = item.optString("nicknameFont").sanitizeServerString().ifBlank { item.optString("nickname_font").sanitizeServerString() },
-        premiumStarIcon = parsePremiumStarIcon(item.optJSONObject("premiumStarIcon") ?: item.optJSONObject("premium_star_icon"))
+        premiumStarIcon = parsePremiumStarIcon(item.optJSONObject("premiumStarIcon") ?: item.optJSONObject("premium_star_icon")),
+        gifts = parseUserGifts(item.optJSONArray("gifts"))
     )
 }
 
@@ -80,6 +81,26 @@ private fun parsePremiumStarIcon(json: JSONObject?): PremiumStarIcon? {
         source = json.optString("source").sanitizeServerString().ifBlank { "template" },
         templateId = json.optString("templateId").sanitizeServerString().takeIf { it.isNotBlank() }
     )
+}
+
+private fun parseUserGifts(array: JSONArray?): List<UserGift> {
+    if (array == null) return emptyList()
+    return buildList {
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val giftId = item.optString("giftId").sanitizeServerString().ifBlank { continue }
+            add(
+                UserGift(
+                    giftId = giftId,
+                    giftNumber = item.optInt("giftNumber").takeIf { it > 0 },
+                    name = item.optString("name").sanitizeServerString().ifBlank { "Gift" },
+                    imageUrl = item.optString("imageUrl").sanitizeServerString(),
+                    quantity = item.optInt("quantity", 1).coerceAtLeast(1),
+                    acquiredAt = item.optLong("acquiredAt", 0L)
+                )
+            )
+        }
+    }
 }
 
 fun parseChat(item: JSONObject, usersById: Map<String, UserSummary>, selfUserId: String): ChatSummary {
