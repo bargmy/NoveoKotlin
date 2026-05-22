@@ -256,6 +256,19 @@ private fun ChatSummary.isSavedMessagesChat(currentUserId: String?): Boolean =
         title == "Saved Messages" ||
         (chatType == "private" && currentUserId != null && memberIds.size == 1 && memberIds.firstOrNull() == currentUserId)
 
+private fun getNicknameFontFamily(fontId: String?): FontFamily? {
+    val normalized = fontId?.trim()?.lowercase(Locale.ROOT) ?: return null
+    if (normalized.isBlank()) return null
+    return when (normalized) {
+        "bradhitc" -> FontFamily(androidx.compose.ui.text.font.Font(R.font.bradhitc))
+        "freescpt" -> FontFamily(androidx.compose.ui.text.font.Font(R.font.freescpt))
+        "f_majik" -> FontFamily(androidx.compose.ui.text.font.Font(R.font.f_majik))
+        "impact" -> FontFamily(androidx.compose.ui.text.font.Font(R.font.impact))
+        "npidivani" -> FontFamily(androidx.compose.ui.text.font.Font(R.font.npidivani))
+        else -> null
+    }
+}
+
 private fun localAttachmentCacheFile(root: File, file: MessageFileAttachment): File {
     val extension = file.name.substringAfterLast('.', "").ifBlank {
         when {
@@ -2130,6 +2143,7 @@ private fun ChatPane(
                     hasTail = hasTail,
                     isGroupChat = selectedChat?.chatType != "private",
                     currentUserId = currentUserId,
+                    usersById = usersById,
                     onMediaClick = onMediaClick,
                     onOpenProfile = onOpenProfile,
                     repliedMessage = repliedMessage,
@@ -2234,6 +2248,7 @@ private fun ChatPane(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.Center
                     ) {
+                        val nicknameFont = profileUserId?.let { state.usersById[it]?.nicknameFont }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -2246,6 +2261,7 @@ private fun ChatPane(
                                 color = tgColors.headerTitle,
                                 fontSize = 15.sp,
                                 lineHeight = 18.sp,
+                                fontFamily = getNicknameFontFamily(nicknameFont),
                                 modifier = Modifier.weight(1f, fill = false)
                             )
                             if (selectedChat?.isVerified == true || profileUser?.isVerified == true) {
@@ -2673,6 +2689,7 @@ private fun MessageRow(
     hasTail: Boolean,
     isGroupChat: Boolean,
     currentUserId: String?,
+    usersById: Map<String, UserSummary>,
     onMediaClick: (ChatMessage, MessageFileAttachment) -> Unit,
     onOpenProfile: (String) -> Unit,
     repliedMessage: ChatMessage? = null,
@@ -2860,11 +2877,13 @@ private fun MessageRow(
                                         )
                                         Spacer(Modifier.width(8.dp))
                                         Column {
+                                            val replySenderFont = repliedMessage?.let { usersById[it.senderId]?.nicknameFont }
                                             Text(
                                                 text = repliedMessage.senderName,
                                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
+                                                fontFamily = getNicknameFontFamily(replySenderFont),
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -2980,10 +2999,12 @@ private fun MessageRow(
                         Column(modifier = Modifier.padding(if (hasVisualMedia) 3.dp else 6.dp).padding(horizontal = 4.dp)) {
                             if (!ownMessage && isGroupChat && showSenderInfo && !isAnonymous) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)) {
+                                    val senderFont = usersById[message.senderId]?.nicknameFont
                                     Text(
                                         message.senderName,
                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
                                         color = tgColors.incomingLink,
+                                        fontFamily = getNicknameFontFamily(senderFont),
                                         modifier = Modifier.weight(1f, fill = false)
                                     )
                                     if (isSenderVerified) {
@@ -3035,11 +3056,13 @@ private fun MessageRow(
                                         )
                                         Spacer(Modifier.width(8.dp))
                                         Column {
+                                            val replySenderFont = repliedMessage?.let { usersById[it.senderId]?.nicknameFont }
                                             Text(
                                                 text = repliedMessage.senderName,
                                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (ownMessage) tgColors.outgoingText else tgColors.incomingLink,
+                                                fontFamily = getNicknameFontFamily(replySenderFont),
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -4122,7 +4145,13 @@ private fun ContactRow(
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(user.username, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            user.username,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontFamily = getNicknameFontFamily(user.nicknameFont)
+                        )
                         if (user.isVerified) {
                             Spacer(Modifier.width(4.dp))
                             VerifiedIcon(modifier = Modifier.size(14.dp))
@@ -4804,7 +4833,8 @@ private fun ProfileModal(
                                 Text(
                                     user.username, 
                                     style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = getNicknameFontFamily(user.nicknameFont)
                                 )
                                 if (user.isVerified) {
                                     Spacer(Modifier.width(6.dp))
@@ -4842,7 +4872,8 @@ private fun ProfileModal(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontFamily = getNicknameFontFamily(user.nicknameFont)
                                 )
                                 if (user.isVerified) {
                                     Spacer(Modifier.width(4.dp))
@@ -5121,7 +5152,11 @@ private fun GroupInfoModal(
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(user?.username ?: memberId, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            user?.username ?: memberId,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontFamily = getNicknameFontFamily(user?.nicknameFont)
+                                        )
                                         if (user?.isVerified == true) {
                                             Spacer(Modifier.width(4.dp))
                                             VerifiedIcon(modifier = Modifier.size(14.dp))
@@ -5357,8 +5392,15 @@ private fun ChatRow(
             ProfileCircle(name = chatTitle, imageUrl = chat.avatarUrl, isSavedMessages = chat.isSavedMessagesChat(currentUserId))
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
+                val nicknameFont = profileUserId?.let { usersById[it]?.nicknameFont }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(chatTitle, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        chatTitle,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontFamily = getNicknameFontFamily(nicknameFont)
+                    )
                     if (isVerified) {
                         Spacer(Modifier.width(4.dp))
                         VerifiedIcon()

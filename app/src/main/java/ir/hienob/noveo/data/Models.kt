@@ -47,7 +47,8 @@ data class UserSummary(
     val languageCode: String = "en",
     val lastSeen: Long? = null,
     val joinedAt: Long? = null,
-    val membershipTier: String = ""
+    val membershipTier: String = "",
+    val nicknameFont: String = ""
 )
 
 data class MessageFileAttachment(

@@ -24,7 +24,8 @@ fun parseUser(item: JSONObject, onlineIds: Set<String> = emptySet()): UserSummar
         languageCode = item.optString("languageCode").sanitizeServerString().ifBlank { "en" },
         lastSeen = item.optLong("lastSeen", item.optLong("last_seen", 0L)).takeIf { it > 0 },
         joinedAt = item.optLong("joinedAt", item.optLong("createdAt", 0L)).takeIf { it > 0 },
-        membershipTier = item.optString("membershipTier").sanitizeServerString().ifBlank { item.optString("membership_tier").sanitizeServerString() }
+        membershipTier = item.optString("membershipTier").sanitizeServerString().ifBlank { item.optString("membership_tier").sanitizeServerString() },
+        nicknameFont = item.optString("nicknameFont").sanitizeServerString().ifBlank { item.optString("nickname_font").sanitizeServerString() }
     )
 }
 

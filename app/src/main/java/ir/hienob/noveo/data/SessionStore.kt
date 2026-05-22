@@ -202,6 +202,7 @@ private fun UserSummary.toJson(): JSONObject = JSONObject()
     .put("joinedAt", joinedAt)
     .put("profileSkin", profileSkin?.toJson())
     .put("membershipTier", membershipTier)
+    .put("nicknameFont", nicknameFont)
 
 private fun ProfileSkin.toJson(): JSONObject = JSONObject()
     .put("mode", mode)
@@ -272,7 +273,8 @@ private fun JSONObject.toUserSummary(): UserSummary = UserSummary(
     languageCode = optString("languageCode", "en"),
     lastSeen = optLong("lastSeen").takeIf { it > 0L },
     joinedAt = optLong("joinedAt").takeIf { it > 0L },
-    membershipTier = optString("membershipTier", "")
+    membershipTier = optString("membershipTier", ""),
+    nicknameFont = optString("nicknameFont", "")
 )
 
 private fun JSONObject.toProfileSkin(): ProfileSkin {
