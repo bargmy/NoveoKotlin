@@ -54,6 +54,8 @@ import ir.hienob.noveo.data.ChatMessage
 import ir.hienob.noveo.data.NoveoClientIdentity
 import ir.hienob.noveo.data.NotificationSettings
 import ir.hienob.noveo.data.SavedSticker
+import ir.hienob.noveo.data.ProfileSkin
+import ir.hienob.noveo.data.PremiumStarIcon
 import ir.hienob.noveo.core.ui.NoveoTheme
 import ir.hienob.noveo.core.ui.NoveoThemePreset
 import ir.hienob.noveo.core.ui.NoveoRootFrame
