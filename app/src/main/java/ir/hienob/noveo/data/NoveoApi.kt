@@ -475,9 +475,30 @@ class NoveoApi(
         }
     }
 
-    fun submitPaymentRequest(session: Session, tier: String, receiptBytes: ByteArray, fileName: String) {
+    fun submitPaymentRequest(
+        session: Session,
+        tier: String,
+        receiptBytes: ByteArray,
+        fileName: String,
+        onProgress: (Float) -> Unit
+    ) {
         val url = "https://noveo.ir:8443/payment/request".toHttpUrl()
-        val requestBody = receiptBytes.toRequestBody("image/*".toMediaType())
+        val requestBody = object : okhttp3.RequestBody() {
+            override fun contentType() = "image/*".toMediaType()
+            override fun contentLength() = receiptBytes.size.toLong()
+            override fun writeTo(sink: okio.BufferedSink) {
+                val total = contentLength()
+                var uploaded = 0L
+                val buffer = ByteArray(4096)
+                val inputStream = receiptBytes.inputStream()
+                var read: Int
+                while (inputStream.read(buffer).also { read = it } != -1) {
+                    sink.write(buffer, 0, read)
+                    uploaded += read
+                    onProgress(uploaded.toFloat() / total)
+                }
+            }
+        }
         val multipartBody = okhttp3.MultipartBody.Builder()
             .setType(okhttp3.MultipartBody.FORM)
             .addFormDataPart("tier", tier)
@@ -495,6 +516,54 @@ class NoveoApi(
                 val errBody = response.body?.string().orEmpty()
                 val serverErr = runCatching { JSONObject(errBody).getString("error") }.getOrNull()
                 error(serverErr ?: "Payment request failed (${response.code})")
+            }
+        }
+    }
+
+    fun updateChatProfile(session: Session, chatId: String, chatName: String, bio: String) {
+        val url = "https://noveo.ir:8443/chat/settings".toHttpUrl()
+        val body = JSONObject()
+            .put("action", "update_profile")
+            .put("chatId", chatId)
+            .put("chatName", chatName)
+            .put("bio", bio)
+            .toString()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errBody = response.body?.string().orEmpty()
+                val serverErr = runCatching { JSONObject(errBody).getString("error") }.getOrNull()
+                error(serverErr ?: "Failed to update chat profile (${response.code})")
+            }
+        }
+    }
+
+    fun updateChatHandle(session: Session, chatId: String, handle: String?) {
+        val url = "https://noveo.ir:8443/chat/settings".toHttpUrl()
+        val body = JSONObject()
+            .put("action", if (handle.isNullOrBlank()) "remove_handle" else "set_handle")
+            .put("chatId", chatId)
+        if (!handle.isNullOrBlank()) {
+            body.put("handle", handle)
+        }
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errBody = response.body?.string().orEmpty()
+                val serverErr = runCatching { JSONObject(errBody).getString("error") }.getOrNull()
+                error(serverErr ?: "Failed to update chat handle (${response.code})")
             }
         }
     }

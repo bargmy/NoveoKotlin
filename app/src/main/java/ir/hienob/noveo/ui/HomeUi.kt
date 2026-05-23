@@ -505,6 +505,9 @@ internal fun HomeScreen(
     onUpdateProfile: (String, String, String?, String?, ProfileSkin?, PremiumStarIcon?) -> Unit,
     onSubmitPaymentRequest: (String, ByteArray, String) -> Unit,
     onCancelSubscription: () -> Unit,
+    onUpdateChatProfile: (String, String, String) -> Unit,
+    onUpdateChatHandle: (String, String?) -> Unit,
+    onContactAdmin: () -> Unit,
     onFetchUserProfile: (String) -> Unit,
     onLoadOlder: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
@@ -1255,6 +1258,9 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 onUpdateProfile = onUpdateProfile,
                 onSubmitPaymentRequest = onSubmitPaymentRequest,
                 onCancelSubscription = onCancelSubscription,
+                onUpdateChatProfile = onUpdateChatProfile,
+                onUpdateChatHandle = onUpdateChatHandle,
+                onContactAdmin = onContactAdmin,
                 onChangePassword = onChangePassword,
                 onDeleteAccount = onDeleteAccount,
                 onSetLanguage = onSetLanguage,
@@ -4500,6 +4506,9 @@ private fun SettingsModal(
     onUpdateProfile: (String, String, String?, String?, ProfileSkin?, PremiumStarIcon?) -> Unit,
     onSubmitPaymentRequest: (String, ByteArray, String) -> Unit,
     onCancelSubscription: () -> Unit,
+    onUpdateChatProfile: (String, String, String) -> Unit,
+    onUpdateChatHandle: (String, String?) -> Unit,
+    onContactAdmin: () -> Unit,
     onChangePassword: (String, String) -> Unit,
     onDeleteAccount: (String) -> Unit,
     onSetLanguage: (String) -> Unit,
@@ -4534,8 +4543,8 @@ private fun SettingsModal(
             Crossfade(targetState = section, label = "settings_section") { current ->
                 when (current) {
                     SettingsSection.MENU -> SettingsMenu(strings, onSectionChange)
-                    SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings, me, onSubmitPaymentRequest, onCancelSubscription)
-                    SettingsSection.PROFILE -> SettingsProfileSection(strings, me, onUpdateProfile, onSectionChange)
+                    SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings, me, state.receiptUploadProgress, state.receiptUploadStatusLog, onSubmitPaymentRequest, onCancelSubscription, onContactAdmin)
+                    SettingsSection.PROFILE -> SettingsProfileSection(strings, me, state.chats, state.session?.userId, onUpdateProfile, onUpdateChatProfile, onUpdateChatHandle, onSectionChange)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
                     SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, currentTheme, onThemeChange, onRequestBatteryOptimization)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
@@ -4550,8 +4559,11 @@ private fun SettingsModal(
 private fun SettingsSubscriptionSection(
     strings: NoveoStrings,
     me: UserSummary?,
+    receiptUploadProgress: Float?,
+    receiptUploadStatusLog: String?,
     onSubmitPaymentRequest: (String, ByteArray, String) -> Unit,
-    onCancelSubscription: () -> Unit
+    onCancelSubscription: () -> Unit,
+    onContactAdmin: () -> Unit
 ) {
     val context = LocalContext.current
     var selectedTier by remember { mutableStateOf("premium") }
@@ -4581,6 +4593,7 @@ private fun SettingsSubscriptionSection(
     val currentTier = me?.membershipTier?.lowercase() ?: ""
     val isPremium = currentTier == "premium"
     val isSilver = currentTier == "silver"
+    val isFa = strings.languageCode == "fa"
     
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -4597,7 +4610,7 @@ private fun SettingsSubscriptionSection(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Current Status",
+                        text = if (isFa) "وضعیت فعلی" else "Current Status",
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
@@ -4625,7 +4638,7 @@ private fun SettingsSubscriptionSection(
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth().height(42.dp)
                         ) {
-                            Text("Cancel Active Subscription", fontWeight = FontWeight.Bold)
+                            Text(if (isFa) "لغو اشتراک فعال" else "Cancel Active Subscription", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -4635,7 +4648,7 @@ private fun SettingsSubscriptionSection(
         if (!isPremium) {
             item {
                 Text(
-                    text = "Select a Plan",
+                    text = if (isFa) "انتخاب طرح" else "Select a Plan",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -4721,7 +4734,7 @@ private fun SettingsSubscriptionSection(
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
-                        Text("Upload Receipt Photo to Pay", fontWeight = FontWeight.Bold)
+                        Text(if (isFa) "آپلود تصویر رسید پرداخت" else "Upload Receipt Photo to Pay", fontWeight = FontWeight.Bold)
                     }
                     
                     uploadError?.let {
@@ -4730,145 +4743,368 @@ private fun SettingsSubscriptionSection(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
+            
+            if (receiptUploadProgress != null || receiptUploadStatusLog != null) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            receiptUploadStatusLog?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            receiptUploadProgress?.let {
+                                Spacer(Modifier.height(8.dp))
+                                LinearProgressIndicator(
+                                    progress = it,
+                                    modifier = Modifier.fillMaxWidth().height(6.dp)
+                                )
+                            }
+                        }
+                    }
+     @Composable
 private fun SettingsProfileSection(
     strings: NoveoStrings,
     me: UserSummary?,
+    chats: List<ChatSummary>,
+    sessionUserId: String?,
     onUpdateProfile: (String, String, String?, String?, ProfileSkin?, PremiumStarIcon?) -> Unit,
+    onUpdateChatProfile: (String, String, String) -> Unit,
+    onUpdateChatHandle: (String, String?) -> Unit,
     onSectionChange: (SettingsSection) -> Unit
 ) {
-    var username by remember(me) { mutableStateOf(me?.username ?: "") }
-    var bio by remember(me) { mutableStateOf(me?.bio ?: "") }
-    var handle by remember(me) { mutableStateOf(me?.handle?.replace(Regex("^@"), "") ?: "") }
-    
-    val tier = me?.membershipTier?.lowercase() ?: ""
-    val hasFontAccess = tier == "premium" || tier == "silver"
-    val hasSkinAccess = tier == "premium"
-    
-    var selectedFont by remember(me) { mutableStateOf(me?.nicknameFont ?: "") }
-    var selectedSkinPreset by remember(me) { mutableStateOf("default") }
-    var selectedBadgeColor by remember(me) { mutableStateOf("none") }
-    
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            ProfileCircle(name = username.ifBlank { "Me" }, imageUrl = me?.avatarUrl, size = 90.dp)
+    var activeEditChat by remember { mutableStateOf<ChatSummary?>(null) }
+    val isFa = strings.languageCode == "fa"
+
+    if (activeEditChat != null) {
+        val chat = activeEditChat!!
+        var chatName by remember(chat) { mutableStateOf(chat.title) }
+        var chatBio by remember(chat) { mutableStateOf("") } // Bio is loaded on socket or dynamically
+        var chatHandle by remember(chat) { mutableStateOf(chat.handle?.replace(Regex("^@"), "") ?: "") }
+
+        // Fetch bio if available from existing chats or fallback
+        LaunchedEffect(chat) {
+            // Find existing bio in state if present
         }
-        
-        item {
-            OutlinedTextField(
-                value = username,
-                onValueChange = { username = it },
-                label = { Text(strings.displayName) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-            )
-        }
-        
-        item {
-            OutlinedTextField(
-                value = bio,
-                onValueChange = { bio = it },
-                label = { Text(strings.bio) },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-                maxLines = 3,
-                shape = RoundedCornerShape(12.dp)
-            )
-        }
-        
-        item {
-            OutlinedTextField(
-                value = handle,
-                onValueChange = { handle = it.trim().removePrefix("@") },
-                label = { Text("Public Handle") },
-                leadingIcon = {
-                    Text(
-                        text = "@",
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 12.dp)
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-            )
-        }
-        
-        if (hasFontAccess) {
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
             item {
                 Text(
-                    text = "Nickname Font",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    text = if (isFa) "ویرایش پروفایل گفتگو" else "Edit Chat Profile",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = chat.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            item {
+                OutlinedTextField(
+                    value = chatName,
+                    onValueChange = { chatName = it },
+                    label = { Text(if (isFa) "نام گفتگو" else "Chat Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+
+            item {
+                OutlinedTextField(
+                    value = chatBio,
+                    onValueChange = { chatBio = it },
+                    label = { Text(if (isFa) "درباره (Bio)" else "Bio") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 3,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+
+            item {
+                OutlinedTextField(
+                    value = chatHandle,
+                    onValueChange = { chatHandle = it.trim().removePrefix("@") },
+                    label = { Text(if (isFa) "شناسه عمومی" else "Public Handle") },
+                    leadingIcon = {
+                        Text(
+                            text = "@",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 12.dp)
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { activeEditChat = null },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f).height(48.dp)
+                    ) {
+                        Text(if (isFa) "بازگشت" else "Back")
+                    }
+
+                    Button(
+                        onClick = {
+                            val cleanHandle = chatHandle.trim().removePrefix("@")
+                            onUpdateChatProfile(chat.id, chatName.trim(), chatBio.trim())
+                            onUpdateChatHandle(chat.id, cleanHandle.takeIf { it.isNotBlank() })
+                            activeEditChat = null
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1.5f).height(48.dp)
+                    ) {
+                        Text(if (isFa) "ذخیره تغییرات" else "Save Changes", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    } else {
+        var username by remember(me) { mutableStateOf(me?.username ?: "") }
+        var bio by remember(me) { mutableStateOf(me?.bio ?: "") }
+        var handle by remember(me) { mutableStateOf(me?.handle?.replace(Regex("^@"), "") ?: "") }
+        
+        val tier = me?.membershipTier?.lowercase() ?: ""
+        val hasFontAccess = tier == "premium" || tier == "silver"
+        val hasSkinAccess = tier == "premium"
+        
+        var selectedFont by remember(me) { mutableStateOf(me?.nicknameFont ?: "") }
+        
+        // Custom 1:1 Web Client Skin States
+        val initialSkin = me?.profileSkin
+        var skinMode by remember(me) { mutableStateOf(initialSkin?.mode?.lowercase() ?: "") }
+        var skinPrimary by remember(me) { mutableStateOf(initialSkin?.primaryColor?.ifBlank { "#00FFF0" } ?: "#00FFF0") }
+        var skinSecondary by remember(me) { mutableStateOf(initialSkin?.secondaryColor?.ifBlank { "#00838F" } ?: "#00838F") }
+        var skinTertiary by remember(me) { mutableStateOf(initialSkin?.tertiaryColor?.ifBlank { "#00E5FF" } ?: "#00E5FF") }
+        var skinStops by remember(me) { mutableStateOf(initialSkin?.gradientStops ?: 2) }
+        var selectedBadgeColor by remember(me) { mutableStateOf(me?.premiumStarIcon?.templateId ?: "none") }
+        
+        val presetColors = listOf("#FF5252", "#FFA726", "#FFD54F", "#66BB6A", "#26C6DA", "#29B6F6", "#AB47BC", "#EC407A")
+        
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item {
+                ProfileCircle(name = username.ifBlank { "Me" }, imageUrl = me?.avatarUrl, size = 90.dp)
+            }
+            
+            item {
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text(strings.displayName) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
                 )
             }
             
             item {
-                val fonts = listOf("default", "impact", "italic", "mono", "script")
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    fonts.forEach { font ->
-                        val isSelected = selectedFont == font || (font == "default" && selectedFont.isBlank())
-                        Card(
-                            onClick = { selectedFont = if (font == "default") "" else font },
-                            shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(
-                                width = 1.dp,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-                            ),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
-                            ),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(modifier = Modifier.padding(8.dp), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = font.replaceFirstChar { it.uppercase() },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                )
+                OutlinedTextField(
+                    value = bio,
+                    onValueChange = { bio = it },
+                    label = { Text(strings.bio) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 3,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+            
+            item {
+                OutlinedTextField(
+                    value = handle,
+                    onValueChange = { handle = it.trim().removePrefix("@") },
+                    label = { Text("Public Handle") },
+                    leadingIcon = {
+                        Text(
+                            text = "@",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 12.dp)
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+            
+            if (hasFontAccess) {
+                item {
+                    Text(
+                        text = if (isFa) "قلم نام مستعار" else "Nickname Font",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    )
+                }
+                
+                item {
+                    val fontsMap = listOf(
+                        "" to "Default",
+                        "8514oem" to "OEM",
+                        "bradhitc" to "Bradley",
+                        "coure" to "Courier",
+                        "freescpt" to "Script",
+                        "f_majik" to "Magic",
+                        "impact" to "Impact",
+                        "npidivani" to "Divani"
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        fontsMap.chunked(4).forEach { chunk ->
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                chunk.forEach { (fontKey, fontName) ->
+                                    val isSelected = selectedFont == fontKey
+                                    Card(
+                                        onClick = { selectedFont = fontKey },
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                        ),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(modifier = Modifier.padding(6.dp), contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = fontName,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-        
-        if (hasSkinAccess) {
-            item {
-                Text(
-                    text = "Premium Profile Skin",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                )
-            }
             
-            item {
-                val skinPresets = listOf("default", "liquid_glass", "golden_glow", "aura_shimmer", "ruby_velvet")
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    skinPresets.chunked(3).forEach { chunk ->
+            if (hasSkinAccess) {
+                item {
+                    Text(
+                        text = if (isFa) "پوسته پروفایل پریمیوم" else "Premium Profile Skin",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    )
+                }
+
+                item {
+                    val modes = listOf("" to "Default", "solid" to "Static Color", "gradient" to "Gradient")
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        modes.forEach { (modeKey, modeTitle) ->
+                            val isSelected = skinMode == modeKey
+                            Card(
+                                onClick = { skinMode = modeKey },
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                ),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(modifier = Modifier.padding(8.dp), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = modeTitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (skinMode == "solid") {
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(
+                                            color = runCatching { Color(android.graphics.Color.parseColor(skinPrimary)) }.getOrDefault(Color.Gray),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                )
+                                OutlinedTextField(
+                                    value = skinPrimary,
+                                    onValueChange = { skinPrimary = it },
+                                    label = { Text(if (isFa) "رنگ اصلی (Hex)" else "Primary Color (Hex)") },
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                presetColors.forEach { hex ->
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .background(Color(android.graphics.Color.parseColor(hex)), RoundedCornerShape(12.dp))
+                                            .clickable { skinPrimary = hex }
+                                            .border(
+                                                width = if (skinPrimary.lowercase() == hex.lowercase()) 2.dp else 0.dp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                shape = RoundedCornerShape(12.dp)
+                                            )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (skinMode == "gradient") {
+                    item {
+                        val stopsOptions = listOf(2 to "2 Colors", 3 to "3 Colors")
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            chunk.forEach { preset ->
-                                val isSelected = selectedSkinPreset == preset
+                            stopsOptions.forEach { (stopsVal, stopsTitle) ->
+                                val isSelected = skinStops == stopsVal
                                 Card(
-                                    onClick = { selectedSkinPreset = preset },
+                                    onClick = { skinStops = stopsVal },
                                     shape = RoundedCornerShape(10.dp),
                                     border = BorderStroke(
                                         width = 1.dp,
@@ -4879,9 +5115,9 @@ private fun SettingsProfileSection(
                                     ),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Box(modifier = Modifier.padding(8.dp), contentAlignment = Alignment.Center) {
+                                    Box(modifier = Modifier.padding(6.dp), contentAlignment = Alignment.Center) {
                                         Text(
-                                            text = preset.replace("_", " ").replaceFirstChar { it.uppercase() },
+                                            text = stopsTitle,
                                             style = MaterialTheme.typography.bodySmall,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                         )
@@ -4890,122 +5126,264 @@ private fun SettingsProfileSection(
                             }
                         }
                     }
-                }
-            }
-            
-            item {
-                Text(
-                    text = "Premium Star Badge Icon",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                )
-            }
-            
-            item {
-                val badges = listOf("none", "gold", "cyan", "purple")
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    badges.forEach { badge ->
-                        val isSelected = selectedBadgeColor == badge
-                        Card(
-                            onClick = { selectedBadgeColor = badge },
-                            shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(
-                                width = 1.dp,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-                            ),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
-                            ),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(modifier = Modifier.padding(8.dp), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = badge.replaceFirstChar { it.uppercase() },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            // Primary Color
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(
+                                            color = runCatching { Color(android.graphics.Color.parseColor(skinPrimary)) }.getOrDefault(Color.Gray),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
                                 )
+                                OutlinedTextField(
+                                    value = skinPrimary,
+                                    onValueChange = { skinPrimary = it },
+                                    label = { Text("Color 1 (Hex)") },
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                presetColors.forEach { hex ->
+                                    Box(
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .background(Color(android.graphics.Color.parseColor(hex)), RoundedCornerShape(10.dp))
+                                            .clickable { skinPrimary = hex }
+                                    )
+                                }
+                            }
+
+                            // Secondary Color
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(
+                                            color = runCatching { Color(android.graphics.Color.parseColor(skinSecondary)) }.getOrDefault(Color.Gray),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                )
+                                OutlinedTextField(
+                                    value = skinSecondary,
+                                    onValueChange = { skinSecondary = it },
+                                    label = { Text("Color 2 (Hex)") },
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                presetColors.forEach { hex ->
+                                    Box(
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .background(Color(android.graphics.Color.parseColor(hex)), RoundedCornerShape(10.dp))
+                                            .clickable { skinSecondary = hex }
+                                    )
+                                }
+                            }
+
+                            // Optional Tertiary Color
+                            if (skinStops == 3) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .background(
+                                                color = runCatching { Color(android.graphics.Color.parseColor(skinTertiary)) }.getOrDefault(Color.Gray),
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                    )
+                                    OutlinedTextField(
+                                        value = skinTertiary,
+                                        onValueChange = { skinTertiary = it },
+                                        label = { Text("Color 3 (Hex)") },
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    presetColors.forEach { hex ->
+                                        Box(
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .background(Color(android.graphics.Color.parseColor(hex)), RoundedCornerShape(10.dp))
+                                                .clickable { skinTertiary = hex }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Text(
+                        text = if (isFa) "نشان ستاره پریمیوم" else "Premium Star Badge Icon",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    )
+                }
+                
+                item {
+                    val badges = listOf("none", "gold", "cyan", "purple")
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        badges.forEach { badge ->
+                            val isSelected = selectedBadgeColor == badge
+                            Card(
+                                onClick = { selectedBadgeColor = badge },
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                ),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(modifier = Modifier.padding(8.dp), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = badge.replaceFirstChar { it.uppercase() },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-        
-        if (!hasFontAccess && !hasSkinAccess) {
-            item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = "Unlock Premium Customizations 👑",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = "Get access to gorgeous name fonts, glowing profile skin gradient presets, and custom star badge icons.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Button(
-                            onClick = { onSectionChange(SettingsSection.SUBSCRIPTION) },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth().height(36.dp)
-                        ) {
-                            Text("Upgrade Plan", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+            
+            if (!hasFontAccess && !hasSkinAccess) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "Unlock Premium Customizations 👑",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "Get access to gorgeous name fonts, glowing profile skin gradient presets, and custom star badge icons.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Button(
+                                onClick = { onSectionChange(SettingsSection.SUBSCRIPTION) },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth().height(36.dp)
+                            ) {
+                                Text("Upgrade Plan", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
             }
-        }
-        
-        item {
-            Button(
-                onClick = {
-                    val cleanHandle = handle.trim().removePrefix("@")
-                    val skinObj = if (hasSkinAccess && selectedSkinPreset != "default") {
-                        when (selectedSkinPreset) {
-                            "liquid_glass" -> ProfileSkin(mode = "gradient", primaryColor = "#00FFF0", secondaryColor = "#00838F", colors = listOf("#00FFF0", "#00838F"), gradientStops = 2)
-                            "golden_glow" -> ProfileSkin(mode = "gradient", primaryColor = "#FFD54F", secondaryColor = "#FF8F00", colors = listOf("#FFD54F", "#FF8F00"), gradientStops = 2)
-                            "aura_shimmer" -> ProfileSkin(mode = "gradient", primaryColor = "#E040FB", secondaryColor = "#651FFF", colors = listOf("#E040FB", "#651FFF"), gradientStops = 2)
-                            "ruby_velvet" -> ProfileSkin(mode = "gradient", primaryColor = "#FF5252", secondaryColor = "#C62828", colors = listOf("#FF5252", "#C62828"), gradientStops = 2)
-                            else -> null
-                        }
-                    } else null
-                    
-                    val badgeObj = if (hasSkinAccess && selectedBadgeColor != "none") {
-                        val colorUrl = when (selectedBadgeColor) {
-                            "gold" -> "https://noveo.ir/badges/star_gold.png"
-                            "cyan" -> "https://noveo.ir/badges/star_cyan.png"
-                            "purple" -> "https://noveo.ir/badges/star_purple.png"
-                            else -> ""
-                        }
-                        PremiumStarIcon(url = colorUrl, type = "image", source = "template", templateId = selectedBadgeColor)
-                    } else null
-                    
-                    onUpdateProfile(
-                        username.trim(),
-                        bio.trim(),
-                        cleanHandle.takeIf { it.isNotBlank() },
-                        selectedFont.takeIf { it.isNotBlank() },
-                        skinObj,
-                        badgeObj
+            
+            item {
+                Button(
+                    onClick = {
+                        val cleanHandle = handle.trim().removePrefix("@")
+                        val skinObj = if (hasSkinAccess && skinMode.isNotBlank()) {
+                            if (skinMode == "solid") {
+                                ProfileSkin(mode = "solid", color = skinPrimary)
+                            } else {
+                                val colors = mutableListOf(skinPrimary, skinSecondary)
+                                if (skinStops == 3) colors.add(skinTertiary)
+                                ProfileSkin(mode = "gradient", primaryColor = skinPrimary, secondaryColor = skinSecondary, tertiaryColor = if (skinStops == 3) skinTertiary else "", colors = colors, gradientStops = skinStops)
+                            }
+                        } else null
+                        
+                        val badgeObj = if (hasSkinAccess && selectedBadgeColor != "none") {
+                            val colorUrl = when (selectedBadgeColor) {
+                                "gold" -> "https://noveo.ir/badges/star_gold.png"
+                                "cyan" -> "https://noveo.ir/badges/star_cyan.png"
+                                "purple" -> "https://noveo.ir/badges/star_purple.png"
+                                else -> ""
+                            }
+                            PremiumStarIcon(url = colorUrl, type = "image", source = "template", templateId = selectedBadgeColor)
+                        } else null
+                        
+                        onUpdateProfile(
+                            username.trim(),
+                            bio.trim(),
+                            cleanHandle.takeIf { it.isNotBlank() },
+                            selectedFont.takeIf { it.isNotBlank() },
+                            skinObj,
+                            badgeObj
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(strings.saveChanges, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // Owned Groups & Channels List Section
+            val ownedChats = chats.filter { (it.chatType == "group" || it.chatType == "channel") && it.ownerId == sessionUserId }
+            if (ownedChats.isNotEmpty()) {
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    Text(
+                        text = if (isFa) "مدیریت گروه‌ها و کانال‌ها" else "Manage Groups & Channels",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(strings.saveChanges, fontWeight = FontWeight.Bold)
+                }
+
+                ownedChats.forEach { chat ->
+                    item {
+                        Card(
+                            onClick = { activeEditChat = chat },
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    ProfileCircle(name = chat.title, imageUrl = chat.avatarUrl, size = 36.dp)
+                                    Column {
+                                        Text(chat.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            chat.handle ?: (if (chat.chatType == "group") "Group" else "Channel"),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    imageVector = Icons.Outlined.ArrowForward,
+                                    contentDescription = "Edit",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

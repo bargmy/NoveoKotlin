@@ -105,7 +105,9 @@ data class AppUiState(
     val animatedEmojiTgsEnabled: Boolean = true,
     val isSendingMessage: Boolean = false,
     val messagesByChat: Map<String, List<ChatMessage>> = emptyMap(),
-    val e2eeSessions: Map<String, E2EESessionSnapshot> = emptyMap()
+    val e2eeSessions: Map<String, E2EESessionSnapshot> = emptyMap(),
+    val receiptUploadProgress: Float? = null,
+    val receiptUploadStatusLog: String? = null
 )
 
 data class AttachmentDownloadState(
@@ -2139,14 +2141,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             runCatching {
-                _uiState.value = _uiState.value.copy(loading = true, error = null)
+                _uiState.value = _uiState.value.copy(
+                    loading = true,
+                    error = null,
+                    receiptUploadProgress = 0f,
+                    receiptUploadStatusLog = "Reading receipt file..."
+                )
                 withContext(Dispatchers.IO) {
-                    api.submitPaymentRequest(session, tier, receiptBytes, fileName)
+                    api.submitPaymentRequest(session, tier, receiptBytes, fileName) { progress ->
+                        _uiState.value = _uiState.value.copy(
+                            receiptUploadProgress = progress,
+                            receiptUploadStatusLog = "Uploading: ${(progress * 100).toInt()}%"
+                        )
+                    }
                 }
+                _uiState.value = _uiState.value.copy(
+                    receiptUploadProgress = 1f,
+                    receiptUploadStatusLog = "Receipt uploaded successfully! Awaiting admin review."
+                )
+                kotlinx.coroutines.delay(2000)
                 loadHome(session)
-                _uiState.value = _uiState.value.copy(loading = false)
+                fetchUserProfile(session.userId)
+                _uiState.value = _uiState.value.copy(
+                    loading = false,
+                    receiptUploadProgress = null,
+                    receiptUploadStatusLog = null
+                )
             }.onFailure {
-                _uiState.value = _uiState.value.copy(loading = false, error = it.message ?: "Failed to submit subscription payment request")
+                _uiState.value = _uiState.value.copy(
+                    loading = false,
+                    receiptUploadProgress = null,
+                    receiptUploadStatusLog = "Upload failed: ${it.message ?: "Unknown error"}",
+                    error = it.message ?: "Failed to submit subscription payment request"
+                )
             }
         }
     }
@@ -2160,9 +2187,66 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     api.cancelSubscription(session)
                 }
                 loadHome(session)
+                fetchUserProfile(session.userId)
                 _uiState.value = _uiState.value.copy(loading = false)
             }.onFailure {
                 _uiState.value = _uiState.value.copy(loading = false, error = it.message ?: "Failed to cancel subscription")
+            }
+        }
+    }
+
+    fun updateChatProfile(chatId: String, chatName: String, bio: String) {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            runCatching {
+                _uiState.value = _uiState.value.copy(loading = true, error = null)
+                withContext(Dispatchers.IO) {
+                    api.updateChatProfile(session, chatId, chatName, bio)
+                }
+                // Silently reload home list so that the chat is updated
+                refreshHomeSilently()
+                _uiState.value = _uiState.value.copy(loading = false)
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(loading = false, error = it.message ?: "Failed to update chat profile")
+            }
+        }
+    }
+
+    fun updateChatHandle(chatId: String, handle: String?) {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            runCatching {
+                _uiState.value = _uiState.value.copy(loading = true, error = null)
+                withContext(Dispatchers.IO) {
+                    api.updateChatHandle(session, chatId, handle)
+                }
+                // Silently reload home list so that the chat handle is updated
+                refreshHomeSilently()
+                _uiState.value = _uiState.value.copy(loading = false)
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(loading = false, error = it.message ?: "Failed to update chat handle")
+            }
+        }
+    }
+
+    fun contactPaymentAdmin() {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            runCatching {
+                _uiState.value = _uiState.value.copy(loading = true, error = null)
+                val (foundUsers, _) = withContext(Dispatchers.IO) { api.searchPublicUsers(session, "pcpapc172") }
+                val adminUser = foundUsers.firstOrNull { it.handle?.lowercase()?.removePrefix("@") == "pcpapc172" || it.username.lowercase() == "pcpapc172" }
+                if (adminUser != null) {
+                    _uiState.value = _uiState.value.copy(
+                        usersById = mergeUsersMaps(_uiState.value.usersById, mapOf(adminUser.id to adminUser))
+                    )
+                    openDirectChat(adminUser.id)
+                } else {
+                    _uiState.value = _uiState.value.copy(error = "Admin @pcpapc172 not found. Please search manually.")
+                }
+                _uiState.value = _uiState.value.copy(loading = false)
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(loading = false, error = it.message ?: "Failed to search for payment admin")
             }
         }
     }
