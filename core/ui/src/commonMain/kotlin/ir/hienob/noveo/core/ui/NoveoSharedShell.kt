@@ -68,7 +68,7 @@ enum class NoveoThemePreset {
     SUNSET_SHIMMER,
     CHERRY_RED,
     SNOWY_DAYDREAM,
-    RAINBOW_RAGEBAIT
+    LIQUID_ASS
 }
 
 
@@ -236,19 +236,20 @@ fun NoveoTheme(
             onError = Color.White,
             onErrorContainer = Color(0xFF7F1D1D)
         )
-        NoveoThemePreset.RAINBOW_RAGEBAIT -> darkColorScheme(
-            primary = Color(0xFFFF4FD8),
+
+        NoveoThemePreset.LIQUID_ASS -> darkColorScheme(
+            primary = Color(0xFF00E5FF),
             onPrimary = Color.Black,
-            primaryContainer = Color(0xFF331D52),
-            onPrimaryContainer = Color(0xFFFDF4FF),
-            secondary = Color(0xFFD8B4FE),
-            onSecondary = Color(0xFF3B0764),
-            background = Color(0xFF020617),
-            surface = Color(0xFF0F172A),
-            surfaceVariant = Color(0xFF1E293B),
-            onSurface = Color(0xFFF8FAFC),
+            primaryContainer = Color(0x3300E5FF),
+            onPrimaryContainer = Color(0xFFE0F7FA),
+            secondary = Color(0xFF80DEEA),
+            onSecondary = Color.Black,
+            background = Color(0xFF030712),
+            surface = Color(0x1AFFFFFF),
+            surfaceVariant = Color(0x0DFFFFFF),
+            onSurface = Color(0xFFE0F7FA),
             onSurfaceVariant = Color(0xFFCBD5E1),
-            outline = Color(0xFF334155)
+            outline = Color(0x33FFFFFF)
         )
     }
     MaterialTheme(colorScheme = colorScheme, content = content)

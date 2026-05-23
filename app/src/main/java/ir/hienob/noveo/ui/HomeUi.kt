@@ -502,7 +502,9 @@ internal fun HomeScreen(
     onLogout: () -> Unit,
     onAttachFile: (android.net.Uri) -> Unit,
     onRemoveAttachment: () -> Unit,
-    onUpdateProfile: (String, String) -> Unit,
+    onUpdateProfile: (String, String, String?, String?, ProfileSkin?, PremiumStarIcon?) -> Unit,
+    onSubmitPaymentRequest: (String, ByteArray, String) -> Unit,
+    onCancelSubscription: () -> Unit,
     onFetchUserProfile: (String) -> Unit,
     onLoadOlder: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
@@ -1251,6 +1253,8 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 currentTheme = currentTheme,
                 onThemeChange = onThemeChange,
                 onUpdateProfile = onUpdateProfile,
+                onSubmitPaymentRequest = onSubmitPaymentRequest,
+                onCancelSubscription = onCancelSubscription,
                 onChangePassword = onChangePassword,
                 onDeleteAccount = onDeleteAccount,
                 onSetLanguage = onSetLanguage,
@@ -4493,7 +4497,9 @@ private fun SettingsModal(
     onLogout: () -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
-    onUpdateProfile: (String, String) -> Unit,
+    onUpdateProfile: (String, String, String?, String?, ProfileSkin?, PremiumStarIcon?) -> Unit,
+    onSubmitPaymentRequest: (String, ByteArray, String) -> Unit,
+    onCancelSubscription: () -> Unit,
     onChangePassword: (String, String) -> Unit,
     onDeleteAccount: (String) -> Unit,
     onSetLanguage: (String) -> Unit,
@@ -4528,14 +4534,479 @@ private fun SettingsModal(
             Crossfade(targetState = section, label = "settings_section") { current ->
                 when (current) {
                     SettingsSection.MENU -> SettingsMenu(strings, onSectionChange)
-                    SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings)
-                    SettingsSection.PROFILE -> SettingsProfileSection(strings, me, onUpdateProfile)
+                    SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings, me, onSubmitPaymentRequest, onCancelSubscription)
+                    SettingsSection.PROFILE -> SettingsProfileSection(strings, me, onUpdateProfile, onSectionChange)
                     SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
                     SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, currentTheme, onThemeChange, onRequestBatteryOptimization)
                     SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
                     SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings, onRequestPermission)
                 }
             } // Build fix pass 2
+        }
+    }
+}
+
+@Composable
+private fun SettingsSubscriptionSection(
+    strings: NoveoStrings,
+    me: UserSummary?,
+    onSubmitPaymentRequest: (String, ByteArray, String) -> Unit,
+    onCancelSubscription: () -> Unit
+) {
+    val context = LocalContext.current
+    var selectedTier by remember { mutableStateOf("premium") }
+    var uploadError by remember { mutableStateOf<String?>(null) }
+    
+    val fileLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bytes = inputStream?.readBytes()
+                inputStream?.close()
+                if (bytes != null) {
+                    val fileName = "receipt_${System.currentTimeMillis()}.jpg"
+                    onSubmitPaymentRequest(selectedTier, bytes, fileName)
+                    uploadError = null
+                } else {
+                    uploadError = "Unable to read selected receipt image file."
+                }
+            }.onFailure {
+                uploadError = it.message ?: "Failed to read file."
+            }
+        }
+    }
+    
+    val currentTier = me?.membershipTier?.lowercase() ?: ""
+    val isPremium = currentTier == "premium"
+    val isSilver = currentTier == "silver"
+    
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Current Status",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = when (currentTier) {
+                            "premium" -> "Noveo Premium Active 🌟"
+                            "silver" -> "Noveo Silver Active 🥈"
+                            else -> "Noveo Free 🥉"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    
+                    if (isPremium || isSilver) {
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = onCancelSubscription,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().height(42.dp)
+                        ) {
+                            Text("Cancel Active Subscription", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (!isPremium) {
+            item {
+                Text(
+                    text = "Select a Plan",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            item {
+                val isSelected = selectedTier == "silver"
+                Card(
+                    onClick = { if (!isSilver) selectedTier = "silver" },
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    ),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surface
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Noveo Silver 🥈", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("35,000 Tomans / mo", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "• Access gorgeous premium fonts for your display name\n• Customize chat bubbles and messages",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            
+            item {
+                val isSelected = selectedTier == "premium" || selectedTier == "premium_upgrade"
+                val actualTier = if (isSilver) "premium_upgrade" else "premium"
+                Card(
+                    onClick = { selectedTier = actualTier },
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    ),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surface
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Noveo Premium 🌟", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (isSilver) "15,000 Tomans (Upgrade)" else "50,000 Tomans / mo",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "• Full profile skin gradient customization\n• Translucent glowing presets (Liquid Ass & more)\n• Exquisite name fonts and premium custom badges",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            
+            item {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = { fileLauncher.launch("image/*") },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text("Upload Receipt Photo to Pay", fontWeight = FontWeight.Bold)
+                    }
+                    
+                    uploadError?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsProfileSection(
+    strings: NoveoStrings,
+    me: UserSummary?,
+    onUpdateProfile: (String, String, String?, String?, ProfileSkin?, PremiumStarIcon?) -> Unit,
+    onSectionChange: (SettingsSection) -> Unit
+) {
+    var username by remember(me) { mutableStateOf(me?.username ?: "") }
+    var bio by remember(me) { mutableStateOf(me?.bio ?: "") }
+    var handle by remember(me) { mutableStateOf(me?.handle?.replace(Regex("^@"), "") ?: "") }
+    
+    val tier = me?.membershipTier?.lowercase() ?: ""
+    val hasFontAccess = tier == "premium" || tier == "silver"
+    val hasSkinAccess = tier == "premium"
+    
+    var selectedFont by remember(me) { mutableStateOf(me?.nicknameFont ?: "") }
+    var selectedSkinPreset by remember(me) { mutableStateOf("default") }
+    var selectedBadgeColor by remember(me) { mutableStateOf("none") }
+    
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            ProfileCircle(name = username.ifBlank { "Me" }, imageUrl = me?.avatarUrl, size = 90.dp)
+        }
+        
+        item {
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text(strings.displayName) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
+        
+        item {
+            OutlinedTextField(
+                value = bio,
+                onValueChange = { bio = it },
+                label = { Text(strings.bio) },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+                maxLines = 3,
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
+        
+        item {
+            OutlinedTextField(
+                value = handle,
+                onValueChange = { handle = it.trim().removePrefix("@") },
+                label = { Text("Public Handle") },
+                leadingIcon = {
+                    Text(
+                        text = "@",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
+        
+        if (hasFontAccess) {
+            item {
+                Text(
+                    text = "Nickname Font",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
+            }
+            
+            item {
+                val fonts = listOf("default", "impact", "italic", "mono", "script")
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    fonts.forEach { font ->
+                        val isSelected = selectedFont == font || (font == "default" && selectedFont.isBlank())
+                        Card(
+                            onClick = { selectedFont = if (font == "default") "" else font },
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(modifier = Modifier.padding(8.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = font.replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (hasSkinAccess) {
+            item {
+                Text(
+                    text = "Premium Profile Skin",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
+            }
+            
+            item {
+                val skinPresets = listOf("default", "liquid_glass", "golden_glow", "aura_shimmer", "ruby_velvet")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    skinPresets.chunked(3).forEach { chunk ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            chunk.forEach { preset ->
+                                val isSelected = selectedSkinPreset == preset
+                                Card(
+                                    onClick = { selectedSkinPreset = preset },
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(modifier = Modifier.padding(8.dp), contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = preset.replace("_", " ").replaceFirstChar { it.uppercase() },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            item {
+                Text(
+                    text = "Premium Star Badge Icon",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
+            }
+            
+            item {
+                val badges = listOf("none", "gold", "cyan", "purple")
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    badges.forEach { badge ->
+                        val isSelected = selectedBadgeColor == badge
+                        Card(
+                            onClick = { selectedBadgeColor = badge },
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(modifier = Modifier.padding(8.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = badge.replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (!hasFontAccess && !hasSkinAccess) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "Unlock Premium Customizations 👑",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "Get access to gorgeous name fonts, glowing profile skin gradient presets, and custom star badge icons.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Button(
+                            onClick = { onSectionChange(SettingsSection.SUBSCRIPTION) },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().height(36.dp)
+                        ) {
+                            Text("Upgrade Plan", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+        
+        item {
+            Button(
+                onClick = {
+                    val cleanHandle = handle.trim().removePrefix("@")
+                    val skinObj = if (hasSkinAccess && selectedSkinPreset != "default") {
+                        when (selectedSkinPreset) {
+                            "liquid_glass" -> ProfileSkin(mode = "gradient", primaryColor = "#00FFF0", secondaryColor = "#00838F", colors = listOf("#00FFF0", "#00838F"), gradientStops = 2)
+                            "golden_glow" -> ProfileSkin(mode = "gradient", primaryColor = "#FFD54F", secondaryColor = "#FF8F00", colors = listOf("#FFD54F", "#FF8F00"), gradientStops = 2)
+                            "aura_shimmer" -> ProfileSkin(mode = "gradient", primaryColor = "#E040FB", secondaryColor = "#651FFF", colors = listOf("#E040FB", "#651FFF"), gradientStops = 2)
+                            "ruby_velvet" -> ProfileSkin(mode = "gradient", primaryColor = "#FF5252", secondaryColor = "#C62828", colors = listOf("#FF5252", "#C62828"), gradientStops = 2)
+                            else -> null
+                        }
+                    } else null
+                    
+                    val badgeObj = if (hasSkinAccess && selectedBadgeColor != "none") {
+                        val colorUrl = when (selectedBadgeColor) {
+                            "gold" -> "https://noveo.ir/badges/star_gold.png"
+                            "cyan" -> "https://noveo.ir/badges/star_cyan.png"
+                            "purple" -> "https://noveo.ir/badges/star_purple.png"
+                            else -> ""
+                        }
+                        PremiumStarIcon(url = colorUrl, type = "image", source = "template", templateId = selectedBadgeColor)
+                    } else null
+                    
+                    onUpdateProfile(
+                        username.trim(),
+                        bio.trim(),
+                        cleanHandle.takeIf { it.isNotBlank() },
+                        selectedFont.takeIf { it.isNotBlank() },
+                        skinObj,
+                        badgeObj
+                    )
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(strings.saveChanges, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -4550,54 +5021,7 @@ private fun SettingsMenu(strings: NoveoStrings, onSectionChange: (SettingsSectio
     }
 }
 
-@Composable
-private fun SettingsSubscriptionSection(strings: NoveoStrings) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        DetailCard(title = strings.premiumTitle, body = strings.premiumBody)
-        DetailCard(title = strings.walletTitle, body = strings.walletBody)
-    }
-}
 
-@Composable
-private fun SettingsProfileSection(strings: NoveoStrings, me: UserSummary?, onUpdateProfile: (String, String) -> Unit) {
-    var username by remember(me) { mutableStateOf(me?.username ?: "") }
-    var bio by remember(me) { mutableStateOf(me?.bio ?: "") }
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        ProfileCircle(name = me?.username ?: "Me", imageUrl = me?.avatarUrl, size = 90.dp)
-        Spacer(Modifier.height(16.dp))
-        
-        OutlinedTextField(
-            value = username,
-            onValueChange = { username = it },
-            label = { Text(strings.displayName) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp)
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = bio,
-            onValueChange = { bio = it },
-            label = { Text(strings.bio) },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 2,
-            maxLines = 4,
-            shape = RoundedCornerShape(12.dp)
-        )
-        Spacer(Modifier.height(20.dp))
-        Button(
-            onClick = { onUpdateProfile(username, bio) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text(strings.saveChanges)
-        }
-    }
-}
 
 @Composable
 private fun SettingsAccountSection(strings: NoveoStrings, state: AppUiState, onLogout: () -> Unit, onChangePassword: (String, String) -> Unit, onDeleteAccount: (String) -> Unit) {
@@ -4896,7 +5320,7 @@ private fun SettingsThemeSection(strings: NoveoStrings, currentTheme: ThemePrese
             ThemeSection(
                 title = strings.themePremium,
                 subtitle = strings.themePremiumDesc,
-                presets = listOf(ThemePreset.SUNSET_SHIMMER, ThemePreset.CHERRY_RED, ThemePreset.RAINBOW_RAGEBAIT)
+                presets = listOf(ThemePreset.SUNSET_SHIMMER, ThemePreset.CHERRY_RED, ThemePreset.LIQUID_ASS)
             )
         )
 

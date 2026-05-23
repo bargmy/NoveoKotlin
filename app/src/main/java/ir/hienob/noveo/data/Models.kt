@@ -1,5 +1,8 @@
 package ir.hienob.noveo.data
 
+import org.json.JSONObject
+import org.json.JSONArray
+
 data class Session(
     val userId: String,
     val token: String,
@@ -304,3 +307,19 @@ fun stripMarkdown(text: String): String {
         // Trim extra whitespace
         .trim()
 }
+
+fun ProfileSkin.toJson(): JSONObject = JSONObject()
+    .put("mode", mode)
+    .put("primaryColor", primaryColor)
+    .put("secondaryColor", secondaryColor)
+    .put("tertiaryColor", tertiaryColor)
+    .put("gradientStops", gradientStops)
+    .put("colors", JSONArray().apply { colors.forEach(::put) })
+    .put("angle", angle)
+    .put("color", color)
+
+fun PremiumStarIcon.toJson(): JSONObject = JSONObject()
+    .put("url", url)
+    .put("type", type)
+    .put("source", source)
+    .put("templateId", templateId)

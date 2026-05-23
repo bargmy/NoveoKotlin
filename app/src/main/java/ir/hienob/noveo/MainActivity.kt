@@ -9,6 +9,8 @@ import androidx.compose.runtime.getValue
 import android.content.Intent
 import ir.hienob.noveo.app.AppViewModel
 import ir.hienob.noveo.ui.NoveoRoot
+import ir.hienob.noveo.data.ProfileSkin
+import ir.hienob.noveo.data.PremiumStarIcon
 
 import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
@@ -59,7 +61,9 @@ class MainActivity : ComponentActivity() {
                 onAuthSubmit = { h, p -> viewModel.authenticate(h, p) },
                 onOpenChat = viewModel::openChat,
                 onStartDirectChat = viewModel::openDirectChat,
-                onStartCreateChat = viewModel::startCreateChatCaptcha,
+                onStartCreateChat = { name, type, handle, bio ->
+                    viewModel.createChat(name, type, handle, bio)
+                },
                 onSearchPublic = viewModel::searchPublicDirectory,
                 onBackToChats = viewModel::backToChatList,
                 onSend = viewModel::sendMessage,
@@ -69,7 +73,11 @@ class MainActivity : ComponentActivity() {
                 onRemoveAttachment = viewModel::removeAttachment,
                 onCaptchaTokenReceived = viewModel::onCaptchaTokenReceived,
                 onCaptchaDismiss = viewModel::dismissCaptcha,
-                onUpdateProfile = { u, b -> viewModel.updateProfile(u, b) },
+                onUpdateProfile = { username, bio, handle, font, skin, badge ->
+                    viewModel.updateProfile(username, bio, handle, font, skin, badge)
+                },
+                onSubmitPaymentRequest = viewModel::submitPaymentRequest,
+                onCancelSubscription = viewModel::cancelSubscription,
                 onFetchUserProfile = viewModel::fetchUserProfile,
                 onLoadOlder = viewModel::loadOlderMessages,
                 onReply = viewModel::setReplyingTo,

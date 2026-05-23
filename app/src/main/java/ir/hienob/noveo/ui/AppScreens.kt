@@ -72,7 +72,7 @@ internal enum class ThemePreset(val label: String) {
     SUNSET_SHIMMER("Sunset Shimmer"),
     CHERRY_RED("Cherry Red"),
     SNOWY_DAYDREAM("Snowy Daydream"),
-    RAINBOW_RAGEBAIT("Rainbow Ragebait")
+    LIQUID_ASS("Liquid Ass")
 }
 
 private fun ThemePreset.toSharedTheme(): NoveoThemePreset = when (this) {
@@ -86,7 +86,7 @@ private fun ThemePreset.toSharedTheme(): NoveoThemePreset = when (this) {
     ThemePreset.SUNSET_SHIMMER -> NoveoThemePreset.SUNSET_SHIMMER
     ThemePreset.CHERRY_RED -> NoveoThemePreset.CHERRY_RED
     ThemePreset.SNOWY_DAYDREAM -> NoveoThemePreset.SNOWY_DAYDREAM
-    ThemePreset.RAINBOW_RAGEBAIT -> NoveoThemePreset.RAINBOW_RAGEBAIT
+    ThemePreset.LIQUID_ASS -> NoveoThemePreset.LIQUID_ASS
 }
 
 private val sunsetLightScheme = lightColorScheme(
@@ -193,19 +193,19 @@ private val snowyDaydreamScheme = lightColorScheme(
     onErrorContainer = Color(0xFF7F1D1D)
 )
 
-private val rainbowRagebaitScheme = darkColorScheme(
-    primary = Color(0xFFFF4FD8),
+private val liquidAssScheme = darkColorScheme(
+    primary = Color(0xFF00E5FF),
     onPrimary = Color.Black,
-    primaryContainer = Color(0xFF331D52),
-    onPrimaryContainer = Color(0xFFfdf4ff),
-    secondary = Color(0xFFD8B4FE),
-    onSecondary = Color(0xFF3b0764),
-    background = Color(0xFF020617),
-    surface = Color(0xFF0f172a),
-    surfaceVariant = Color(0xFF1e293b),
-    onSurface = Color(0xFFf8fafc),
-    onSurfaceVariant = Color(0xFFcbd5e1),
-    outline = Color(0xFF334155)
+    primaryContainer = Color(0x3300E5FF),
+    onPrimaryContainer = Color(0xFFE0F7FA),
+    secondary = Color(0xFF80DEEA),
+    onSecondary = Color.Black,
+    background = Color(0xFF030712),
+    surface = Color(0x1AFFFFFF),
+    surfaceVariant = Color(0x0DFFFFFF),
+    onSurface = Color(0xFFE0F7FA),
+    onSurfaceVariant = Color(0xFFCBD5E1),
+    outline = Color(0x33FFFFFF)
 )
 
 
@@ -292,7 +292,9 @@ fun NoveoRoot(
     onRemoveAttachment: () -> Unit,
     onCaptchaTokenReceived: (String) -> Unit,
     onCaptchaDismiss: () -> Unit,
-    onUpdateProfile: (String, String) -> Unit,
+    onUpdateProfile: (String, String, String?, String?, ProfileSkin?, PremiumStarIcon?) -> Unit,
+    onSubmitPaymentRequest: (String, ByteArray, String) -> Unit,
+    onCancelSubscription: () -> Unit,
     onFetchUserProfile: (String) -> Unit,
     onLoadOlder: () -> Unit,
     onReply: (ChatMessage?) -> Unit,
@@ -415,6 +417,8 @@ fun NoveoRoot(
                 onAttachFile = onAttachFile,
                 onRemoveAttachment = onRemoveAttachment,
                 onUpdateProfile = onUpdateProfile,
+                onSubmitPaymentRequest = onSubmitPaymentRequest,
+                onCancelSubscription = onCancelSubscription,
                 onFetchUserProfile = onFetchUserProfile,
                 onLoadOlder = onLoadOlder,
                 onReply = onReply,

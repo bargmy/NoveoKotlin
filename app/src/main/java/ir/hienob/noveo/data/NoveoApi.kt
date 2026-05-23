@@ -475,6 +475,48 @@ class NoveoApi(
         }
     }
 
+    fun submitPaymentRequest(session: Session, tier: String, receiptBytes: ByteArray, fileName: String) {
+        val url = "https://noveo.ir:8443/payment/request".toHttpUrl()
+        val requestBody = receiptBytes.toRequestBody("image/*".toMediaType())
+        val multipartBody = okhttp3.MultipartBody.Builder()
+            .setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart("tier", tier)
+            .addFormDataPart("receipt", fileName, requestBody)
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
+            .post(multipartBody)
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errBody = response.body?.string().orEmpty()
+                val serverErr = runCatching { JSONObject(errBody).getString("error") }.getOrNull()
+                error(serverErr ?: "Payment request failed (${response.code})")
+            }
+        }
+    }
+
+    fun cancelSubscription(session: Session) {
+        val url = "https://noveo.ir:8443/subscription/cancel".toHttpUrl()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
+            .post("".toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errBody = response.body?.string().orEmpty()
+                val serverErr = runCatching { JSONObject(errBody).getString("error") }.getOrNull()
+                error(serverErr ?: "Subscription cancellation failed (${response.code})")
+            }
+        }
+    }
+
     fun getUserProfile(session: Session, userId: String): UserSummary {
         val url = "https://noveo.ir:8443/user/profile".toHttpUrl().newBuilder()
             .addQueryParameter("userId", userId)

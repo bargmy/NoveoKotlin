@@ -2105,13 +2105,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun updateProfile(username: String, bio: String) {
+    fun updateProfile(
+        username: String,
+        bio: String,
+        handle: String? = null,
+        nicknameFont: String? = null,
+        profileSkin: ProfileSkin? = null,
+        premiumStarIcon: PremiumStarIcon? = null
+    ) {
         val payload = org.json.JSONObject()
             .put("type", "update_profile")
             .put("username", username)
             .put("bio", bio)
+        if (handle != null) {
+            payload.put("handle", handle)
+        }
+        if (nicknameFont != null) {
+            payload.put("nicknameFont", nicknameFont)
+        }
+        if (profileSkin != null) {
+            payload.put("profileSkin", profileSkin.toJson())
+        }
+        if (premiumStarIcon != null) {
+            payload.put("premiumStarIcon", premiumStarIcon.toJson())
+        }
         NoveoNotificationService.send(payload)
-        // Optimistic update or wait for sync? The server should broadcast a user update.
+    }
+
+    fun submitPaymentRequest(tier: String, receiptBytes: ByteArray, fileName: String) {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            runCatching {
+                _uiState.value = _uiState.value.copy(loading = true, error = null)
+                withContext(Dispatchers.IO) {
+                    api.submitPaymentRequest(session, tier, receiptBytes, fileName)
+                }
+                loadHome(session)
+                _uiState.value = _uiState.value.copy(loading = false)
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(loading = false, error = it.message ?: "Failed to submit subscription payment request")
+            }
+        }
+    }
+
+    fun cancelSubscription() {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            runCatching {
+                _uiState.value = _uiState.value.copy(loading = true, error = null)
+                withContext(Dispatchers.IO) {
+                    api.cancelSubscription(session)
+                }
+                loadHome(session)
+                _uiState.value = _uiState.value.copy(loading = false)
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(loading = false, error = it.message ?: "Failed to cancel subscription")
+            }
+        }
     }
 
     fun fetchUserProfile(userId: String) {
