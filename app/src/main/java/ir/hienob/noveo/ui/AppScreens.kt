@@ -73,8 +73,7 @@ internal enum class ThemePreset(val label: String) {
     OLED_DARK("OLED Dark"),
     SUNSET_SHIMMER("Sunset Shimmer"),
     CHERRY_RED("Cherry Red"),
-    SNOWY_DAYDREAM("Snowy Daydream"),
-    LIQUID_ASS("Liquid Ass")
+    SNOWY_DAYDREAM("Snowy Daydream")
 }
 
 private fun ThemePreset.toSharedTheme(): NoveoThemePreset = when (this) {
@@ -88,7 +87,6 @@ private fun ThemePreset.toSharedTheme(): NoveoThemePreset = when (this) {
     ThemePreset.SUNSET_SHIMMER -> NoveoThemePreset.SUNSET_SHIMMER
     ThemePreset.CHERRY_RED -> NoveoThemePreset.CHERRY_RED
     ThemePreset.SNOWY_DAYDREAM -> NoveoThemePreset.SNOWY_DAYDREAM
-    ThemePreset.LIQUID_ASS -> NoveoThemePreset.LIQUID_ASS
 }
 
 private val sunsetLightScheme = lightColorScheme(

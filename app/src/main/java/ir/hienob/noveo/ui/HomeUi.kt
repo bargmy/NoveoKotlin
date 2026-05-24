@@ -4977,11 +4977,26 @@ private fun SettingsProfileSection(
                 ) {
                     item {
                         // Profile card
+                        val skin = me?.profileSkin
+                        val bgModifier = if (skin != null) {
+                            if (skin.mode == "solid" && !skin.color.isNullOrBlank()) {
+                                Modifier.background(runCatching { Color(android.graphics.Color.parseColor(skin.color)) }.getOrDefault(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)))
+                            } else if (skin.mode == "gradient" && !skin.colors.isNullOrEmpty() && skin.colors.size >= 2) {
+                                val cList = skin.colors.mapNotNull { runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull() }
+                                if (cList.size >= 2) Modifier.background(Brush.linearGradient(cList))
+                                else Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                            } else {
+                                Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                            }
+                        } else {
+                            Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                        }
+
                         Card(
                             shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().then(bgModifier)
                         ) {
                             Column(
                                 modifier = Modifier.padding(20.dp),
@@ -4990,12 +5005,33 @@ private fun SettingsProfileSection(
                             ) {
                                 ProfileCircle(name = me?.username?.ifBlank { "Me" } ?: "Me", imageUrl = me?.avatarUrl, size = 80.dp)
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(
-                                        text = me?.username?.ifBlank { "—" } ?: "—",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
+                                    val nameFont = getNicknameFontFamily(me?.nicknameFont)
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(
+                                            text = me?.username?.ifBlank { "—" } ?: "—",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontFamily = nameFont
+                                        )
+                                        if (me?.premiumStarIcon != null) {
+                                            when {
+                                                me.premiumStarIcon.type == "image" && me.premiumStarIcon.url.isNotBlank() -> {
+                                                    AsyncImage(
+                                                        model = me.premiumStarIcon.url,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(24.dp)
+                                                    )
+                                                }
+                                                me.premiumStarIcon.type == "tgs" && me.premiumStarIcon.url.isNotBlank() -> {
+                                                    TgsSticker(url = me.premiumStarIcon.url, modifier = Modifier.size(24.dp))
+                                                }
+                                                else -> {
+                                                    Text("⭐", style = MaterialTheme.typography.titleLarge)
+                                                }
+                                            }
+                                        }
+                                    }
                                     if (!me?.handle.isNullOrBlank()) {
                                         Text(
                                             text = me?.handle ?: "",
@@ -5102,122 +5138,31 @@ private fun SettingsProfileSection(
             AlertDialog(
                 onDismissRequest = { showStarPicker = false },
                 title = {
-                    Column {
-                        Text(if (isFaLocal) "نشان ستاره پریمیوم" else "Premium Star Badge", fontWeight = FontWeight.ExtraBold)
-                        Spacer(Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("templates" to (if (isFaLocal) "الگو" else "Templates"), "tgs" to (if (isFaLocal) "استیکر" else "TGS Stars"), "stickers" to (if (isFaLocal) "استیکرهای من" else "My Stickers")).forEach { (tab, label) ->
-                                val isActive = starPickerTab == tab
-                                Surface(
-                                    onClick = { starPickerTab = tab },
-                                    shape = RoundedCornerShape(50),
-                                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                                ) {
-                                    Text(
-                                        text = label,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    Text(if (isFaLocal) "نشان ستاره پریمیوم" else "Premium Star Badge", fontWeight = FontWeight.ExtraBold)
                 },
                 text = {
-                    when (starPickerTab) {
-                        "templates" -> {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                // None option
-                                val noneSelected = selectedBadgeTemplateId == "none" && selectedBadgeTgsUrl.isBlank()
-                                Card(
-                                    onClick = { selectedBadgeTemplateId = "none"; selectedBadgeTgsUrl = "" },
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(if (noneSelected) 2.dp else 1.dp, if (noneSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
-                                    colors = CardDefaults.cardColors(containerColor = if (noneSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(if (isFaLocal) "بدون نشان" else "No badge", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
-                                }
-                                listOf("gold" to "⭐ Gold Star", "cyan" to "🔵 Cyan Star", "purple" to "💜 Purple Star").forEach { (tId, label) ->
-                                    val isSel = selectedBadgeTemplateId == tId && selectedBadgeTgsUrl.isBlank()
-                                    Card(
-                                        onClick = { selectedBadgeTemplateId = tId; selectedBadgeTgsUrl = "" },
-                                        shape = RoundedCornerShape(12.dp),
-                                        border = BorderStroke(if (isSel) 2.dp else 1.dp, if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
-                                        colors = CardDefaults.cardColors(containerColor = if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(label, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
-                                    }
-                                }
-                            }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // None option
+                        val noneSelected = selectedBadgeTemplateId == "none"
+                        Card(
+                            onClick = { selectedBadgeTemplateId = "none"; selectedBadgeTgsUrl = "" },
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(if (noneSelected) 2.dp else 1.dp, if (noneSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                            colors = CardDefaults.cardColors(containerColor = if (noneSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (isFaLocal) "بدون نشان" else "No badge", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
                         }
-                        "tgs" -> {
-                            LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
-                                val rows = defaultTgsStars.chunked(4)
-                                items(rows) { row ->
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                                        row.forEach { tgsUrl ->
-                                            val isSel = selectedBadgeTgsUrl == tgsUrl
-                                            Box(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .aspectRatio(1f)
-                                                    .background(
-                                                        if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                                        RoundedCornerShape(10.dp)
-                                                    )
-                                                    .border(if (isSel) 2.dp else 0.dp, if (isSel) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(10.dp))
-                                                    .clickable { selectedBadgeTgsUrl = tgsUrl; selectedBadgeTemplateId = "none" },
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                TgsSticker(url = tgsUrl, modifier = Modifier.size(44.dp))
-                                            }
-                                        }
-                                        // fill remaining slots
-                                        repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
-                                    }
-                                }
-                            }
-                        }
-                        else -> {
-                            // My saved stickers
-                            if (savedStickers.isEmpty()) {
-                                Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                                    Text(if (isFaLocal) "استیکری ذخیره نشده" else "No saved stickers yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            } else {
-                                LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
-                                    val rows = savedStickers.chunked(4)
-                                    items(rows) { row ->
-                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                                            row.forEach { sticker ->
-                                                val isSel = selectedBadgeTgsUrl == sticker.url
-                                                Box(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .aspectRatio(1f)
-                                                        .background(
-                                                            if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                                            RoundedCornerShape(10.dp)
-                                                        )
-                                                        .border(if (isSel) 2.dp else 0.dp, if (isSel) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(10.dp))
-                                                        .clickable { selectedBadgeTgsUrl = sticker.url; selectedBadgeTemplateId = "none" },
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    if (sticker.type == "tgs" || sticker.url.endsWith(".tgs")) {
-                                                        TgsSticker(url = sticker.url, modifier = Modifier.size(44.dp))
-                                                    } else {
-                                                        ProfileCircle(name = "S", imageUrl = sticker.url, size = 44.dp)
-                                                    }
-                                                }
-                                            }
-                                            repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
-                                        }
-                                    }
-                                }
+                        listOf("gold" to "⭐ Gold Star", "cyan" to "🔵 Cyan Star", "purple" to "💜 Purple Star").forEach { (tId, label) ->
+                            val isSel = selectedBadgeTemplateId == tId
+                            Card(
+                                onClick = { selectedBadgeTemplateId = tId; selectedBadgeTgsUrl = "" },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(if (isSel) 2.dp else 1.dp, if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                                colors = CardDefaults.cardColors(containerColor = if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(label, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
                     }
@@ -5585,7 +5530,6 @@ private fun SettingsProfileSection(
                             // Preview of selected badge
                             Box(modifier = Modifier.size(42.dp), contentAlignment = Alignment.Center) {
                                 when {
-                                    selectedBadgeTgsUrl.isNotBlank() -> TgsSticker(url = selectedBadgeTgsUrl, modifier = Modifier.size(40.dp))
                                     selectedBadgeTemplateId == "gold" -> Text("⭐", style = MaterialTheme.typography.headlineSmall)
                                     selectedBadgeTemplateId == "cyan" -> Text("🔵", style = MaterialTheme.typography.headlineSmall)
                                     selectedBadgeTemplateId == "purple" -> Text("💜", style = MaterialTheme.typography.headlineSmall)
@@ -5595,7 +5539,6 @@ private fun SettingsProfileSection(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = when {
-                                        selectedBadgeTgsUrl.isNotBlank() -> if (isFaLocal) "استیکر سفارشی انتخاب شد" else "Custom sticker selected"
                                         selectedBadgeTemplateId == "gold" -> if (isFaLocal) "ستاره طلایی" else "Gold Star"
                                         selectedBadgeTemplateId == "cyan" -> if (isFaLocal) "ستاره فیروزه‌ای" else "Cyan Star"
                                         selectedBadgeTemplateId == "purple" -> if (isFaLocal) "ستاره بنفش" else "Purple Star"
@@ -5663,7 +5606,6 @@ private fun SettingsProfileSection(
                         } else null
                         val badgeObj = if (hasSkinAccess) {
                             when {
-                                selectedBadgeTgsUrl.isNotBlank() -> PremiumStarIcon(url = selectedBadgeTgsUrl, type = "tgs", source = "sticker", templateId = null)
                                 selectedBadgeTemplateId != "none" && selectedBadgeTemplateId.isNotBlank() -> {
                                     val colorUrl = when (selectedBadgeTemplateId) {
                                         "gold" -> "https://noveo.ir/badges/star_gold.png"
@@ -6047,9 +5989,9 @@ private fun SettingsThemeSection(strings: NoveoStrings, currentTheme: ThemePrese
                 presets = listOf(ThemePreset.DARK, ThemePreset.OCEAN_DARK, ThemePreset.PLUM_DARK, ThemePreset.OLED_DARK)
             ),
             ThemeSection(
-                title = strings.themePremium,
-                subtitle = strings.themePremiumDesc,
-                presets = listOf(ThemePreset.SUNSET_SHIMMER, ThemePreset.CHERRY_RED, ThemePreset.LIQUID_ASS)
+                title = if (strings.languageCode == "fa") "تم‌های دیگر" else "Other Themes",
+                subtitle = if (strings.languageCode == "fa") "تم‌های رنگارنگ" else "Colorful themes",
+                presets = listOf(ThemePreset.SUNSET_SHIMMER, ThemePreset.CHERRY_RED)
             )
         )
 
