@@ -557,7 +557,7 @@ class NoveoApi(
             .header("X-User-ID", session.userId)
             .header("X-Auth-Token", session.token)
             .noveoClientHeaders()
-            .post(body.toRequestBody("application/json".toMediaType()))
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
             .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
