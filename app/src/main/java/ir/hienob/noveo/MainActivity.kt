@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
             NoveoRoot(
                 state = state,
                 onDismissOnboarding = viewModel::dismissOnboarding,
+                onDismissError = viewModel::dismissError,
                 onAuthMode = viewModel::setAuthMode,
                 onStartRegisterCaptcha = viewModel::startRegisterCaptcha,
                 onAuthSubmit = { h, p -> viewModel.authenticate(h, p) },

@@ -2271,6 +2271,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun dismissError() {
+        _uiState.value = _uiState.value.copy(error = null)
+    }
+
     fun changePassword(old: String, new: String) {
         val payload = org.json.JSONObject()
             .put("type", "change_password")

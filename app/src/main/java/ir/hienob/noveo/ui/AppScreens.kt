@@ -279,6 +279,7 @@ private val darkScheme = darkColorScheme(
 fun NoveoRoot(
     state: AppUiState,
     onDismissOnboarding: () -> Unit,
+    onDismissError: () -> Unit,
     onAuthMode: (Boolean) -> Unit,
     onStartRegisterCaptcha: (String, String) -> Unit,
     onAuthSubmit: (String, String) -> Unit,
@@ -472,7 +473,8 @@ fun NoveoRoot(
                 onConnectE2EE = onConnectE2EE,
                 onEndE2EE = onEndE2EE,
                 currentTheme = currentTheme,
-                onThemeChange = { currentTheme = it }
+                onThemeChange = { currentTheme = it },
+                onDismissError = onDismissError
             )
         }
     )

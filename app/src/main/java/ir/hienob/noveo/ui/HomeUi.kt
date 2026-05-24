@@ -111,6 +111,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -554,7 +555,8 @@ internal fun HomeScreen(
     onEndE2EE: () -> Unit,
     currentTheme: ThemePreset,
     onThemeChange: (ThemePreset) -> Unit,
-    onForwardConfirm: (ChatMessage, String) -> Unit = { _, _ -> }
+    onForwardConfirm: (ChatMessage, String) -> Unit = { _, _ -> },
+    onDismissError: () -> Unit = {}
 ) {
     val strings = getStrings(state.languageCode)
     val context = LocalContext.current
@@ -1246,13 +1248,13 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
     )
 }
 
-        ModalHost(visible = showSettingsModal, onDismiss = { showSettingsModal = false }) {
+        ModalHost(visible = showSettingsModal, onDismiss = { showSettingsModal = false; onDismissError() }) {
             SettingsModal(
                 state = state,
                 strings = strings,
                 section = settingsSection,
                 onSectionChange = { settingsSection = it },
-                onClose = { showSettingsModal = false },
+                onClose = { showSettingsModal = false; onDismissError() },
                 onLogout = onLogout,
                 currentTheme = currentTheme,
                 onThemeChange = onThemeChange,
@@ -1270,7 +1272,8 @@ ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
                 onSetDoubleTapReaction = onSetDoubleTapReaction,
                 onUpdateNotificationSettings = onUpdateNotificationSettings,
                 onRequestBatteryOptimization = onRequestBatteryOptimization,
-                onRequestPermission = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                onRequestPermission = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                onDismissError = onDismissError
             )
         }
 
@@ -4518,7 +4521,8 @@ private fun SettingsModal(
     onSetDoubleTapReaction: (String) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
-    onRequestPermission: () -> Unit
+    onRequestPermission: () -> Unit,
+    onDismissError: () -> Unit = {}
 ) {
     val me = state.session?.userId?.let { state.usersById[it] }
     Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
@@ -4541,17 +4545,59 @@ private fun SettingsModal(
                     else -> ({ onSectionChange(SettingsSection.MENU) })
                 }
             )
-            Crossfade(targetState = section, label = "settings_section") { current ->
-                when (current) {
-                    SettingsSection.MENU -> SettingsMenu(strings, onSectionChange)
-                    SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings, me, state.receiptUploadProgress, state.receiptUploadStatusLog, onSubmitPaymentRequest, onCancelSubscription, onContactAdmin)
-                    SettingsSection.PROFILE -> SettingsProfileSection(strings, me, state.chats, state.session?.userId, onUpdateProfile, onUpdateChatProfile, onUpdateChatHandle, onSectionChange)
-                    SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
-                    SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, currentTheme, onThemeChange, onRequestBatteryOptimization)
-                    SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
-                    SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings, onRequestPermission)
+            Box(modifier = Modifier.weight(1f)) {
+                Crossfade(targetState = section, label = "settings_section") { current ->
+                    when (current) {
+                        SettingsSection.MENU -> SettingsMenu(strings, onSectionChange)
+                        SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings, me, state.receiptUploadProgress, state.receiptUploadStatusLog, onSubmitPaymentRequest, onCancelSubscription, onContactAdmin)
+                        SettingsSection.PROFILE -> SettingsProfileSection(strings, me, state.savedStickers, state.chats, state.session?.userId, onUpdateProfile, onUpdateChatProfile, onUpdateChatHandle, onSectionChange)
+                        SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
+                        SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, currentTheme, onThemeChange, onRequestBatteryOptimization)
+                        SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
+                        SettingsSection.NOTIFICATIONS -> SettingsNotificationSection(state, strings, onUpdateNotificationSettings, onRequestPermission)
+                    }
                 }
-            } // Build fix pass 2
+            }
+            // WebSocket error banner — shows at the bottom of the settings modal
+            AnimatedVisibility(
+                visible = state.error != null,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut()
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = state.error ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = onDismissError, modifier = Modifier.size(28.dp)) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = "Dismiss",
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -4628,20 +4674,7 @@ private fun SettingsSubscriptionSection(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     
-                    if (isPremium || isSilver) {
-                        Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = onCancelSubscription,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer,
-                                contentColor = MaterialTheme.colorScheme.onErrorContainer
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().height(42.dp)
-                        ) {
-                            Text(if (isFa) "لغو اشتراک فعال" else "Cancel Active Subscription", fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    // Cancel subscription removed per product decision
                 }
             }
         }
@@ -4788,6 +4821,7 @@ private fun SettingsSubscriptionSection(
 private fun SettingsProfileSection(
     strings: NoveoStrings,
     me: UserSummary?,
+    savedStickers: List<SavedSticker>,
     chats: List<ChatSummary>,
     sessionUserId: String?,
     onUpdateProfile: (String, String, String?, String?, ProfileSkin?, PremiumStarIcon?) -> Unit,
@@ -4900,6 +4934,8 @@ private fun SettingsProfileSection(
             }
         }
     } else {
+        var isEditing by remember { mutableStateOf(false) }
+        
         var username by remember(me) { mutableStateOf(me?.username ?: "") }
         var bio by remember(me) { mutableStateOf(me?.bio ?: "") }
         var handle by remember(me) { mutableStateOf(me?.handle?.replace(Regex("^@"), "") ?: "") }
@@ -4917,19 +4953,318 @@ private fun SettingsProfileSection(
         var skinSecondary by remember(me) { mutableStateOf(initialSkin?.secondaryColor?.ifBlank { "#00838F" } ?: "#00838F") }
         var skinTertiary by remember(me) { mutableStateOf(initialSkin?.tertiaryColor?.ifBlank { "#00E5FF" } ?: "#00E5FF") }
         var skinStops by remember(me) { mutableStateOf(initialSkin?.gradientStops ?: 2) }
-        var selectedBadgeColor by remember(me) { mutableStateOf(me?.premiumStarIcon?.templateId ?: "none") }
-        
+        // Star badge: track selected template OR custom TGS url
+        var selectedBadgeTemplateId by remember(me) { mutableStateOf(me?.premiumStarIcon?.templateId ?: "none") }
+        var selectedBadgeTgsUrl by remember(me) { mutableStateOf(if (me?.premiumStarIcon?.type == "tgs") me.premiumStarIcon.url else "") }
+        // Star picker tab: "templates" | "tgs" | "stickers"
+        var starPickerTab by remember { mutableStateOf("templates") }
+        var showStarPicker by remember { mutableStateOf(false) }
+
+        // Default TGS star stickers from server (0001..0020)
+        val defaultTgsStars = remember {
+            (1..20).map { i -> "https://noveo.ir/emoji_tgs/%04d.tgs".format(i) }
+        }
+
+        val isFaLocal = strings.languageCode == "fa"
+
+        if (!isEditing) {
+            // ── VIEW MODE ──
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item {
+                        // Profile card
+                        Card(
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                ProfileCircle(name = me?.username?.ifBlank { "Me" } ?: "Me", imageUrl = me?.avatarUrl, size = 80.dp)
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = me?.username?.ifBlank { "—" } ?: "—",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (!me?.handle.isNullOrBlank()) {
+                                        Text(
+                                            text = me?.handle ?: "",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    if (me?.bio?.isNotBlank() == true) {
+                                        Text(
+                                            text = me.bio,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                    if (!tier.isNullOrBlank()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(50),
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                        ) {
+                                            Text(
+                                                text = when (tier) {
+                                                    "premium" -> "Noveo Premium 🌟"
+                                                    "silver" -> "Noveo Silver 🥈"
+                                                    else -> "Noveo Free"
+                                                },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Owned groups/channels
+                    val ownedChats = chats.filter { (it.chatType == "group" || it.chatType == "channel") && it.ownerId == sessionUserId }
+                    if (ownedChats.isNotEmpty()) {
+                        item {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                            Text(
+                                text = if (isFaLocal) "مدیریت گروه‌ها و کانال‌ها" else "Manage Groups & Channels",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        ownedChats.forEach { chat ->
+                            item {
+                                Card(
+                                    onClick = { activeEditChat = chat },
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            ProfileCircle(name = chat.title, imageUrl = chat.avatarUrl, size = 36.dp)
+                                            Column {
+                                                Text(chat.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                                Text(
+                                                    chat.handle ?: (if (chat.chatType == "group") "Group" else "Channel"),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                        Icon(imageVector = Icons.Outlined.ArrowForward, contentDescription = "Edit", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Pen/Edit FAB in top-right corner of the view panel
+                IconButton(
+                    onClick = { isEditing = true },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(40.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), shape = RoundedCornerShape(50))
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = if (isFaLocal) "ویرایش پروفایل" else "Edit Profile",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        } else {
+            // ── EDIT MODE ──
+
+        // Star Picker Dialog
+        if (showStarPicker) {
+            AlertDialog(
+                onDismissRequest = { showStarPicker = false },
+                title = {
+                    Column {
+                        Text(if (isFaLocal) "نشان ستاره پریمیوم" else "Premium Star Badge", fontWeight = FontWeight.ExtraBold)
+                        Spacer(Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("templates" to (if (isFaLocal) "الگو" else "Templates"), "tgs" to (if (isFaLocal) "استیکر" else "TGS Stars"), "stickers" to (if (isFaLocal) "استیکرهای من" else "My Stickers")).forEach { (tab, label) ->
+                                val isActive = starPickerTab == tab
+                                Surface(
+                                    onClick = { starPickerTab = tab },
+                                    shape = RoundedCornerShape(50),
+                                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                text = {
+                    when (starPickerTab) {
+                        "templates" -> {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                // None option
+                                val noneSelected = selectedBadgeTemplateId == "none" && selectedBadgeTgsUrl.isBlank()
+                                Card(
+                                    onClick = { selectedBadgeTemplateId = "none"; selectedBadgeTgsUrl = "" },
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(if (noneSelected) 2.dp else 1.dp, if (noneSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                                    colors = CardDefaults.cardColors(containerColor = if (noneSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(if (isFaLocal) "بدون نشان" else "No badge", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                                }
+                                listOf("gold" to "⭐ Gold Star", "cyan" to "🔵 Cyan Star", "purple" to "💜 Purple Star").forEach { (tId, label) ->
+                                    val isSel = selectedBadgeTemplateId == tId && selectedBadgeTgsUrl.isBlank()
+                                    Card(
+                                        onClick = { selectedBadgeTemplateId = tId; selectedBadgeTgsUrl = "" },
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = BorderStroke(if (isSel) 2.dp else 1.dp, if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                                        colors = CardDefaults.cardColors(containerColor = if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(label, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
+                                    }
+                                }
+                            }
+                        }
+                        "tgs" -> {
+                            LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                                val rows = defaultTgsStars.chunked(4)
+                                items(rows) { row ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                                        row.forEach { tgsUrl ->
+                                            val isSel = selectedBadgeTgsUrl == tgsUrl
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .aspectRatio(1f)
+                                                    .background(
+                                                        if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                                        RoundedCornerShape(10.dp)
+                                                    )
+                                                    .border(if (isSel) 2.dp else 0.dp, if (isSel) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(10.dp))
+                                                    .clickable { selectedBadgeTgsUrl = tgsUrl; selectedBadgeTemplateId = "none" },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                TgsSticker(url = tgsUrl, modifier = Modifier.size(44.dp))
+                                            }
+                                        }
+                                        // fill remaining slots
+                                        repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                                    }
+                                }
+                            }
+                        }
+                        else -> {
+                            // My saved stickers
+                            if (savedStickers.isEmpty()) {
+                                Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                                    Text(if (isFaLocal) "استیکری ذخیره نشده" else "No saved stickers yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            } else {
+                                LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                                    val rows = savedStickers.chunked(4)
+                                    items(rows) { row ->
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                                            row.forEach { sticker ->
+                                                val isSel = selectedBadgeTgsUrl == sticker.url
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .aspectRatio(1f)
+                                                        .background(
+                                                            if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                                            RoundedCornerShape(10.dp)
+                                                        )
+                                                        .border(if (isSel) 2.dp else 0.dp, if (isSel) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(10.dp))
+                                                        .clickable { selectedBadgeTgsUrl = sticker.url; selectedBadgeTemplateId = "none" },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    if (sticker.type == "tgs" || sticker.url.endsWith(".tgs")) {
+                                                        TgsSticker(url = sticker.url, modifier = Modifier.size(44.dp))
+                                                    } else {
+                                                        ProfileCircle(name = "S", imageUrl = sticker.url, size = 44.dp)
+                                                    }
+                                                }
+                                            }
+                                            repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { showStarPicker = false }) {
+                        Text(if (isFaLocal) "تایید" else "Done")
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = {
+                        selectedBadgeTemplateId = "none"; selectedBadgeTgsUrl = ""; showStarPicker = false
+                    }) {
+                        Text(if (isFaLocal) "پاک کردن" else "Clear")
+                    }
+                }
+            )
+        }
+
         val presetColors = listOf("#FF5252", "#FFA726", "#FFD54F", "#66BB6A", "#26C6DA", "#29B6F6", "#AB47BC", "#EC407A")
-        
+
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = if (isFaLocal) "ویرایش پروفایل" else "Edit Profile",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    OutlinedButton(
+                        onClick = { isEditing = false },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(34.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text(if (isFaLocal) "بازگشت" else "Cancel", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+            item {
                 ProfileCircle(name = username.ifBlank { "Me" }, imageUrl = me?.avatarUrl, size = 90.dp)
             }
-            
             item {
                 OutlinedTextField(
                     value = username,
@@ -4940,7 +5275,6 @@ private fun SettingsProfileSection(
                     shape = RoundedCornerShape(12.dp)
                 )
             }
-            
             item {
                 OutlinedTextField(
                     value = bio,
@@ -4952,7 +5286,6 @@ private fun SettingsProfileSection(
                     shape = RoundedCornerShape(12.dp)
                 )
             }
-            
             item {
                 OutlinedTextField(
                     value = handle,
@@ -4971,17 +5304,15 @@ private fun SettingsProfileSection(
                     shape = RoundedCornerShape(12.dp)
                 )
             }
-            
             if (hasFontAccess) {
                 item {
                     Text(
-                        text = if (isFa) "قلم نام مستعار" else "Nickname Font",
+                        text = if (isFaLocal) "قلم نام مستعار" else "Nickname Font",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                     )
                 }
-                
                 item {
                     val fontsMap = listOf(
                         "" to "Default",
@@ -5027,17 +5358,15 @@ private fun SettingsProfileSection(
                     }
                 }
             }
-            
             if (hasSkinAccess) {
                 item {
                     Text(
-                        text = if (isFa) "پوسته پروفایل پریمیوم" else "Premium Profile Skin",
+                        text = if (isFaLocal) "پوسته پروفایل پریمیوم" else "Premium Profile Skin",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                     )
                 }
-
                 item {
                     val modes = listOf("" to "Default", "solid" to "Static Color", "gradient" to "Gradient")
                     Row(
@@ -5069,7 +5398,6 @@ private fun SettingsProfileSection(
                         }
                     }
                 }
-
                 if (skinMode == "solid") {
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -5086,12 +5414,11 @@ private fun SettingsProfileSection(
                                 OutlinedTextField(
                                     value = skinPrimary,
                                     onValueChange = { skinPrimary = it },
-                                    label = { Text(if (isFa) "رنگ اصلی (Hex)" else "Primary Color (Hex)") },
+                                    label = { Text(if (isFaLocal) "رنگ اصلی (Hex)" else "Primary Color (Hex)") },
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier.weight(1f)
                                 )
                             }
-
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.fillMaxWidth()
@@ -5113,7 +5440,6 @@ private fun SettingsProfileSection(
                         }
                     }
                 }
-
                 if (skinMode == "gradient") {
                     item {
                         val stopsOptions = listOf(2 to "2 Colors", 3 to "3 Colors")
@@ -5146,10 +5472,8 @@ private fun SettingsProfileSection(
                             }
                         }
                     }
-
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            // Primary Color
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Box(
                                     modifier = Modifier
@@ -5177,8 +5501,6 @@ private fun SettingsProfileSection(
                                     )
                                 }
                             }
-
-                            // Secondary Color
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Box(
                                     modifier = Modifier
@@ -5206,8 +5528,6 @@ private fun SettingsProfileSection(
                                     )
                                 }
                             }
-
-                            // Optional Tertiary Color
                             if (skinStops == 3) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Box(
@@ -5240,49 +5560,61 @@ private fun SettingsProfileSection(
                         }
                     }
                 }
-
+                // ── Star Badge Picker ──
                 item {
                     Text(
-                        text = if (isFa) "نشان ستاره پریمیوم" else "Premium Star Badge Icon",
+                        text = if (isFaLocal) "نشان ستاره پریمیوم" else "Premium Star Badge Icon",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                     )
                 }
-                
                 item {
-                    val badges = listOf("none", "gold", "cyan", "purple")
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    Card(
+                        onClick = { showStarPicker = true },
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        badges.forEach { badge ->
-                            val isSelected = selectedBadgeColor == badge
-                            Card(
-                                onClick = { selectedBadgeColor = badge },
-                                shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-                                ),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(modifier = Modifier.padding(8.dp), contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = badge.replaceFirstChar { it.uppercase() },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                    )
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Preview of selected badge
+                            Box(modifier = Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+                                when {
+                                    selectedBadgeTgsUrl.isNotBlank() -> TgsSticker(url = selectedBadgeTgsUrl, modifier = Modifier.size(40.dp))
+                                    selectedBadgeTemplateId == "gold" -> Text("⭐", style = MaterialTheme.typography.headlineSmall)
+                                    selectedBadgeTemplateId == "cyan" -> Text("🔵", style = MaterialTheme.typography.headlineSmall)
+                                    selectedBadgeTemplateId == "purple" -> Text("💜", style = MaterialTheme.typography.headlineSmall)
+                                    else -> Icon(imageVector = Icons.Outlined.Star, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
                                 }
                             }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = when {
+                                        selectedBadgeTgsUrl.isNotBlank() -> if (isFaLocal) "استیکر سفارشی انتخاب شد" else "Custom sticker selected"
+                                        selectedBadgeTemplateId == "gold" -> if (isFaLocal) "ستاره طلایی" else "Gold Star"
+                                        selectedBadgeTemplateId == "cyan" -> if (isFaLocal) "ستاره فیروزه‌ای" else "Cyan Star"
+                                        selectedBadgeTemplateId == "purple" -> if (isFaLocal) "ستاره بنفش" else "Purple Star"
+                                        else -> if (isFaLocal) "بدون نشان" else "No badge"
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = if (isFaLocal) "برای تغییر ضربه بزنید" else "Tap to change",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(imageVector = Icons.Outlined.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
             }
-            
             if (!hasFontAccess && !hasSkinAccess) {
                 item {
                     Card(
@@ -5316,7 +5648,6 @@ private fun SettingsProfileSection(
                     }
                 }
             }
-            
             item {
                 Button(
                     onClick = {
@@ -5330,17 +5661,21 @@ private fun SettingsProfileSection(
                                 ProfileSkin(mode = "gradient", primaryColor = skinPrimary, secondaryColor = skinSecondary, tertiaryColor = if (skinStops == 3) skinTertiary else "", colors = colors, gradientStops = skinStops)
                             }
                         } else null
-                        
-                        val badgeObj = if (hasSkinAccess && selectedBadgeColor != "none") {
-                            val colorUrl = when (selectedBadgeColor) {
-                                "gold" -> "https://noveo.ir/badges/star_gold.png"
-                                "cyan" -> "https://noveo.ir/badges/star_cyan.png"
-                                "purple" -> "https://noveo.ir/badges/star_purple.png"
-                                else -> ""
+                        val badgeObj = if (hasSkinAccess) {
+                            when {
+                                selectedBadgeTgsUrl.isNotBlank() -> PremiumStarIcon(url = selectedBadgeTgsUrl, type = "tgs", source = "sticker", templateId = null)
+                                selectedBadgeTemplateId != "none" && selectedBadgeTemplateId.isNotBlank() -> {
+                                    val colorUrl = when (selectedBadgeTemplateId) {
+                                        "gold" -> "https://noveo.ir/badges/star_gold.png"
+                                        "cyan" -> "https://noveo.ir/badges/star_cyan.png"
+                                        "purple" -> "https://noveo.ir/badges/star_purple.png"
+                                        else -> ""
+                                    }
+                                    PremiumStarIcon(url = colorUrl, type = "image", source = "template", templateId = selectedBadgeTemplateId)
+                                }
+                                else -> null
                             }
-                            PremiumStarIcon(url = colorUrl, type = "image", source = "template", templateId = selectedBadgeColor)
                         } else null
-                        
                         onUpdateProfile(
                             username.trim(),
                             bio.trim(),
@@ -5349,6 +5684,7 @@ private fun SettingsProfileSection(
                             skinObj,
                             badgeObj
                         )
+                        isEditing = false
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp)
@@ -5356,21 +5692,19 @@ private fun SettingsProfileSection(
                     Text(strings.saveChanges, fontWeight = FontWeight.Bold)
                 }
             }
-
-            // Owned Groups & Channels List Section
-            val ownedChats = chats.filter { (it.chatType == "group" || it.chatType == "channel") && it.ownerId == sessionUserId }
-            if (ownedChats.isNotEmpty()) {
+            // Owned groups & channels
+            val ownedChatsEdit = chats.filter { (it.chatType == "group" || it.chatType == "channel") && it.ownerId == sessionUserId }
+            if (ownedChatsEdit.isNotEmpty()) {
                 item {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     Text(
-                        text = if (isFa) "مدیریت گروه‌ها و کانال‌ها" else "Manage Groups & Channels",
+                        text = if (isFaLocal) "مدیریت گروه‌ها و کانال‌ها" else "Manage Groups & Channels",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-
-                ownedChats.forEach { chat ->
+                ownedChatsEdit.forEach { chat ->
                     item {
                         Card(
                             onClick = { activeEditChat = chat },
@@ -5395,18 +5729,14 @@ private fun SettingsProfileSection(
                                         )
                                     }
                                 }
-                                Icon(
-                                    imageVector = Icons.Outlined.ArrowForward,
-                                    contentDescription = "Edit",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Icon(imageVector = Icons.Outlined.ArrowForward, contentDescription = "Edit", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
                 }
             }
         }
-    }
+        } // end else (isEditing)
 }
 
 @Composable
