@@ -5505,58 +5505,7 @@ private fun SettingsProfileSection(
                         }
                     }
                 }
-                // ── Star Badge Picker ──
-                item {
-                    Text(
-                        text = if (isFaLocal) "نشان ستاره پریمیوم" else "Premium Star Badge Icon",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                    )
-                }
-                item {
-                    Card(
-                        onClick = { showStarPicker = true },
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            // Preview of selected badge
-                            Box(modifier = Modifier.size(42.dp), contentAlignment = Alignment.Center) {
-                                when {
-                                    selectedBadgeTemplateId == "gold" -> Text("⭐", style = MaterialTheme.typography.headlineSmall)
-                                    selectedBadgeTemplateId == "cyan" -> Text("🔵", style = MaterialTheme.typography.headlineSmall)
-                                    selectedBadgeTemplateId == "purple" -> Text("💜", style = MaterialTheme.typography.headlineSmall)
-                                    else -> Icon(imageVector = Icons.Outlined.Star, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
-                                }
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = when {
-                                        selectedBadgeTemplateId == "gold" -> if (isFaLocal) "ستاره طلایی" else "Gold Star"
-                                        selectedBadgeTemplateId == "cyan" -> if (isFaLocal) "ستاره فیروزه‌ای" else "Cyan Star"
-                                        selectedBadgeTemplateId == "purple" -> if (isFaLocal) "ستاره بنفش" else "Purple Star"
-                                        else -> if (isFaLocal) "بدون نشان" else "No badge"
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = if (isFaLocal) "برای تغییر ضربه بزنید" else "Tap to change",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Icon(imageVector = Icons.Outlined.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                }
+
             }
             if (!hasFontAccess && !hasSkinAccess) {
                 item {
@@ -5685,6 +5634,7 @@ private fun SettingsProfileSection(
 @Composable
 private fun SettingsMenu(strings: NoveoStrings, onSectionChange: (SettingsSection) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SettingsRow(strings.subscription, Icons.Outlined.Star) { onSectionChange(SettingsSection.SUBSCRIPTION) }
         SettingsRow(strings.profile, Icons.Outlined.Person) { onSectionChange(SettingsSection.PROFILE) }
         SettingsRow(strings.account, Icons.Outlined.AccountCircle) { onSectionChange(SettingsSection.ACCOUNT) }
         SettingsRow(strings.preferences, Icons.Outlined.Settings) { onSectionChange(SettingsSection.PREFERENCES) }
