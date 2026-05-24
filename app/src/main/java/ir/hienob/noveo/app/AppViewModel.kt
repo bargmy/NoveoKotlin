@@ -2144,6 +2144,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         profileSkin: ProfileSkin? = null,
         premiumStarIcon: PremiumStarIcon? = null
     ) {
+        val session = _uiState.value.session
+        if (session != null) {
+            val currentMe = _uiState.value.usersById[session.userId]
+            if (currentMe != null) {
+                val updatedMe = currentMe.copy(
+                    username = username,
+                    bio = bio,
+                    handle = handle ?: currentMe.handle,
+                    nicknameFont = nicknameFont ?: currentMe.nicknameFont,
+                    profileSkin = profileSkin ?: currentMe.profileSkin,
+                    premiumStarIcon = premiumStarIcon ?: currentMe.premiumStarIcon
+                )
+                val updatedUsers = _uiState.value.usersById.toMutableMap()
+                updatedUsers[session.userId] = updatedMe
+                _uiState.value = _uiState.value.copy(usersById = updatedUsers)
+            }
+        }
+
         val payload = org.json.JSONObject()
             .put("type", "update_profile")
             .put("username", username)

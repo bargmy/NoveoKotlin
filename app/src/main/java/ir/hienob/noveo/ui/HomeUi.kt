@@ -1275,7 +1275,8 @@ internal fun HomeScreen(
                 onUpdateNotificationSettings = onUpdateNotificationSettings,
                 onRequestBatteryOptimization = onRequestBatteryOptimization,
                 onRequestPermission = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
-                onDismissError = onDismissError
+                onDismissError = onDismissError,
+                onFetchUserProfile = onFetchUserProfile
             )
         }
 
@@ -4527,35 +4528,63 @@ private fun SettingsModal(
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onRequestBatteryOptimization: () -> Unit,
     onRequestPermission: () -> Unit,
-    onDismissError: () -> Unit = {}
+    onDismissError: () -> Unit = {},
+    onFetchUserProfile: (String) -> Unit
 ) {
     val me = state.session?.userId?.let { state.usersById[it] }
+    var isProfileEditing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(section) {
+        if (section != SettingsSection.PROFILE) {
+            isProfileEditing = false
+        }
+    }
+
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-            ModalHeader(
-                title = when (section) {
-                    SettingsSection.MENU -> strings.settings
-                    SettingsSection.SUBSCRIPTION -> strings.subscription
-                    SettingsSection.PROFILE -> strings.profile
-                    SettingsSection.ACCOUNT -> strings.account
-                    SettingsSection.PREFERENCES -> strings.preferences
-                    SettingsSection.THEME -> strings.themes
-                    SettingsSection.NOTIFICATIONS -> strings.notificationSettings
-                },
-                onClose = onClose,
-                onBack = when (section) {
-                    SettingsSection.MENU -> null
-                    SettingsSection.THEME -> ({ onSectionChange(SettingsSection.PREFERENCES) })
-                    SettingsSection.NOTIFICATIONS -> ({ onSectionChange(SettingsSection.PREFERENCES) })
-                    else -> ({ onSectionChange(SettingsSection.MENU) })
-                }
-            )
+            if (section != SettingsSection.PROFILE || isProfileEditing) {
+                ModalHeader(
+                    title = when (section) {
+                        SettingsSection.MENU -> strings.settings
+                        SettingsSection.SUBSCRIPTION -> strings.subscription
+                        SettingsSection.PROFILE -> strings.profile
+                        SettingsSection.ACCOUNT -> strings.account
+                        SettingsSection.PREFERENCES -> strings.preferences
+                        SettingsSection.THEME -> strings.themes
+                        SettingsSection.NOTIFICATIONS -> strings.notificationSettings
+                    },
+                    onClose = onClose,
+                    onBack = when (section) {
+                        SettingsSection.MENU -> null
+                        SettingsSection.PROFILE -> ({ isProfileEditing = false })
+                        SettingsSection.THEME -> ({ onSectionChange(SettingsSection.PREFERENCES) })
+                        SettingsSection.NOTIFICATIONS -> ({ onSectionChange(SettingsSection.PREFERENCES) })
+                        else -> ({ onSectionChange(SettingsSection.MENU) })
+                    },
+                    showCloseOnLeft = (section == SettingsSection.MENU)
+                )
+            }
             Box(modifier = Modifier.weight(1f)) {
                 Crossfade(targetState = section, label = "settings_section") { current ->
                     when (current) {
                         SettingsSection.MENU -> SettingsMenu(strings, onSectionChange)
                         SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings, me, state.receiptUploadProgress, state.receiptUploadStatusLog, onSubmitPaymentRequest, onCancelSubscription, onContactAdmin)
-                        SettingsSection.PROFILE -> SettingsProfileSection(strings, me, state.savedStickers, state.chats, state.session?.userId, onUpdateProfile, onUpdateChatProfile, onUpdateChatHandle, onSectionChange, state.contacts, onAddContact)
+                        SettingsSection.PROFILE -> SettingsProfileSection(
+                            strings = strings,
+                            me = me,
+                            savedStickers = state.savedStickers,
+                            chats = state.chats,
+                            sessionUserId = state.session?.userId,
+                            onUpdateProfile = onUpdateProfile,
+                            onUpdateChatProfile = onUpdateChatProfile,
+                            onUpdateChatHandle = onUpdateChatHandle,
+                            onSectionChange = onSectionChange,
+                            contacts = state.contacts,
+                            onAddContact = onAddContact,
+                            isEditing = isProfileEditing,
+                            onIsEditingChange = { isProfileEditing = it },
+                            onFetchUserProfile = onFetchUserProfile
+                        )
                         SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
                         SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, currentTheme, onThemeChange, onRequestBatteryOptimization)
                         SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
@@ -4834,7 +4863,10 @@ private fun SettingsProfileSection(
     onUpdateChatHandle: (String, String?) -> Unit,
     onSectionChange: (SettingsSection) -> Unit,
     contacts: List<UserSummary>,
-    onAddContact: (String, String) -> Unit
+    onAddContact: (String, String) -> Unit,
+    isEditing: Boolean,
+    onIsEditingChange: (Boolean) -> Unit,
+    onFetchUserProfile: (String) -> Unit
 ) {
     var activeEditChat by remember { mutableStateOf<ChatSummary?>(null) }
     val isFa = strings.languageCode == "fa"
@@ -4941,7 +4973,9 @@ private fun SettingsProfileSection(
             }
         }
     } else {
-        var isEditing by remember { mutableStateOf(false) }
+        LaunchedEffect(sessionUserId) {
+            sessionUserId?.let { onFetchUserProfile(it) }
+        }
         
         var username by remember(me) { mutableStateOf(me?.username ?: "") }
         var bio by remember(me) { mutableStateOf(me?.bio ?: "") }
@@ -4985,7 +5019,7 @@ private fun SettingsProfileSection(
                     contacts = contacts,
                     onAddContact = onAddContact,
                     onClose = { onSectionChange(SettingsSection.MENU) },
-                    onMessage = { isEditing = true },
+                    onMessage = { onIsEditingChange(true) },
                     onAvatarClick = {}
                 )
             }
@@ -5057,7 +5091,7 @@ private fun SettingsProfileSection(
                         color = MaterialTheme.colorScheme.primary
                     )
                     OutlinedButton(
-                        onClick = { isEditing = false },
+                        onClick = { onIsEditingChange(false) },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.height(34.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
@@ -5434,7 +5468,7 @@ private fun SettingsProfileSection(
                             skinObj,
                             badgeObj
                         )
-                        isEditing = false
+                        onIsEditingChange(false)
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp)
@@ -5957,9 +5991,60 @@ private fun ProfileModal(
                                 if (!isSelf) {
                                     val isAlreadyContact = remember(user.id, contacts) { contacts.any { it.id == user.id } }
                                     if (!isAlreadyContact) {
+                                        var showAddContactDialog by remember { mutableStateOf(false) }
+                                        var contactCustomName by remember(user) { mutableStateOf(user.username) }
+
+                                        if (showAddContactDialog) {
+                                            val isFa = strings.languageCode == "fa"
+                                            AlertDialog(
+                                                onDismissRequest = { showAddContactDialog = false },
+                                                title = {
+                                                    Text(
+                                                        text = if (isFa) "افزودن به مخاطبین" else "Add to Contacts",
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                },
+                                                text = {
+                                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                        Text(
+                                                            text = if (isFa) "لطفاً نام مخاطب را وارد کنید:" else "Please enter a name for this contact:",
+                                                            style = MaterialTheme.typography.bodyMedium
+                                                        )
+                                                        OutlinedTextField(
+                                                            value = contactCustomName,
+                                                            onValueChange = { contactCustomName = it },
+                                                            label = { Text(if (isFa) "نام مخاطب" else "Contact Name") },
+                                                            singleLine = true,
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            shape = RoundedCornerShape(12.dp)
+                                                        )
+                                                    }
+                                                },
+                                                confirmButton = {
+                                                    Button(
+                                                        onClick = {
+                                                            val finalName = contactCustomName.trim()
+                                                            onAddContact(user.id, finalName.ifBlank { user.username })
+                                                            showAddContactDialog = false
+                                                        },
+                                                        shape = RoundedCornerShape(10.dp)
+                                                    ) {
+                                                        Text(if (isFa) "ذخیره" else "Save")
+                                                    }
+                                                },
+                                                dismissButton = {
+                                                    TextButton(
+                                                        onClick = { showAddContactDialog = false }
+                                                    ) {
+                                                        Text(strings.cancel)
+                                                    }
+                                                }
+                                            )
+                                        }
+
                                         Spacer(Modifier.height(8.dp))
                                         OutlinedButton(
-                                            onClick = { onAddContact(user.id, user.username) },
+                                            onClick = { showAddContactDialog = true },
                                             modifier = Modifier.fillMaxWidth().height(48.dp),
                                             shape = RoundedCornerShape(12.dp)
                                         ) {
@@ -6884,17 +6969,27 @@ private fun ModalHost(visible: Boolean, onDismiss: () -> Unit, fullscreen: Boole
 }
 
 @Composable
-private fun ModalHeader(title: String, onClose: () -> Unit, onBack: (() -> Unit)? = null) {
+private fun ModalHeader(
+    title: String,
+    onClose: () -> Unit,
+    onBack: (() -> Unit)? = null,
+    showCloseOnLeft: Boolean = false
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (onBack != null) {
+        if (showCloseOnLeft) {
+            HeaderIconButton(icon = Icons.Outlined.Close, onClick = onClose)
+            Spacer(Modifier.width(8.dp))
+        } else if (onBack != null) {
             HeaderIconButton(icon = Icons.AutoMirrored.Outlined.ArrowBack, onClick = onBack)
             Spacer(Modifier.width(8.dp))
         }
         Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-        HeaderIconButton(icon = Icons.Outlined.Close, onClick = onClose)
+        if (!showCloseOnLeft) {
+            HeaderIconButton(icon = Icons.Outlined.Close, onClick = onClose)
+        }
     }
     HorizontalDivider()
 }
