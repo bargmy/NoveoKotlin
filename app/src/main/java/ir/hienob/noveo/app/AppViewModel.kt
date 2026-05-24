@@ -931,6 +931,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun addContact(contactUserId: String, saveAs: String) {
+        val session = _uiState.value.session ?: return
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    api.addContact(session, contactUserId, saveAs)
+                }
+                // Reload contacts to keep state in sync
+                val updated = withContext(Dispatchers.IO) {
+                    runCatching { api.getContacts(session) }.getOrNull()
+                }
+                if (updated != null) {
+                    _uiState.value = _uiState.value.copy(contacts = updated)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     private fun retryPendingMessages() {
         viewModelScope.launch(Dispatchers.IO) {
             messageCacheByChat.forEach { (chatId, messages) ->

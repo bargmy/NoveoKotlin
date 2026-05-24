@@ -504,6 +504,7 @@ internal fun HomeScreen(
     onLogout: () -> Unit,
     onAttachFile: (android.net.Uri) -> Unit,
     onRemoveAttachment: () -> Unit,
+    onAddContact: (String, String) -> Unit = { _, _ -> },
     onUpdateProfile: (String, String, String?, String?, ProfileSkin?, PremiumStarIcon?) -> Unit,
     onSubmitPaymentRequest: (String, ByteArray, String) -> Unit,
     onCancelSubscription: () -> Unit,
@@ -1248,10 +1249,11 @@ internal fun HomeScreen(
             )
         }
 
-        ModalHost(visible = showSettingsModal, onDismiss = { showSettingsModal = false; onDismissError() }) {
+        ModalHost(visible = showSettingsModal, onDismiss = { showSettingsModal = false; onDismissError() }, fullscreen = true) {
             SettingsModal(
                 state = state,
                 strings = strings,
+                onAddContact = onAddContact,
                 section = settingsSection,
                 onSectionChange = { settingsSection = it },
                 onClose = { showSettingsModal = false; onDismissError() },
@@ -1325,6 +1327,8 @@ internal fun HomeScreen(
                     user = user,
                     chats = state.chats,
                     selfUserId = state.session?.userId,
+                    contacts = state.contacts,
+                    onAddContact = onAddContact,
                     onClose = { 
                         profileUserId = null
                         animateModalEntrance = false
@@ -4501,6 +4505,7 @@ private fun CreateChannelModal(
 private fun SettingsModal(
     state: AppUiState,
     strings: NoveoStrings,
+    onAddContact: (String, String) -> Unit,
     section: SettingsSection,
     onSectionChange: (SettingsSection) -> Unit,
     onClose: () -> Unit,
@@ -4525,8 +4530,8 @@ private fun SettingsModal(
     onDismissError: () -> Unit = {}
 ) {
     val me = state.session?.userId?.let { state.usersById[it] }
-    Surface(shape = RoundedCornerShape(28.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().height(620.dp)) {
-        Column(modifier = Modifier.fillMaxSize()) {
+    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
             ModalHeader(
                 title = when (section) {
                     SettingsSection.MENU -> strings.settings
@@ -4550,7 +4555,7 @@ private fun SettingsModal(
                     when (current) {
                         SettingsSection.MENU -> SettingsMenu(strings, onSectionChange)
                         SettingsSection.SUBSCRIPTION -> SettingsSubscriptionSection(strings, me, state.receiptUploadProgress, state.receiptUploadStatusLog, onSubmitPaymentRequest, onCancelSubscription, onContactAdmin)
-                        SettingsSection.PROFILE -> SettingsProfileSection(strings, me, state.savedStickers, state.chats, state.session?.userId, onUpdateProfile, onUpdateChatProfile, onUpdateChatHandle, onSectionChange)
+                        SettingsSection.PROFILE -> SettingsProfileSection(strings, me, state.savedStickers, state.chats, state.session?.userId, onUpdateProfile, onUpdateChatProfile, onUpdateChatHandle, onSectionChange, state.contacts, onAddContact)
                         SettingsSection.ACCOUNT -> SettingsAccountSection(strings, state, onLogout, onChangePassword, onDeleteAccount)
                         SettingsSection.PREFERENCES -> SettingsPreferencesSection(state, strings, onSectionChange, onSetLanguage, onCheckUpdate, onSetBetaUpdatesEnabled, onSetDoubleTapReaction, currentTheme, onThemeChange, onRequestBatteryOptimization)
                         SettingsSection.THEME -> SettingsThemeSection(strings, currentTheme, onThemeChange)
@@ -4827,7 +4832,9 @@ private fun SettingsProfileSection(
     onUpdateProfile: (String, String, String?, String?, ProfileSkin?, PremiumStarIcon?) -> Unit,
     onUpdateChatProfile: (String, String, String) -> Unit,
     onUpdateChatHandle: (String, String?) -> Unit,
-    onSectionChange: (SettingsSection) -> Unit
+    onSectionChange: (SettingsSection) -> Unit,
+    contacts: List<UserSummary>,
+    onAddContact: (String, String) -> Unit
 ) {
     var activeEditChat by remember { mutableStateOf<ChatSummary?>(null) }
     val isFa = strings.languageCode == "fa"
@@ -4968,167 +4975,19 @@ private fun SettingsProfileSection(
         val isFaLocal = strings.languageCode == "fa"
 
         if (!isEditing) {
-            // ── VIEW MODE ──
-            Box(modifier = Modifier.fillMaxSize()) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    item {
-                        // Profile card
-                        val skin = me?.profileSkin
-                        val bgModifier = if (skin != null) {
-                            if (skin.mode == "solid" && !skin.color.isNullOrBlank()) {
-                                Modifier.background(runCatching { Color(android.graphics.Color.parseColor(skin.color)) }.getOrDefault(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)))
-                            } else if (skin.mode == "gradient" && !skin.colors.isNullOrEmpty() && skin.colors.size >= 2) {
-                                val cList = skin.colors.mapNotNull { runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull() }
-                                if (cList.size >= 2) Modifier.background(Brush.linearGradient(cList))
-                                else Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                            } else {
-                                Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                            }
-                        } else {
-                            Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                        }
-
-                        Card(
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                            modifier = Modifier.fillMaxWidth().then(bgModifier)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                ProfileCircle(name = me?.username?.ifBlank { "Me" } ?: "Me", imageUrl = me?.avatarUrl, size = 80.dp)
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    val nameFont = getNicknameFontFamily(me?.nicknameFont)
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(
-                                            text = me?.username?.ifBlank { "—" } ?: "—",
-                                            style = MaterialTheme.typography.titleLarge,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = nameFont
-                                        )
-                                        if (me?.premiumStarIcon != null) {
-                                            when {
-                                                me.premiumStarIcon.type == "image" && me.premiumStarIcon.url.isNotBlank() -> {
-                                                    AsyncImage(
-                                                        model = me.premiumStarIcon.url,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(24.dp)
-                                                    )
-                                                }
-                                                me.premiumStarIcon.type == "tgs" && me.premiumStarIcon.url.isNotBlank() -> {
-                                                    TgsSticker(url = me.premiumStarIcon.url, modifier = Modifier.size(24.dp))
-                                                }
-                                                else -> {
-                                                    Text("⭐", style = MaterialTheme.typography.titleLarge)
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if (!me?.handle.isNullOrBlank()) {
-                                        Text(
-                                            text = me?.handle ?: "",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                    if (me?.bio?.isNotBlank() == true) {
-                                        Text(
-                                            text = me.bio,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                    if (!tier.isNullOrBlank()) {
-                                        Surface(
-                                            shape = RoundedCornerShape(50),
-                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                        ) {
-                                            Text(
-                                                text = when (tier) {
-                                                    "premium" -> "Noveo Premium 🌟"
-                                                    "silver" -> "Noveo Silver 🥈"
-                                                    else -> "Noveo Free"
-                                                },
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // Owned groups/channels
-                    val ownedChats = chats.filter { (it.chatType == "group" || it.chatType == "channel") && it.ownerId == sessionUserId }
-                    if (ownedChats.isNotEmpty()) {
-                        item {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                            Text(
-                                text = if (isFaLocal) "مدیریت گروه‌ها و کانال‌ها" else "Manage Groups & Channels",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        ownedChats.forEach { chat ->
-                            item {
-                                Card(
-                                    onClick = { activeEditChat = chat },
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            ProfileCircle(name = chat.title, imageUrl = chat.avatarUrl, size = 36.dp)
-                                            Column {
-                                                Text(chat.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                                Text(
-                                                    chat.handle ?: (if (chat.chatType == "group") "Group" else "Channel"),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-                                        Icon(imageVector = Icons.Outlined.ArrowForward, contentDescription = "Edit", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // Pen/Edit FAB in top-right corner of the view panel
-                IconButton(
-                    onClick = { isEditing = true },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .size(40.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), shape = RoundedCornerShape(50))
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Edit,
-                        contentDescription = if (isFaLocal) "ویرایش پروفایل" else "Edit Profile",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+            // ── VIEW MODE (REUSED PROFILE SCREEN) ──
+            me?.let { meUser ->
+                ProfileModal(
+                    strings = strings,
+                    user = meUser,
+                    chats = chats,
+                    selfUserId = sessionUserId,
+                    contacts = contacts,
+                    onAddContact = onAddContact,
+                    onClose = { onSectionChange(SettingsSection.MENU) },
+                    onMessage = { isEditing = true },
+                    onAvatarClick = {}
+                )
             }
         } else {
             // ── EDIT MODE ──
@@ -5999,6 +5858,8 @@ private fun ProfileModal(
     user: UserSummary,
     chats: List<ChatSummary>,
     selfUserId: String?,
+    contacts: List<UserSummary>,
+    onAddContact: (String, String) -> Unit,
     onClose: () -> Unit,
     onMessage: () -> Unit,
     onLeaveChat: ((String) -> Unit)? = null,
@@ -6084,12 +5945,37 @@ private fun ProfileModal(
                                     }
                                 }
 
+                                val isSelf = selfUserId == user.id
                                 Button(
                                     onClick = onMessage,
                                     modifier = Modifier.fillMaxWidth().height(48.dp),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text(strings.sendMessage)
+                                    Text(if (isSelf) strings.editProfile else strings.sendMessage)
+                                }
+
+                                if (!isSelf) {
+                                    val isAlreadyContact = remember(user.id, contacts) { contacts.any { it.id == user.id } }
+                                    if (!isAlreadyContact) {
+                                        Spacer(Modifier.height(8.dp))
+                                        OutlinedButton(
+                                            onClick = { onAddContact(user.id, user.username) },
+                                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Text(strings.addToContacts)
+                                        }
+                                    } else {
+                                        Spacer(Modifier.height(8.dp))
+                                        OutlinedButton(
+                                            onClick = {},
+                                            enabled = false,
+                                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Text(strings.alreadyInContacts)
+                                        }
+                                    }
                                 }
 
                                 Spacer(Modifier.height(300.dp))
@@ -6287,6 +6173,36 @@ private fun ProfileModal(
 }
 
 @Composable
+private fun WebmPlayer(url: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val exoPlayer = remember(url) {
+        androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(Uri.parse(url)))
+            repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
+            playWhenReady = true
+            prepare()
+        }
+    }
+    
+    androidx.compose.runtime.DisposableEffect(exoPlayer) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    androidx.compose.ui.viewinterop.AndroidView(
+        factory = { ctx ->
+            androidx.media3.ui.PlayerView(ctx).apply {
+                player = exoPlayer
+                useController = false
+                resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            }
+        },
+        modifier = modifier
+    )
+}
+
 private fun GiftCard(gift: UserGift, modifier: Modifier = Modifier) {
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -6314,8 +6230,16 @@ private fun GiftCard(gift: UserGift, modifier: Modifier = Modifier) {
                         val isTgs = remember(gift.imageUrl) {
                             gift.imageUrl.lowercase(Locale.ROOT).contains(".tgs")
                         }
+                        val isWebm = remember(gift.imageUrl) {
+                            gift.imageUrl.lowercase(Locale.ROOT).contains(".webm")
+                        }
                         if (isTgs) {
                             TgsSticker(
+                                url = normalizedUrl,
+                                modifier = Modifier.fillMaxSize().padding(6.dp)
+                            )
+                        } else if (isWebm && normalizedUrl != null) {
+                            WebmPlayer(
                                 url = normalizedUrl,
                                 modifier = Modifier.fillMaxSize().padding(6.dp)
                             )

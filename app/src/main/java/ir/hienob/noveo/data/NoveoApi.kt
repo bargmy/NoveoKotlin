@@ -285,6 +285,30 @@ class NoveoApi(
         }
     }
 
+    fun addContact(session: Session, contactUserId: String, saveAs: String) {
+        val url = "https://noveo.ir:8443/user/contacts".toHttpUrl()
+        val body = JSONObject()
+            .put("userId", contactUserId)
+            .put("action", "add")
+            .put("saveAs", saveAs)
+            .toString()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-User-ID", session.userId)
+            .header("X-Auth-Token", session.token)
+            .noveoClientHeaders()
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errorMsg = response.body?.string()?.let {
+                    runCatching { JSONObject(it).getString("error") }.getOrNull()
+                } ?: "Failed to add contact (${response.code})"
+                error(errorMsg)
+            }
+        }
+    }
+
     fun getSavedStickers(session: Session): List<SavedSticker> {
         val url = "https://noveo.ir:8443/user/stickers".toHttpUrl()
         val request = Request.Builder()

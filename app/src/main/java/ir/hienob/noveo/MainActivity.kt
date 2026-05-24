@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
                 onRemoveAttachment = viewModel::removeAttachment,
                 onCaptchaTokenReceived = viewModel::onCaptchaTokenReceived,
                 onCaptchaDismiss = viewModel::dismissCaptcha,
+                onAddContact = viewModel::addContact,
                 onUpdateProfile = { username, bio, handle, font, skin, badge ->
                     viewModel.updateProfile(username, bio, handle, font, skin, badge)
                 },
