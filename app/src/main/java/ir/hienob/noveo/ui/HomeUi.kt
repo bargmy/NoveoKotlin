@@ -5685,7 +5685,6 @@ private fun SettingsProfileSection(
 @Composable
 private fun SettingsMenu(strings: NoveoStrings, onSectionChange: (SettingsSection) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SettingsRow(strings.subscription, Icons.Outlined.Star) { onSectionChange(SettingsSection.SUBSCRIPTION) }
         SettingsRow(strings.profile, Icons.Outlined.Person) { onSectionChange(SettingsSection.PROFILE) }
         SettingsRow(strings.account, Icons.Outlined.AccountCircle) { onSectionChange(SettingsSection.ACCOUNT) }
         SettingsRow(strings.preferences, Icons.Outlined.Settings) { onSectionChange(SettingsSection.PREFERENCES) }
@@ -6842,7 +6841,7 @@ private fun MenuSheet(
         MenuRow(strings.allContacts, Icons.Outlined.Info, onOpenContacts)
         MenuRow(strings.newChat, Icons.Outlined.Menu, onOpenCreate)
         Card(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenStars),
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {

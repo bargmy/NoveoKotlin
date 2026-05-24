@@ -20,9 +20,6 @@ class NoveoApplication : Application(), SingletonImageLoader.Factory {
         return ImageLoader.Builder(context)
             .components {
                 add(OkHttpNetworkFetcherFactory())
-                if (SDK_INT >= 28) {
-                    add(AnimatedImageDecoder.Factory())
-                }
                 add(GifDecoder.Factory())
             }
             .build()

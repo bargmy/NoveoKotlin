@@ -25,5 +25,6 @@ server_no_captcha_creation.py
 server.py
 
 .gemini/
+.antigravitycli/
 gha-creds-*.json
 web_refrence/

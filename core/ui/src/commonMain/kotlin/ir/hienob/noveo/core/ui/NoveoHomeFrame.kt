@@ -1588,7 +1588,7 @@ private fun AndroidStyleSideMenu(
         AndroidMenuRow(strings.allContacts, Icons.Outlined.Info) { onContacts(); onDismiss() }
         AndroidMenuRow(strings.newChat, Icons.Outlined.Menu) { onStartNewChat(); onDismiss() }
         Card(
-            modifier = Modifier.fillMaxWidth().clickable { onDismiss() },
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
