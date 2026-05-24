@@ -1240,13 +1240,13 @@ internal fun HomeScreen(
                 onOpenProfile = { userId -> profileUserId = userId }
             )
         }
-ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
-    CreateChannelModal(
-        strings = strings,
-        onCreate = onStartCreateChat,
-        onClose = { showCreateModal = false }
-    )
-}
+        ModalHost(visible = showCreateModal, onDismiss = { showCreateModal = false }) {
+            CreateChannelModal(
+                strings = strings,
+                onCreate = onStartCreateChat,
+                onClose = { showCreateModal = false }
+            )
+        }
 
         ModalHost(visible = showSettingsModal, onDismiss = { showSettingsModal = false; onDismissError() }) {
             SettingsModal(
@@ -5737,6 +5737,7 @@ private fun SettingsProfileSection(
             }
         }
         } // end else (isEditing)
+    } // end outer else (no activeEditChat)
 }
 
 @Composable
