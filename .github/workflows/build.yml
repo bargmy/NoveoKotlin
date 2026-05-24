@@ -135,10 +135,8 @@ jobs:
           A high-fidelity Android shell and Kotlin port of the Noveo Messenger ecosystem.
           
           ## ⚡ Updates in this Release
-          - **CAPTCHA Bypass**: CAPTCHA constraints during chat and channel creation have been fully removed for a seamless experience.
-          - **Settings Billing Integration**: Replaced mockup sections with real payment uploads (receipt image picker targeting \`/payment/request\`) and instant subscription cancellation (\`/subscription/cancel\`).
-          - **Premium Customs**: Enabled customized nickname fonts, glowing profile skin gradient presets, and custom star badges for Premium users.
-          - **"Liquid Ass" Theme**: Replaced the legacy rainbow ragebait theme with a state-of-the-art translucent dark liquid glass theme preset.
+          - Stability and performance improvements.
+          - Minor fixes and UI refinements.
           EOF
           
           # Generate release-caption.txt (capped at 900 chars)
@@ -146,10 +144,8 @@ jobs:
           \${RELEASE_NAME} 🚀
           
           ⚡ Updates in this Release:
-          - CAPTCHA Bypass: Removed captcha checks during chat/channel creation.
-          - Settings Billing Integration: Real payment uploads (receipt image picker to /payment/request) and instant subscription cancellation (/subscription/cancel).
-          - Premium Customs: Customized nickname fonts, glowing profile skin gradient presets, and custom star badges.
-          - "Liquid Ass" Theme: Translucent dark liquid glass theme preset.
+          - Stability and performance improvements.
+          - Minor fixes and UI refinements.
           EOF
 
       - name: Upload release metadata files

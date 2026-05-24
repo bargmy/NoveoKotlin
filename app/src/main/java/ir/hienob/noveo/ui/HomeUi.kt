@@ -5878,13 +5878,6 @@ private fun ThemeSectionBlock(
     }
 }
 
-@Composable
-private fun SettingsChangelogSection(strings: NoveoStrings) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        DetailCard(title = strings.version, body = localizeDigits(CLIENT_VERSION, strings.languageCode))
-        DetailCard(title = strings.whatNew, body = strings.changelogBody)
-    }
-}
 
 @Composable
 private fun ProfileModal(
