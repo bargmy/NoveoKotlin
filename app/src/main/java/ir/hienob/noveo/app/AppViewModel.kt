@@ -1659,6 +1659,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     e2eeSessions = NoveoNotificationService.e2eeSessions()
                 )
             }
+            is SocketEvent.Error -> {
+                _uiState.value = _uiState.value.copy(
+                    error = event.message,
+                    loading = false
+                )
+            }
             is SocketEvent.UserListUpdate -> {
                 val mergedUsers = mergeUsersMaps(_uiState.value.usersById, event.usersById)
                 val resolvedChats = _uiState.value.chats.resolveUserDisplay(mergedUsers, session.userId)

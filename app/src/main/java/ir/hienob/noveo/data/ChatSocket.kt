@@ -42,6 +42,7 @@ sealed class SocketEvent {
     ) : SocketEvent()
     data class E2EESessionUpdate(val chatId: String, val session: E2EESessionSnapshot?) : SocketEvent()
     data class E2EEError(val chatId: String?, val message: String) : SocketEvent()
+    data class Error(val message: String) : SocketEvent()
 }
 
 class ChatSocket(
@@ -308,6 +309,10 @@ class ChatSocket(
                         "voice_call_error" -> {
                             val message = json.optString("message", "Voice call error")
                             trySend(SocketEvent.VoiceCallError(message))
+                        }
+                        "error" -> {
+                            val message = json.optString("message", "An error occurred on the server.")
+                            trySend(SocketEvent.Error(message))
                         }
                     }
                 }
