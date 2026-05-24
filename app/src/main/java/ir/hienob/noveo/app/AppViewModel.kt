@@ -2387,13 +2387,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun mergeUserSummary(existing: UserSummary?, incoming: UserSummary): UserSummary {
         if (existing == null) return incoming
+        
+        val mergedTier = if (incoming.membershipTier.isNotEmpty()) incoming.membershipTier else existing.membershipTier
+        val tierClean = mergedTier.lowercase()
+        val hasFontAccess = tierClean == "premium" || tierClean == "silver"
+        val hasSkinAccess = tierClean == "premium"
+        
+        val finalSkin = if (hasSkinAccess) {
+            incoming.profileSkin ?: existing.profileSkin
+        } else {
+            null
+        }
+        
+        val finalBadge = if (hasSkinAccess) {
+            incoming.premiumStarIcon ?: existing.premiumStarIcon
+        } else {
+            null
+        }
+        
+        val finalFont = if (hasFontAccess) {
+            if (incoming.nicknameFont.isNotEmpty()) incoming.nicknameFont else existing.nicknameFont
+        } else {
+            ""
+        }
+        
         return incoming.copy(
             gifts = incoming.gifts ?: existing.gifts,
-            profileSkin = incoming.profileSkin ?: existing.profileSkin,
-            premiumStarIcon = incoming.premiumStarIcon ?: existing.premiumStarIcon,
+            profileSkin = finalSkin,
+            premiumStarIcon = finalBadge,
             starsBalance = if (incoming.starsBalance == 0.0) existing.starsBalance else incoming.starsBalance,
-            nicknameFont = if (incoming.nicknameFont.isEmpty()) existing.nicknameFont else incoming.nicknameFont,
-            membershipTier = if (incoming.membershipTier.isEmpty()) existing.membershipTier else incoming.membershipTier,
+            nicknameFont = finalFont,
+            membershipTier = mergedTier,
             bio = if (incoming.bio.isEmpty()) existing.bio else incoming.bio,
             handle = incoming.handle ?: existing.handle,
             joinedAt = incoming.joinedAt ?: existing.joinedAt,
