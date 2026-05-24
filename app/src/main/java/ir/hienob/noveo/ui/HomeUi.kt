@@ -4728,13 +4728,27 @@ private fun SettingsSubscriptionSection(
             }
             
             item {
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { fileLauncher.launch("image/*") },
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
                         Text(if (isFa) "آپلود تصویر رسید پرداخت" else "Upload Receipt Photo to Pay", fontWeight = FontWeight.Bold)
+                    }
+                    
+                    OutlinedButton(
+                        onClick = onContactAdmin,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(Icons.Outlined.AccountCircle, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = if (isFa) "تماس با @pcpapc172 جهت پرداخت کارت به کارت" else "Contact @pcpapc172 for Credit Card Payment",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                     
                     uploadError?.let {
@@ -4764,6 +4778,11 @@ private fun SettingsSubscriptionSection(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
      @Composable
 private fun SettingsProfileSection(
     strings: NoveoStrings,
