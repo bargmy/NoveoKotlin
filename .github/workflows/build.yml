@@ -128,25 +128,11 @@ jobs:
         run: |
           set -euo pipefail
           
-          # Generate release-notes.md
-          cat > release-notes.md <<EOF
-          # \${RELEASE_NAME} 🚀
+          # Generate empty release-notes.md
+          touch release-notes.md
           
-          A high-fidelity Android shell and Kotlin port of the Noveo Messenger ecosystem.
-          
-          ## ⚡ Updates in this Release
-          - Stability and performance improvements.
-          - Minor fixes and UI refinements.
-          EOF
-          
-          # Generate release-caption.txt (capped at 900 chars)
-          cat > release-caption.txt <<EOF
-          \${RELEASE_NAME} 🚀
-          
-          ⚡ Updates in this Release:
-          - Stability and performance improvements.
-          - Minor fixes and UI refinements.
-          EOF
+          # Generate empty release-caption.txt
+          touch release-caption.txt
 
       - name: Upload release metadata files
         uses: actions/upload-artifact@v4
