@@ -6203,6 +6203,7 @@ private fun WebmPlayer(url: String, modifier: Modifier = Modifier) {
     )
 }
 
+@Composable
 private fun GiftCard(gift: UserGift, modifier: Modifier = Modifier) {
     Card(
         shape = RoundedCornerShape(16.dp),
