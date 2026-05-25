@@ -697,48 +697,16 @@ private fun AuthScreen(
         }
         Spacer(Modifier.height(12.dp))
 
-        if (state.authModeSignup) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-            ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text(strings.registerOnWebTitle, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text(strings.registerOnWebBody)
-                    Spacer(Modifier.height(16.dp))
-                    Button(
-                        onClick = {
-                            val chromeIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://web.noveo.ir")).apply {
-                                setPackage("com.android.chrome")
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            val fallbackIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://web.noveo.ir")).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            runCatching { context.startActivity(chromeIntent) }
-                                .recoverCatching { context.startActivity(fallbackIntent) }
-                        },
-                        enabled = !state.loading,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(strings.openNoveoWeb)
-                    }
-                }
-            }
-        } else {
-            OutlinedTextField(value = handle, onValueChange = { handle = it }, label = { Text(strings.handlePlaceholder) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(strings.passwordPlaceholder) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = { onAuthSubmit(handle, password) },
-                enabled = !state.loading,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(strings.loginButton)
-            }
+        OutlinedTextField(value = handle, onValueChange = { handle = it }, label = { Text(strings.handlePlaceholder) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(strings.passwordPlaceholder) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = { onAuthSubmit(handle, password) },
+            enabled = !state.loading,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (state.authModeSignup) strings.signupButton else strings.loginButton)
         }
         state.error?.let {
             Spacer(Modifier.height(10.dp))
