@@ -668,6 +668,7 @@ jobs:
           ls -lh delivery
 
       - name: Send primary ZIPs to Telegram as one message
+        continue-on-error: true
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TOKEN }}
@@ -682,23 +683,11 @@ jobs:
           LITE_ZIP="delivery/noveo-lite-${RELEASE_TAG}-arm64-v8a-minified.zip"
           test -f "$LITE_ZIP"
 
-          python3 - <<'PY'
-          import json
-          import pathlib
+          CAPTION="$(head -c 900 release-caption.txt 2>/dev/null || echo "Noveo release ${RELEASE_TAG}")"
 
-          caption = pathlib.Path("release-caption.txt").read_text(encoding="utf-8", errors="ignore")[:900]
-          media = [
-              {
-                  "type": "document",
-                  "media": "attach://lite",
-                  "caption": caption,
-              },
-          ]
-          pathlib.Path("telegram-media.json").write_text(json.dumps(media), encoding="utf-8")
-          PY
-
+          echo "Sending APK to Telegram..."
           curl --fail --silent --show-error \
-            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup" \
+            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
             -F "chat_id=${TELEGRAM_CHAT_ID}" \
-            -F "media=$(cat telegram-media.json)" \
-            -F "lite=@${LITE_ZIP};filename=$(basename "$LITE_ZIP")"
+            -F "caption=${CAPTION}" \
+            -F "document=@${LITE_ZIP};filename=$(basename "$LITE_ZIP")" || true
