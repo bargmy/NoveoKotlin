@@ -168,9 +168,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -398,9 +395,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -544,9 +538,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -584,9 +575,6 @@ jobs:
       RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
 
     steps:
-      - name: Set up Android SDK for signing
-        uses: android-actions/setup-android@v3
-
       - name: Download APK artifacts
         uses: actions/download-artifact@v4
         with:
@@ -629,7 +617,8 @@ jobs:
           fi
 
           echo "$SIGN_KEYSTORE_BASE64" | base64 -d > release.keystore
-          BUILD_TOOLS_DIR="$(ls -d "${ANDROID_SDK_ROOT}"/build-tools/* | sort -V | tail -n 1)"
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          BUILD_TOOLS_DIR="$(ls -d "${SDK_DIR}"/build-tools/* | sort -V | tail -n 1)"
           APKSIGNER="${BUILD_TOOLS_DIR}/apksigner"
           ZIPALIGN="${BUILD_TOOLS_DIR}/zipalign"
 
