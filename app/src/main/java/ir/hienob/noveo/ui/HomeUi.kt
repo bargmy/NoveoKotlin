@@ -6807,7 +6807,7 @@ private fun MenuSheet(
                         onOpenSettings()
                     }
                 },
-            color = tgColors.headerBackground
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ) {
             Column(
                 modifier = Modifier
@@ -6827,20 +6827,17 @@ private fun MenuSheet(
                         text = me?.username?.ifBlank { strings.settings } ?: strings.settings,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = tgColors.headerText,
+                        color = tgColors.headerTitle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
                     )
-                    if (me?.isVerified == true) {
-                        Spacer(Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF2F88FF),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    UserBadges(
+                        isVerified = me?.isVerified == true,
+                        premiumStarIcon = me?.premiumStarIcon,
+                        modifier = Modifier.padding(start = 4.dp),
+                        verifiedSize = 16.dp
+                    )
                 }
 
                 val subtitleText = when {
@@ -6850,7 +6847,7 @@ private fun MenuSheet(
                 Text(
                     text = subtitleText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = tgColors.headerSubtext,
+                    color = tgColors.headerSubtitle,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
