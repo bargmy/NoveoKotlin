@@ -6796,9 +6796,18 @@ private fun MenuSheet(
             .background(MaterialTheme.colorScheme.surface)
     ) {
         // Telegram-Style Header Box
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = if (tgColors.isDark) {
+                            listOf(Color(0xFF2B5278), Color(0xFF1E3B56))
+                        } else {
+                            listOf(Color(0xFF517DA2), Color(0xFF3B678D))
+                        }
+                    )
+                )
                 .clickable {
                     val userId = state.session?.userId
                     if (!userId.isNullOrBlank()) {
@@ -6806,8 +6815,7 @@ private fun MenuSheet(
                     } else {
                         onOpenSettings()
                     }
-                },
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                }
         ) {
             Column(
                 modifier = Modifier
@@ -6827,7 +6835,7 @@ private fun MenuSheet(
                         text = me?.username?.ifBlank { strings.settings } ?: strings.settings,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = tgColors.headerTitle,
+                        color = Color.White,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
@@ -6847,7 +6855,7 @@ private fun MenuSheet(
                 Text(
                     text = subtitleText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = tgColors.headerSubtitle,
+                    color = Color.White.copy(alpha = 0.72f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
