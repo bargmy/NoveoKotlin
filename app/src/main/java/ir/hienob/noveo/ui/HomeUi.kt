@@ -1221,6 +1221,10 @@ internal fun HomeScreen(
                             showMenu = false
                             settingsSection = SettingsSection.MENU
                             showSettingsModal = true
+                        },
+                        onOpenProfile = { userId ->
+                            showMenu = false
+                            onOpenProfile(userId)
                         }
                     )
                 }
@@ -6779,41 +6783,111 @@ private fun MenuSheet(
     onOpenContacts: () -> Unit,
     onOpenCreate: () -> Unit,
     onOpenStars: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenProfile: (String) -> Unit
 ) {
     val me = state.session?.userId?.let { state.usersById[it] }
+    val tgColors = telegramColors()
+
     Column(
         modifier = Modifier
             .width(296.dp)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
-            .padding(16.dp)
     ) {
-        Text(strings.menu, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(16.dp))
-        MenuRow(strings.allContacts, Icons.Outlined.Info, onOpenContacts)
-        MenuRow(strings.newChat, Icons.Outlined.Menu, onOpenCreate)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        // Telegram-Style Header Box
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    val userId = state.session?.userId
+                    if (!userId.isNullOrBlank()) {
+                        onOpenProfile(userId)
+                    } else {
+                        onOpenSettings()
+                    }
+                },
+            color = tgColors.headerBackground
         ) {
-            Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Star, contentDescription = null, tint = Color(0xFFFFD700))
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(strings.stars, fontWeight = FontWeight.SemiBold)
-                    Text("${localizeDigits(state.wallet?.balanceLabel ?: "0.00", strings.languageCode)} ${strings.stars}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 20.dp)
+            ) {
+                ProfileCircle(
+                    name = me?.username?.ifBlank { "Me" } ?: "Me",
+                    imageUrl = me?.avatarUrl,
+                    size = 64.dp
+                )
+
+                Spacer(Modifier.height(14.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = me?.username?.ifBlank { strings.settings } ?: strings.settings,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = tgColors.headerText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (me?.isVerified == true) {
+                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF2F88FF),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
+
+                val subtitleText = when {
+                    !me?.handle.isNullOrBlank() -> "@${me?.handle}"
+                    else -> strings.brandName
+                }
+                Text(
+                    text = subtitleText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tgColors.headerSubtext,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
-        Spacer(Modifier.height(8.dp))
-        MenuRow(strings.settings, Icons.Outlined.Settings, onOpenSettings)
-        Spacer(Modifier.weight(1f))
-        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(strings.brandName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(4.dp))
-            Text(localizeDigits(CLIENT_VERSION, strings.languageCode), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        // Drawer Menu Items
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(16.dp)
+        ) {
+            MenuRow(strings.allContacts, Icons.Outlined.Info, onOpenContacts)
+            MenuRow(strings.newChat, Icons.Outlined.Menu, onOpenCreate)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Star, contentDescription = null, tint = Color(0xFFFFD700))
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(strings.stars, fontWeight = FontWeight.SemiBold)
+                        Text("${localizeDigits(state.wallet?.balanceLabel ?: "0.00", strings.languageCode)} ${strings.stars}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            MenuRow(strings.settings, Icons.Outlined.Settings, onOpenSettings)
+            Spacer(Modifier.weight(1f))
+            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(strings.brandName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                Text(localizeDigits(CLIENT_VERSION, strings.languageCode), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
