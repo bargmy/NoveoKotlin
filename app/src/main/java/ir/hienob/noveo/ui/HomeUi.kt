@@ -6841,7 +6841,7 @@ private fun MenuSheet(
                 }
 
                 val subtitleText = when {
-                    !me?.handle.isNullOrBlank() -> "@${me?.handle}"
+                    !me?.handle.isNullOrBlank() -> "@${me.handle.removePrefix("@")}"
                     else -> strings.brandName
                 }
                 Text(
