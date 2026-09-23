@@ -6796,17 +6796,48 @@ private fun MenuSheet(
             .background(MaterialTheme.colorScheme.surface)
     ) {
         // Telegram-Style Header Box
+        val themePrimary = MaterialTheme.colorScheme.primary
+        val themePrimaryContainer = MaterialTheme.colorScheme.primaryContainer
+        val themeSecondary = MaterialTheme.colorScheme.secondary
+        val themeBackground = MaterialTheme.colorScheme.background
+
+        // Determine harmonious header colors dynamically from active theme
+        val headerBrush = remember(themePrimary, themePrimaryContainer, themeSecondary, tgColors.isDark) {
+            if (tgColors.isDark) {
+                // In dark mode: rich deep primary-to-background gradient matching active theme tint
+                Brush.linearGradient(
+                    colors = listOf(
+                        themePrimary.copy(alpha = 0.85f),
+                        Color(
+                            red = (themePrimary.red * 0.4f + themeBackground.red * 0.6f),
+                            green = (themePrimary.green * 0.4f + themeBackground.green * 0.6f),
+                            blue = (themePrimary.blue * 0.4f + themeBackground.blue * 0.6f)
+                        )
+                    )
+                )
+            } else {
+                // In light mode: vibrant primary-to-secondary gradient matching active theme tint
+                Brush.linearGradient(
+                    colors = listOf(
+                        themePrimary,
+                        Color(
+                            red = (themePrimary.red * 0.7f + themeSecondary.red * 0.3f),
+                            green = (themePrimary.green * 0.7f + themeSecondary.green * 0.3f),
+                            blue = (themePrimary.blue * 0.7f + themeSecondary.blue * 0.3f)
+                        )
+                    )
+                )
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        colors = if (tgColors.isDark) {
-                            listOf(Color(0xFF2B5278), Color(0xFF1E3B56))
-                        } else {
-                            listOf(Color(0xFF517DA2), Color(0xFF3B678D))
-                        }
-                    )
+                .background(headerBrush)
+                .profileGradientBackground(
+                    profileSkin = me?.profileSkin,
+                    membershipTier = me?.membershipTier ?: "",
+                    fallbackColor = Color.Transparent
                 )
                 .clickable {
                     val userId = state.session?.userId
@@ -6855,7 +6886,7 @@ private fun MenuSheet(
                 Text(
                     text = subtitleText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.72f),
+                    color = Color.White.copy(alpha = 0.75f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
